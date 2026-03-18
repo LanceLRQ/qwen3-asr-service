@@ -1,20 +1,23 @@
 from pydantic import BaseModel
 
-class ASRRequest(BaseModel):
-    mode: str = "auto"    # auto | cpu | gpu
-    align: bool = False
 
 class ASRResponse(BaseModel):
     task_id: str
 
+
 class TaskStatusResponse(BaseModel):
     task_id: str
-    status: str           # pending | processing | done | error
+    status: str             # "pending" | "processing" | "completed" | "failed" | "not_found"
     progress: float
     result: dict | None = None
     error: str | None = None
 
+
 class HealthResponse(BaseModel):
-    status: str
-    device: str
-    engine: str
+    status: str             # "ready" | "loading" | "error"
+    device: str             # "cuda" | "cpu"
+    model_size: str         # "0.6b" | "1.7b"
+    align_enabled: bool
+    punc_enabled: bool
+    vad_backend: str        # "pytorch" | "onnx"
+    punc_backend: str       # "pytorch" | "onnx"

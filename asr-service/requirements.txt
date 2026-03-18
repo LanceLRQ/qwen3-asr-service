@@ -1,12 +1,19 @@
+# 核心
 torch
-torchvision
 torchaudio
-transformers
+qwen-asr
+funasr
+onnxruntime
+
+# Web 框架
 fastapi
 uvicorn[standard]
+python-multipart
+
+# 音频处理
 soundfile
 librosa
-openvino
+
+# 模型管理
 huggingface_hub
 modelscope
-python-multipart

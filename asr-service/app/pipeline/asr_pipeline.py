@@ -1,67 +1,257 @@
 import os
 import shutil
 import logging
-from app.engines.base import BaseEngine
-from app.engines.align_engine import AlignEngine
-from app.pipeline.audio_splitter import split_audio
-from app.config import AUDIO_CHUNKS_DIR, DEFAULT_CHUNK_SIZE, GPU_CHUNK_SIZE
+import soundfile as sf
+import numpy as np
+
+from app.engines.qwen_asr_engine import QwenASREngine
+from app.engines.vad_engine import VADEngine
+from app.engines.punc_engine import PuncEngine
+from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
+from app.config import (
+    UPLOADS_DIR,
+    AUDIO_CHUNKS_DIR,
+    MAX_SEGMENT_DURATION,
+    MIN_AUDIO_DURATION,
+    MAX_AUDIO_DURATION,
+)
 
 logger = logging.getLogger(__name__)
 
+
 class ASRPipeline:
-    def __init__(self, engine: BaseEngine, aligner: AlignEngine = None, is_gpu: bool = False):
-        self.engine = engine
-        self.aligner = aligner
-        self.chunk_size = GPU_CHUNK_SIZE if is_gpu else DEFAULT_CHUNK_SIZE
+    def __init__(
+        self,
+        asr_engine: QwenASREngine,
+        vad_engine: VADEngine,
+        punc_engine: PuncEngine | None = None,
+    ):
+        self.asr = asr_engine
+        self.vad = vad_engine
+        self.punc = punc_engine
 
-    def run(self, audio_path: str, task_id: str = None, progress_callback=None) -> dict:
+    def run(
+        self,
+        audio_path: str,
+        task_id: str,
+        language: str | None = None,
+        progress_callback=None,
+    ) -> dict:
         """
-        执行完整 ASR 流程。
+        执行完整 ASR Pipeline。
 
-        参数:
-            audio_path: 音频文件路径
-            task_id: 任务 ID（用于临时文件隔离）
-            progress_callback: 进度回调 fn(progress: float)
-
-        返回:
-            {"segments": [{"start": float, "end": float, "text": str, "words": list?}]}
+        流程：
+        0. ffmpeg 格式转换 → 16kHz WAV
+        1. VAD 切片 → segments
+        2. 超长 segment 二次切分
+        3. ASR 识别
+        4. 标点恢复（可选）
+        5. 合并结果，回算绝对时间戳
+        6. 清理临时文件
         """
-        # 1. 创建任务专属临时目录
-        task_chunk_dir = os.path.join(AUDIO_CHUNKS_DIR, task_id or "default")
-        os.makedirs(task_chunk_dir, exist_ok=True)
+        wav_path = None
+        chunk_dir = os.path.join(AUDIO_CHUNKS_DIR, task_id)
 
         try:
-            # 2. 切片
-            chunks = split_audio(audio_path, self.chunk_size, task_chunk_dir)
-            total = len(chunks)
-            segments = []
+            os.makedirs(chunk_dir, exist_ok=True)
 
-            # 3. 逐片段推理
-            for i, chunk in enumerate(chunks):
-                text = self.engine.transcribe(chunk.path)
+            # 0. 格式转换
+            if progress_callback:
+                progress_callback(0.05)
+            wav_path = os.path.join(UPLOADS_DIR, f"{task_id}.wav")
+            os.makedirs(UPLOADS_DIR, exist_ok=True)
+            convert_to_wav(audio_path, wav_path)
 
-                segment = {
-                    "start": chunk.start,
-                    "end": chunk.start + chunk.duration,
-                    "text": text,
+            # 检查音频时长
+            duration = get_audio_duration(wav_path)
+            if duration < MIN_AUDIO_DURATION:
+                raise ValueError(f"音频过短（{duration:.1f}s），最短要求 {MIN_AUDIO_DURATION}s")
+            if duration > MAX_AUDIO_DURATION:
+                raise ValueError(
+                    f"音频过长（{duration:.0f}s），最大支持 {MAX_AUDIO_DURATION}s，请分段上传"
+                )
+
+            # 1. VAD 切片
+            if progress_callback:
+                progress_callback(0.1)
+            vad_segments = self.vad.detect(wav_path)
+
+            if not vad_segments:
+                logger.info(f"VAD 未检测到语音段: {audio_path}")
+                return {
+                    "segments": [],
+                    "full_text": "",
+                    "language": language,
+                    "align_enabled": self.asr.align_enabled,
+                    "punc_enabled": self.punc is not None,
                 }
 
-                # 4. 可选：对齐
-                if self.aligner:
-                    segment["words"] = self.aligner.align(chunk.path, text)
+            # 2. 超长 segment 二次切分 + 写入 chunk 文件
+            chunks = self._split_segments_to_chunks(wav_path, vad_segments, chunk_dir)
+            total_chunks = len(chunks)
 
-                segments.append(segment)
+            # 3. 逐 chunk ASR 识别
+            segments = []
+            for i, chunk_info in enumerate(chunks):
+                try:
+                    results = self.asr.transcribe(
+                        audio_path=chunk_info["path"],
+                        language=language,
+                    )
+                    text = self._extract_text(results)
+                    words = self._extract_words(results, chunk_info["offset_sec"])
 
-                # 5. 更新进度
+                    segment = {
+                        "start": chunk_info["offset_sec"],
+                        "end": chunk_info["offset_sec"] + chunk_info["duration_sec"],
+                        "text": text,
+                    }
+                    if self.asr.align_enabled and words:
+                        segment["words"] = words
+
+                    segments.append(segment)
+                except Exception as e:
+                    logger.error(f"chunk {i} 识别失败: {e}")
+                    segments.append({
+                        "start": chunk_info["offset_sec"],
+                        "end": chunk_info["offset_sec"] + chunk_info["duration_sec"],
+                        "text": "[识别失败]",
+                    })
+
                 if progress_callback:
-                    progress_callback((i + 1) / total)
+                    progress_callback(0.1 + 0.8 * (i + 1) / total_chunks)
 
-            # 6. 对齐引擎用完即卸
-            if self.aligner:
-                self.aligner.unload()
+            # 4. 标点恢复（可选）
+            if self.punc:
+                for seg in segments:
+                    if seg["text"] and seg["text"] != "[识别失败]":
+                        try:
+                            seg["text"] = self.punc.restore(seg["text"])
+                        except Exception as e:
+                            logger.warning(f"标点恢复失败，使用原始文本: {e}")
 
-            return {"segments": segments}
+            # 5. 合并全文
+            full_text = "".join(seg["text"] for seg in segments if seg["text"] != "[识别失败]")
+
+            if progress_callback:
+                progress_callback(1.0)
+
+            return {
+                "segments": segments,
+                "full_text": full_text,
+                "language": language,
+                "align_enabled": self.asr.align_enabled,
+                "punc_enabled": self.punc is not None,
+            }
 
         finally:
-            # 7. 清理临时切片文件
-            shutil.rmtree(task_chunk_dir, ignore_errors=True)
+            # 6. 清理临时文件
+            self._cleanup(audio_path, wav_path, chunk_dir)
+
+    def _split_segments_to_chunks(
+        self,
+        wav_path: str,
+        vad_segments: list[tuple[int, int]],
+        chunk_dir: str,
+    ) -> list[dict]:
+        """
+        根据 VAD 段切分音频，超长段二次切分。
+
+        返回:
+            [{"path": str, "offset_sec": float, "duration_sec": float}, ...]
+        """
+        data, sr = sf.read(wav_path)
+        chunks = []
+        idx = 0
+
+        for start_ms, end_ms in vad_segments:
+            start_sample = int(start_ms / 1000 * sr)
+            end_sample = int(end_ms / 1000 * sr)
+            segment_data = data[start_sample:end_sample]
+            segment_duration = len(segment_data) / sr
+
+            if segment_duration <= MAX_SEGMENT_DURATION:
+                # 直接写入
+                chunk_path = os.path.join(chunk_dir, f"chunk_{idx:04d}.wav")
+                sf.write(chunk_path, segment_data, sr)
+                chunks.append({
+                    "path": chunk_path,
+                    "offset_sec": start_ms / 1000,
+                    "duration_sec": segment_duration,
+                })
+                idx += 1
+            else:
+                # 二次切分
+                sub_samples = int(MAX_SEGMENT_DURATION * sr)
+                offset = 0
+                while offset < len(segment_data):
+                    end = min(offset + sub_samples, len(segment_data))
+                    sub_data = segment_data[offset:end]
+                    chunk_path = os.path.join(chunk_dir, f"chunk_{idx:04d}.wav")
+                    sf.write(chunk_path, sub_data, sr)
+                    chunk_offset_sec = start_ms / 1000 + offset / sr
+                    chunks.append({
+                        "path": chunk_path,
+                        "offset_sec": chunk_offset_sec,
+                        "duration_sec": len(sub_data) / sr,
+                    })
+                    offset = end
+                    idx += 1
+
+        logger.info(f"切分完成: {len(vad_segments)} 个 VAD 段 -> {len(chunks)} 个 chunk")
+        return chunks
+
+    def _extract_text(self, results) -> str:
+        """从 qwen_asr transcribe 结果中提取纯文本"""
+        if not results:
+            return ""
+        if isinstance(results, str):
+            return results
+        if isinstance(results, list):
+            texts = []
+            for item in results:
+                if isinstance(item, dict):
+                    texts.append(item.get("text", ""))
+                elif isinstance(item, str):
+                    texts.append(item)
+            return "".join(texts)
+        return str(results)
+
+    def _extract_words(self, results, offset_sec: float) -> list[dict] | None:
+        """从 qwen_asr 结果中提取单词级时间戳（带偏移修正）"""
+        if not results or not isinstance(results, list):
+            return None
+
+        words = []
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            item_words = item.get("words", [])
+            for w in item_words:
+                if isinstance(w, dict) and "text" in w:
+                    words.append({
+                        "text": w["text"],
+                        "start": w.get("start", 0) + offset_sec,
+                        "end": w.get("end", 0) + offset_sec,
+                    })
+        return words if words else None
+
+    def _cleanup(self, original_path: str, wav_path: str | None, chunk_dir: str):
+        """清理临时文件"""
+        try:
+            if original_path and os.path.exists(original_path):
+                os.remove(original_path)
+        except OSError as e:
+            logger.warning(f"清理原始文件失败: {e}")
+
+        try:
+            if wav_path and os.path.exists(wav_path):
+                os.remove(wav_path)
+        except OSError as e:
+            logger.warning(f"清理转换文件失败: {e}")
+
+        try:
+            if os.path.exists(chunk_dir):
+                shutil.rmtree(chunk_dir, ignore_errors=True)
+        except OSError as e:
+            logger.warning(f"清理 chunk 目录失败: {e}")
