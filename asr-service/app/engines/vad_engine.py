@@ -11,7 +11,8 @@ class VADEngine:
 
     def __init__(self, use_onnx: bool = False):
         self._use_onnx = use_onnx
-        self._model_key = "vad_onnx" if use_onnx else "vad"
+        # FunASR 1.3.1 不支持 ONNX VAD，统一使用 PyTorch 版本
+        self._model_key = "vad"
         self._model = None
 
     def load(self):
@@ -22,9 +23,10 @@ class VADEngine:
         self._model = AutoModel(
             model=local_dir,
             model_revision="v2.0.4",
+            device="cpu",
+            disable_update=True,
         )
-        backend = "ONNX" if self._use_onnx else "PyTorch"
-        logger.info(f"VAD 模型已加载 ({backend}): {local_dir}")
+        logger.info(f"VAD 模型已加载 (PyTorch): {local_dir}")
 
     def detect(self, audio_path: str) -> list[tuple[int, int]]:
         """

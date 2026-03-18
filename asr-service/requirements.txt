@@ -14,6 +14,9 @@ python-multipart
 soundfile
 librosa
 
+# OpenVINO（CPU 推理）
+openvino>=2024.0
+
 # 模型管理
 huggingface_hub
 modelscope

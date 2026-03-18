@@ -23,6 +23,12 @@ ALIGN_MODEL_DIR = os.path.join(MODELS_DIR, "align")
 VAD_MODEL_DIR = os.path.join(MODELS_DIR, "vad")
 PUNC_MODEL_DIR = os.path.join(MODELS_DIR, "punc")
 
+# OpenVINO 模型仓库（HuggingFace）
+OV_MODEL_REPO_MAP = {
+    "0.6b": "dseditor/Qwen3-ASR-0.6B-INT8_ASYM-OpenVINO",
+    "1.7b": "dseditor/Qwen3-ASR-1.7B-INT8_OpenVINO",
+}
+
 # 模型仓库 ID
 MODEL_REPO_MAP = {
     "huggingface": {
@@ -54,6 +60,8 @@ MODEL_LOCAL_MAP = {
     "vad_onnx": os.path.join(VAD_MODEL_DIR, "fsmn-onnx"),
     "punc": os.path.join(PUNC_MODEL_DIR, "ct-transformer"),
     "punc_onnx": os.path.join(PUNC_MODEL_DIR, "ct-transformer-onnx"),
+    "asr_ov_0.6b": os.path.join(ASR_MODEL_DIR, "openvino", "0.6b"),
+    "asr_ov_1.7b": os.path.join(ASR_MODEL_DIR, "openvino", "1.7b"),
 }
 
 # ─── VAD 参数 ───

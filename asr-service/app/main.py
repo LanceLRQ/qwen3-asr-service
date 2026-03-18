@@ -104,12 +104,18 @@ def create_app(args=None) -> FastAPI:
         logger.critical(f"VAD 模型加载失败，服务无法启动: {e}")
         sys.exit(1)
 
-    # ASR 引擎（必须）
-    asr_engine = QwenASREngine(
-        model_size=model_size,
-        device=device_map,
-        enable_align=enable_align,
-    )
+    # ASR 引擎（必须）—— CPU 使用 OpenVINO，GPU 使用 Qwen ASR
+    if is_cpu:
+        from app.engines.openvino_asr_engine import OpenVINOASREngine
+        asr_engine = OpenVINOASREngine(model_size=model_size)
+        asr_backend = "openvino"
+    else:
+        asr_engine = QwenASREngine(
+            model_size=model_size,
+            device=device_map,
+            enable_align=enable_align,
+        )
+        asr_backend = "qwen_asr"
     try:
         asr_engine.load()
     except Exception as e:
@@ -161,6 +167,7 @@ def create_app(args=None) -> FastAPI:
         "model_size": model_size,
         "align_enabled": enable_align,
         "punc_enabled": enable_punc,
+        "asr_backend": asr_backend,
         "vad_backend": "onnx" if use_onnx else "pytorch",
         "punc_backend": "onnx" if (use_onnx and enable_punc) else ("pytorch" if enable_punc else "disabled"),
     }

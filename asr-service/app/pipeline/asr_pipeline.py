@@ -4,7 +4,6 @@ import logging
 import soundfile as sf
 import numpy as np
 
-from app.engines.qwen_asr_engine import QwenASREngine
 from app.engines.vad_engine import VADEngine
 from app.engines.punc_engine import PuncEngine
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
@@ -22,7 +21,7 @@ logger = logging.getLogger(__name__)
 class ASRPipeline:
     def __init__(
         self,
-        asr_engine: QwenASREngine,
+        asr_engine,
         vad_engine: VADEngine,
         punc_engine: PuncEngine | None = None,
     ):

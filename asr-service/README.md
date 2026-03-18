@@ -1,12 +1,13 @@
 # ASR Service
 
-基于 FastAPI 的语音识别服务，集成 VAD 语音检测、Qwen3-ASR 识别、标点恢复，支持 GPU / CPU 两种运行模式。
+基于 FastAPI 的语音识别服务，集成 VAD 语音检测、Qwen3-ASR 识别、标点恢复，支持 GPU / CPU 两种运行模式。CPU 模式采用 OpenVINO INT8 量化推理，无需 GPU 即可高效运行。
 
 ## 系统要求
 
 - Python 3.10+
 - ffmpeg（必须）
-- NVIDIA GPU + CUDA 12.1+（可选，GPU 模式需要）
+- NVIDIA GPU + CUDA 12.1+（GPU 模式需要）
+- OpenVINO >= 2024.0（CPU 模式需要，pip install 自动安装）
 
 ```bash
 # 安装 ffmpeg (Ubuntu/Debian)
@@ -37,8 +38,11 @@ bash start.sh --model-size 1.7b --enable-align
 # GPU 轻量模式（0.6B 模型，关闭对齐）
 bash start.sh --model-size 0.6b --no-align
 
-# CPU 兼容模式（无显卡机器）
+# CPU 模式（OpenVINO INT8 推理，无需显卡）
 bash start.sh --device cpu --model-size 0.6b
+
+# CPU 模式 + 1.7B 模型（更高精度，需更多内存）
+bash start.sh --device cpu --model-size 1.7b
 
 # 指定模型下载源（国内推荐 modelscope，海外用 huggingface）
 bash start.sh --model-source modelscope
@@ -55,6 +59,8 @@ curl http://127.0.0.1:8765/health
 
 响应示例：
 
+GPU 模式：
+
 ```json
 {
   "status": "ready",
@@ -62,8 +68,24 @@ curl http://127.0.0.1:8765/health
   "model_size": "0.6b",
   "align_enabled": true,
   "punc_enabled": true,
+  "asr_backend": "qwen_asr",
   "vad_backend": "pytorch",
   "punc_backend": "pytorch"
+}
+```
+
+CPU 模式：
+
+```json
+{
+  "status": "ready",
+  "device": "cpu",
+  "model_size": "0.6b",
+  "align_enabled": false,
+  "punc_enabled": true,
+  "asr_backend": "openvino",
+  "vad_backend": "onnx",
+  "punc_backend": "onnx"
 }
 ```
 
@@ -79,16 +101,34 @@ curl http://127.0.0.1:8765/health
 
 ### 三种运行模式
 
-| | GPU 全功能 | GPU 轻量 | CPU 兼容 |
+| | GPU 全功能 | GPU 轻量 | CPU (OpenVINO) |
 |--|-----------|---------|---------|
-| ASR | Qwen3-ASR + CUDA | Qwen3-ASR + CUDA | Qwen3-ASR + CPU |
+| ASR | Qwen3-ASR + CUDA | Qwen3-ASR + CUDA | **OpenVINO INT8** |
+| 推理框架 | PyTorch (transformers) | PyTorch (transformers) | **OpenVINO (纯 NumPy 预处理)** |
 | 对齐 | ForcedAligner | **关闭** | **强制关闭** |
 | VAD | FSMN-VAD (PyTorch) | FSMN-VAD (PyTorch) | FSMN-VAD (**ONNX**) |
 | 标点 | CT-Transformer (PyTorch) | CT-Transformer (PyTorch) | CT-Transformer (**ONNX**) |
 | 时间戳 | 单词级 | 句子级 | 句子级 |
-| 显存需求 | ~6-8GB | ~2-3GB | 内存 ~4-6GB |
+| 显存需求 | ~6-8GB | ~2-3GB | 无需 GPU，内存 ~4-6GB |
+| 模型来源 | ModelScope / HuggingFace | ModelScope / HuggingFace | **HuggingFace** |
 
-> `--device auto` 时，服务根据显存自动选择：>=6GB 用 1.7B，4-6GB 用 0.6B，<4GB 强制关闭对齐，无 GPU 回退 CPU。
+> `--device auto` 时，服务根据显存自动选择：>=6GB 用 1.7B，4-6GB 用 0.6B，<4GB 强制关闭对齐，无 GPU 回退 CPU（OpenVINO）。
+
+### CPU 模式说明
+
+CPU 模式使用 OpenVINO 推理引擎替代 PyTorch，核心特点：
+
+- **INT8 量化模型**：相比 FP32 大幅减少内存占用和计算量
+- **纯 NumPy 预处理**：Mel 特征提取和 BPE 解码完全由 NumPy 实现，不依赖 torch/transformers 做推理
+- **首次编译耗时**：OpenVINO 模型编译约 10-30 秒，仅在启动时执行一次
+- **模型自动下载**：首次启动自动从 HuggingFace 下载 OpenVINO 格式模型
+
+CPU 模式使用的 OpenVINO 模型：
+
+| 模型大小 | HuggingFace 仓库 | 量化方式 |
+|---------|-----------------|---------|
+| 0.6B | `dseditor/Qwen3-ASR-0.6B-INT8_ASYM-OpenVINO` | INT8 非对称 |
+| 1.7B | `dseditor/Qwen3-ASR-1.7B-INT8_OpenVINO` | INT8 |
 
 ## API 接口
 
@@ -174,7 +214,9 @@ asr-service/
 │   │   ├── routes.py              # FastAPI 路由
 │   │   └── schemas.py             # 请求/响应数据模型
 │   ├── engines/
-│   │   ├── qwen_asr_engine.py     # Qwen3-ASR 识别引擎
+│   │   ├── qwen_asr_engine.py     # Qwen3-ASR 识别引擎（GPU）
+│   │   ├── openvino_asr_engine.py # OpenVINO ASR 引擎（CPU）
+│   │   ├── processor_numpy.py     # 纯 NumPy Mel 提取 + BPE 解码
 │   │   ├── vad_engine.py          # FSMN-VAD 语音检测引擎
 │   │   └── punc_engine.py         # CT-Transformer 标点引擎
 │   ├── pipeline/
@@ -185,7 +227,8 @@ asr-service/
 │   │   └── task_manager.py        # 任务队列管理
 │   └── utils/
 │       ├── logger.py              # 日志配置
-│       └── model_manager.py       # 模型下载管理
+│       ├── model_manager.py       # 模型下载管理
+│       └── openvino_model_downloader.py  # OpenVINO 模型下载
 ├── models/                        # 模型存放（自动下载，不提交 Git）
 ├── cache/                         # 运行时缓存（上传文件、音频切片）
 ├── logs/                          # 日志文件
@@ -196,11 +239,26 @@ asr-service/
 
 ## 处理流程
 
+**GPU 模式：**
+
 ```
 音频文件 → ffmpeg转换(16kHz WAV) → VAD切片 → ASR识别 → [标点恢复] → 输出结果
                                    (FSMN-VAD)  (Qwen3-ASR)  (CT-Transformer)
                                                   ↓
                                            [可选] 对齐(ForcedAligner)
+```
+
+**CPU 模式（OpenVINO）：**
+
+```
+音频文件 → ffmpeg转换(16kHz WAV) → VAD切片 → ASR识别 → [标点恢复] → 输出结果
+                                   (FSMN-VAD   (OpenVINO     (CT-Transformer
+                                    ONNX)       INT8)          ONNX)
+                                                  ↓
+                                    NumPy Mel提取 → audio_encoder
+                                                 → thinker_embeddings
+                                                 → decoder 自回归解码
+                                                 → BPE decode
 ```
 
 ## 配置项

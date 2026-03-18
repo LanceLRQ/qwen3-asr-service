@@ -11,7 +11,8 @@ class PuncEngine:
 
     def __init__(self, use_onnx: bool = False):
         self._use_onnx = use_onnx
-        self._model_key = "punc_onnx" if use_onnx else "punc"
+        # FunASR 1.3.1 不支持 ONNX 标点模型，统一使用 PyTorch 版本
+        self._model_key = "punc"
         self._model = None
 
     def load(self):
@@ -22,9 +23,10 @@ class PuncEngine:
         self._model = AutoModel(
             model=local_dir,
             model_revision="v2.0.4",
+            device="cpu",
+            disable_update=True,
         )
-        backend = "ONNX" if self._use_onnx else "PyTorch"
-        logger.info(f"标点模型已加载 ({backend}): {local_dir}")
+        logger.info(f"标点模型已加载 (PyTorch): {local_dir}")
 
     def restore(self, text: str) -> str:
         """对文本补充标点符号"""

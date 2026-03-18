@@ -19,5 +19,6 @@ class HealthResponse(BaseModel):
     model_size: str         # "0.6b" | "1.7b"
     align_enabled: bool
     punc_enabled: bool
+    asr_backend: str        # "qwen_asr" | "openvino"
     vad_backend: str        # "pytorch" | "onnx"
     punc_backend: str       # "pytorch" | "onnx"
