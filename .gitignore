@@ -142,3 +142,6 @@ docs/plan/*
 .idea
 .vscode
 .claude
+
+# models
+asr_services/models
