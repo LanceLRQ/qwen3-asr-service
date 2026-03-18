@@ -143,5 +143,6 @@ docs/plan/*
 .vscode
 .claude
 
-# models
-asr_services/models
+# models & env
+asr-service/models
+asr-service/bin

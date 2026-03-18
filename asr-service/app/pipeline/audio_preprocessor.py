@@ -16,7 +16,8 @@ def check_ffmpeg():
         )
     except (FileNotFoundError, subprocess.CalledProcessError):
         raise RuntimeError(
-            "ffmpeg 未安装或不可用，请先安装 ffmpeg: apt install ffmpeg"
+            "ffmpeg 未安装或不可用。请下载 ffmpeg.exe 放入 bin/ 目录，"
+            "或安装到系统 PATH 中。下载地址: https://www.gyan.dev/ffmpeg/builds/"
         )
 
 
