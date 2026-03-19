@@ -73,16 +73,44 @@ class QwenASREngine:
         language: str | None = None,
     ) -> list[dict]:
         """
-        对音频执行 ASR 识别。
+        对单个音频执行 ASR 识别。
 
         返回:
-            [{"text": str, "start": float, "end": float, "words": list | None}, ...]
+            [ASRTranscription, ...]
         """
         if self._model is None:
             raise RuntimeError("ASR 模型未加载，请先调用 load()")
 
         results = self._model.transcribe(
             audio=audio_path,
+            language=language,
+            return_time_stamps=self._enable_align,
+        )
+        return results
+
+    def batch_transcribe(
+        self,
+        audio_paths: list[str],
+        language: str | None = None,
+    ) -> list:
+        """
+        批量音频 ASR 识别，利用 Qwen3ASRModel 内部按 max_inference_batch_size 分批并行推理。
+
+        参数:
+            audio_paths: 音频文件路径列表
+            language: 语言（标量，广播到所有音频）
+
+        返回:
+            List[ASRTranscription]，每个元素对应一个输入音频
+        """
+        if self._model is None:
+            raise RuntimeError("ASR 模型未加载，请先调用 load()")
+
+        if not audio_paths:
+            return []
+
+        results = self._model.transcribe(
+            audio=audio_paths,
             language=language,
             return_time_stamps=self._enable_align,
         )

@@ -69,6 +69,10 @@ MODEL_LOCAL_MAP = {
 VAD_MAX_SILENCE = 800           # 尾部静音时长 ms
 VAD_SPEECH_NOISE_THRES = 0.5    # 语音/噪声阈值
 
+# ─── ASR 推理 ───
+
+ASR_BATCH_SIZE = 32             # 批量推理每批 chunk 数（与 Qwen3 max_inference_batch_size 对齐）
+
 # ─── 音频处理 ───
 
 MAX_SEGMENT_DURATION = 5        # 超长片段二次切分阈值（秒）
