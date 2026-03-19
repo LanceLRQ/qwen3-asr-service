@@ -11,6 +11,7 @@
 - **异步任务** - 提交任务后轮询结果，支持大文件处理
 - **时间戳支持** - 句子级 / 单词级时间戳（GPU 模式）
 - **自动标点** - 集成 CT-Transformer 标点恢复模型
+- **Web UI** - 内置浏览器界面，支持音频上传、实时进度、结果播放和导出
 
 ## 系统要求
 
@@ -86,6 +87,12 @@ bash start.sh --device cpu --model-size 0.6b
 # CPU 模式 + 1.7B 模型（更高精度，需更多内存）
 bash start.sh --device cpu --model-size 1.7b
 
+# 启用 Web UI（浏览器访问 http://0.0.0.0:8765/web-ui）
+bash start.sh --web
+
+# 自定义 VAD 切片合并时长（默认 5 秒）
+bash start.sh --max-segment 15
+
 # 指定模型下载源（国内推荐 modelscope，海外用 huggingface）
 bash start.sh --model-source modelscope
 bash start.sh --model-source huggingface
@@ -140,6 +147,10 @@ CPU 模式：
 | `--enable-align` / `--no-align` | - | `--enable-align` | 是否加载对齐模型（单词级时间戳） |
 | `--enable-punc` / `--no-punc` | - | `--enable-punc` | 是否启用标点恢复 |
 | `--model-source` | `modelscope` / `huggingface` | `modelscope` | 模型下载源 |
+| `--host` | IP 地址 | `0.0.0.0` | 监听地址 |
+| `--port` | 端口号 | `8765` | 监听端口 |
+| `--web` | - | 关闭 | 启用 Web UI（访问 `/web-ui`） |
+| `--max-segment` | 秒数 | `5` | VAD 切片合并最大时长 |
 
 ### 三种运行模式
 
@@ -245,6 +256,22 @@ curl http://127.0.0.1:8765/asr/{task_id}
 curl http://127.0.0.1:8765/health
 ```
 
+## Web UI
+
+启动时添加 `--web` 参数即可开启浏览器界面：
+
+```bash
+bash start.sh --web
+```
+
+访问 `http://<host>:<port>/web-ui`，支持以下功能：
+
+- 拖拽或点击上传音频文件
+- 实时显示识别进度
+- 分段结果展示，点击片段可跳转播放对应音频位置
+- 完整文本展示
+- 原始 JSON 数据查看和下载
+
 ## 项目结构
 
 ```
@@ -267,6 +294,9 @@ asr-service/
 │   ├── runtime/
 │   │   ├── device.py              # 设备检测与选择
 │   │   └── task_manager.py        # 任务队列管理
+│   ├── web/
+│   │   ├── views.py               # Web UI 路由
+│   │   └── page.py                # Web UI 单页应用（HTML/CSS/JS）
 │   └── utils/
 │       ├── logger.py              # 日志配置
 │       ├── model_manager.py       # 模型下载管理
@@ -311,7 +341,7 @@ asr-service/
 |------|--------|------|
 | HOST | 0.0.0.0 | 监听地址 |
 | PORT | 8765 | 监听端口 |
-| MAX_SEGMENT_DURATION | 30s | VAD 超长片段二次切分阈值 |
+| MAX_SEGMENT_DURATION | 5s | VAD 超长片段二次切分阈值（可通过 `--max-segment` 启动参数覆盖） |
 | MAX_AUDIO_DURATION | 14400s | 最大音频时长（4 小时） |
 | MAX_AUDIO_FILE_SIZE | 1024MB | 最大文件大小 |
 | MIN_AUDIO_DURATION | 1.0s | 最短音频时长 |

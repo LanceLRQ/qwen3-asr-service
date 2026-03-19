@@ -61,8 +61,8 @@ def parse_args():
         help="启用 Web UI (访问 /web-ui)",
     )
     parser.add_argument(
-        "--max-segment", type=int, default=10,
-        help="VAD 切片合并最大时长，单位秒 (default: 10)",
+        "--max-segment", type=int, default=5,
+        help="VAD 切片合并最大时长，单位秒 (default: 5)",
     )
     return parser.parse_args()
 

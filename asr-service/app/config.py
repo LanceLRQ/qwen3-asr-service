@@ -71,7 +71,7 @@ VAD_SPEECH_NOISE_THRES = 0.5    # 语音/噪声阈值
 
 # ─── 音频处理 ───
 
-MAX_SEGMENT_DURATION = 10       # 超长片段二次切分阈值（秒）
+MAX_SEGMENT_DURATION = 5        # 超长片段二次切分阈值（秒）
 MAX_AUDIO_DURATION = 14400      # 最大音频时长 4 小时（秒）
 MAX_AUDIO_FILE_SIZE = 1024      # 最大文件大小（MB）
 MIN_AUDIO_DURATION = 1.0        # 最短音频时长（秒）
