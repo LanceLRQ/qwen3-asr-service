@@ -20,6 +20,6 @@ services:
       - --model-source=modelscope # 下载源：modelscope / huggingface
       - --enable-align            # 启用对齐模型（不需要则改为 --no-align）
       # - --use-punc              # 启用标点恢复（按需开启）
-      # - --web                   # 启用 Web UI（访问 /web-ui）
+      - --web                     # 启用 Web UI（访问 /web-ui）
       - --max-segment=5           # VAD 切片合并最大时长（秒）
     restart: unless-stopped
