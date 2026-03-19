@@ -56,6 +56,14 @@ def parse_args():
         "--port", type=int, default=None,
         help="监听端口 (default: 8765)",
     )
+    parser.add_argument(
+        "--web", action="store_true", default=False,
+        help="启用 Web UI (访问 /web-ui)",
+    )
+    parser.add_argument(
+        "--max-segment", type=int, default=10,
+        help="VAD 切片合并最大时长，单位秒 (default: 10)",
+    )
     return parser.parse_args()
 
 
@@ -74,6 +82,7 @@ def create_app(args=None) -> FastAPI:
 
     # 3. 写入全局配置
     cfg.MODEL_SOURCE = args.model_source
+    cfg.MAX_SEGMENT_DURATION = args.max_segment
     if args.host is not None:
         cfg.HOST = args.host
     if args.port is not None:
@@ -187,6 +196,12 @@ def create_app(args=None) -> FastAPI:
     app = FastAPI(title="Qwen3-ASR Service", version="2.0.0")
     init_routes(task_manager, service_info)
     app.include_router(router)
+
+    # 条件挂载 Web UI
+    if getattr(args, "web", False):
+        from app.web.views import web_router
+        app.include_router(web_router)
+        logger.info(f"Web UI 已启用，访问 http://{cfg.HOST}:{cfg.PORT}/web-ui")
 
     @app.on_event("shutdown")
     def on_shutdown():
