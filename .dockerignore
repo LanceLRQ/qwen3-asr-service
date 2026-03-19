@@ -1,0 +1,13 @@
+asr-service/venv/
+asr-service/models/
+asr-service/cache/
+asr-service/logs/
+asr-service/bin/
+asr-service/__pycache__/
+*.pyc
+*.pyo
+.git
+.gitignore
+docs/
+LICENSE
+README.md

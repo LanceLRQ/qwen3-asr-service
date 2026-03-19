@@ -1,0 +1,21 @@
+services:
+  asr:
+    image: qwen3-asr-service:latest
+    # build: .  # 如需本地构建，取消此行注释
+    runtime: nvidia
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./asr-service/models:/app/models
+      - ./asr-service/logs:/app/logs
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    command:
+      - --model-size=0.6b        # 模型大小：0.6b / 1.7b
+      - --device=auto             # 运行设备：auto / cuda / cpu
+      - --model-source=modelscope # 下载源：modelscope / huggingface
+      - --enable-align            # 启用对齐模型（不需要则改为 --no-align）
+      # - --use-punc              # 启用标点恢复（按需开启）
+      # - --web                   # 启用 Web UI（访问 /web-ui）
+      - --max-segment=5           # VAD 切片合并最大时长（秒）
+    restart: unless-stopped
