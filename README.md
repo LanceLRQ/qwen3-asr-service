@@ -98,7 +98,14 @@ bash start.sh --model-source modelscope
 bash start.sh --model-source huggingface
 ```
 
-服务默认监听 `http://0.0.0.0:8765`。
+服务默认监听 `http://127.0.0.1:8765`（仅本机访问）。
+
+如需局域网访问：
+
+```bash
+bash start.sh --host 0.0.0.0
+bash start.sh --host 0.0.0.0 --port 9000
+```
 
 ### 3. 验证服务
 
@@ -147,7 +154,7 @@ CPU 模式：
 | `--enable-align` / `--no-align` | - | `--enable-align` | 是否加载对齐模型（单词级时间戳） |
 | `--enable-punc` / `--no-punc` | - | `--enable-punc` | 是否启用标点恢复 |
 | `--model-source` | `modelscope` / `huggingface` | `modelscope` | 模型下载源 |
-| `--host` | IP 地址 | `0.0.0.0` | 监听地址 |
+| `--host` | IP 地址 | `127.0.0.1` | 监听地址，设为 `0.0.0.0` 可局域网访问 |
 | `--port` | 端口号 | `8765` | 监听端口 |
 | `--web` | - | 关闭 | 启用 Web UI（访问 `/web-ui`） |
 | `--max-segment` | 秒数 | `5` | VAD 切片合并最大时长 |
@@ -314,18 +321,18 @@ asr-service/
 **GPU 模式：**
 
 ```
-音频文件 → ffmpeg转换(16kHz WAV) → VAD切片 → ASR识别 → [标点恢复] → 输出结果
-                                   (FSMN-VAD)  (Qwen3-ASR)  (CT-Transformer)
-                                                  ↓
-                                           [可选] 对齐(ForcedAligner)
+音频文件 → ffmpeg转换(16kHz WAV) → VAD切片 → 段合并 → ASR识别 → [标点恢复] → 输出结果
+                                   (FSMN-VAD)  (≤5s)  (Qwen3-ASR)  (CT-Transformer)
+                                                           ↓
+                                                    [可选] 对齐(ForcedAligner)
 ```
 
 **CPU 模式（OpenVINO）：**
 
 ```
-音频文件 → ffmpeg转换(16kHz WAV) → VAD切片 → ASR识别 → [标点恢复] → 输出结果
-                                   (FSMN-VAD   (OpenVINO     (CT-Transformer
-                                    ONNX)       INT8)          ONNX)
+音频文件 → ffmpeg转换(16kHz WAV) → VAD切片 → 段合并 → ASR识别 → [标点恢复] → 输出结果
+                                   (FSMN-VAD   (≤5s)  (OpenVINO     (CT-Transformer
+                                    ONNX)                INT8)          ONNX)
                                                   ↓
                                     NumPy Mel提取 → audio_encoder
                                                  → thinker_embeddings
@@ -339,11 +346,20 @@ asr-service/
 
 | 配置 | 默认值 | 说明 |
 |------|--------|------|
-| HOST | 0.0.0.0 | 监听地址 |
-| PORT | 8765 | 监听端口 |
-| MAX_SEGMENT_DURATION | 5s | VAD 超长片段二次切分阈值（可通过 `--max-segment` 启动参数覆盖） |
+| HOST | 127.0.0.1 | 监听地址（可通过 `--host` 覆盖） |
+| PORT | 8765 | 监听端口（可通过 `--port` 覆盖） |
+| MAX_SEGMENT_DURATION | 5s | VAD 段合并 / 超长切分阈值（可通过 `--max-segment` 启动参数覆盖） |
 | MAX_AUDIO_DURATION | 14400s | 最大音频时长（4 小时） |
 | MAX_AUDIO_FILE_SIZE | 1024MB | 最大文件大小 |
 | MIN_AUDIO_DURATION | 1.0s | 最短音频时长 |
 | MAX_QUEUE_SIZE | 100 | 最大任务队列长度 |
 | TASK_TIMEOUT | 1800s | 单任务超时（30 分钟） |
+
+## 安全终止
+
+服务支持 `Ctrl+C` 安全退出。按下后会：
+
+1. 停止接收新请求
+2. 取消正在处理的 ASR 任务（当前 chunk 完成后立即停止）
+3. 关闭工作线程和线程池
+4. 清理临时文件
