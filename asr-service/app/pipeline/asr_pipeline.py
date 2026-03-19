@@ -10,10 +10,10 @@ from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
 from app.config import (
     UPLOADS_DIR,
     AUDIO_CHUNKS_DIR,
-    MAX_SEGMENT_DURATION,
     MIN_AUDIO_DURATION,
     MAX_AUDIO_DURATION,
 )
+import app.config as cfg
 
 logger = logging.getLogger(__name__)
 
@@ -171,13 +171,13 @@ class ASRPipeline:
     ) -> list[tuple[int, int]]:
         """
         贪心合并相邻 VAD 段：从第一段开始，持续追加后续段，
-        直到合并后总跨度（首段 start 到末段 end）超过 MAX_SEGMENT_DURATION，
+        直到合并后总跨度（首段 start 到末段 end）超过 cfg.MAX_SEGMENT_DURATION，
         则切出一组，开始新的一组。保留段间静音以维持时间戳准确性。
         """
         if not vad_segments:
             return []
 
-        max_span_ms = int(MAX_SEGMENT_DURATION * 1000)
+        max_span_ms = int(cfg.MAX_SEGMENT_DURATION * 1000)
         merged = []
         group_start, group_end = vad_segments[0]
 
@@ -210,7 +210,7 @@ class ASRPipeline:
         merged = self._merge_vad_segments(vad_segments)
         logger.info(
             f"VAD 段合并: {len(vad_segments)} -> {len(merged)} "
-            f"(阈值={MAX_SEGMENT_DURATION}s)"
+            f"(阈值={cfg.MAX_SEGMENT_DURATION}s)"
         )
 
         chunks = []
@@ -222,7 +222,7 @@ class ASRPipeline:
             segment_data = data[start_sample:end_sample]
             segment_duration = len(segment_data) / sr
 
-            if segment_duration <= MAX_SEGMENT_DURATION:
+            if segment_duration <= cfg.MAX_SEGMENT_DURATION:
                 chunk_path = os.path.join(chunk_dir, f"chunk_{idx:04d}.wav")
                 sf.write(chunk_path, segment_data, sr)
                 chunks.append({
@@ -233,7 +233,7 @@ class ASRPipeline:
                 idx += 1
             else:
                 # 单段超长（理论上合并后不会出现，但作为兜底）
-                sub_samples = int(MAX_SEGMENT_DURATION * sr)
+                sub_samples = int(cfg.MAX_SEGMENT_DURATION * sr)
                 offset = 0
                 while offset < len(segment_data):
                     end = min(offset + sub_samples, len(segment_data))

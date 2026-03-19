@@ -40,10 +40,12 @@ class OpenVINOASREngine:
         self._audio_enc = None
         self._embedder = None
         self._dec_req = None
+        self._dec_prefill = None
+        self._dec_kv = None
         self._processor = None
 
     def load(self):
-        """下载模型 + 编译 3 个 OpenVINO 子模型"""
+        """下载模型 + 编译 OpenVINO 子模型"""
         try:
             import openvino as ov
         except ImportError:
@@ -54,13 +56,11 @@ class OpenVINOASREngine:
         from app.engines.processor_numpy import LightProcessor
         from app.utils.openvino_model_downloader import ensure_openvino_model
 
-        # 下载/确认模型
         model_dir = ensure_openvino_model(self._model_size)
         ov_dir = Path(model_dir)
 
         logger.info(f"开始编译 OpenVINO 模型（CPU）...")
 
-        # 编译 3 个子模型
         cpu_cfg = {
             "PERFORMANCE_HINT": "LATENCY",
             "ENABLE_HYPER_THREADING": "YES",
@@ -72,12 +72,21 @@ class OpenVINOASREngine:
         self._embedder = core.compile_model(
             str(ov_dir / "thinker_embeddings_model.xml"), "CPU", cpu_cfg
         )
-        dec_compiled = core.compile_model(
-            str(ov_dir / "decoder_model.xml"), "CPU", cpu_cfg
-        )
-        self._dec_req = dec_compiled.create_infer_request()
 
-        # 加载 Processor
+        if self._model_size == "1.7b":
+            self._dec_prefill = core.compile_model(
+                str(ov_dir / "decoder_prefill_kv_model.xml"), "CPU", cpu_cfg
+            )
+            self._dec_kv = core.compile_model(
+                str(ov_dir / "decoder_kv_model.xml"), "CPU", cpu_cfg
+            )
+            self._dec_req = self._dec_prefill.create_infer_request()
+        else:
+            dec_compiled = core.compile_model(
+                str(ov_dir / "decoder_model.xml"), "CPU", cpu_cfg
+            )
+            self._dec_req = dec_compiled.create_infer_request()
+
         self._processor = LightProcessor(ov_dir)
 
         logger.info(
@@ -128,20 +137,16 @@ class OpenVINOASREngine:
 
     def _infer(self, mel: np.ndarray, ids: np.ndarray, max_tokens: int = 300) -> str:
         """
-        OpenVINO 5 阶段推理：
+        OpenVINO 推理：
         1. audio_encoder(mel) → audio_embeddings
         2. thinker_embeddings(input_ids) → text_embeddings
         3. 融合 audio + text embeddings
         4. decoder 自回归解码
         5. BPE decode → text
         """
-        # 音频编码
         ae = list(self._audio_enc({"mel": mel}).values())[0]
-
-        # 文本 embedding
         te = list(self._embedder({"input_ids": ids}).values())[0]
 
-        # 融合：将 audio embeddings 填入 audio_pad 位置
         combined = te.copy()
         pad_id = self._processor.pad_id
         mask = ids[0] == pad_id
@@ -153,32 +158,52 @@ class OpenVINOASREngine:
         else:
             combined[0, mask] = ae[0]
 
-        # Decoder 自回归生成
         seq_len = combined.shape[1]
         pos = np.arange(seq_len, dtype=np.int64)[np.newaxis, :]
-        self._dec_req.reset_state()
-        out = self._dec_req.infer({0: combined, "position_ids": pos})
-        logits = list(out.values())[0]
 
         eos = self._processor.eos_id
         eot = self._processor.eot_id
         gen_tokens: list[int] = []
-        next_token = int(np.argmax(logits[0, -1, :]))
-        cur_pos = seq_len
 
-        while next_token not in (eos, eot) and len(gen_tokens) < max_tokens:
-            gen_tokens.append(next_token)
-            emb = list(self._embedder(
-                {"input_ids": np.array([[next_token]], dtype=np.int64)}
-            ).values())[0]
-            out = self._dec_req.infer(
-                {0: emb, "position_ids": np.array([[cur_pos]], dtype=np.int64)}
-            )
+        if self._model_size == "1.7b":
+            out = self._dec_req.infer({0: combined, "position_ids": pos})
             logits = list(out.values())[0]
             next_token = int(np.argmax(logits[0, -1, :]))
-            cur_pos += 1
+            cur_pos = seq_len
 
-        # BPE 解码
+            kv_req = self._dec_kv.create_infer_request()
+
+            while next_token not in (eos, eot) and len(gen_tokens) < max_tokens:
+                gen_tokens.append(next_token)
+                emb = list(self._embedder(
+                    {"input_ids": np.array([[next_token]], dtype=np.int64)}
+                ).values())[0]
+                out = kv_req.infer({
+                    0: emb,
+                    "position_ids": np.array([[cur_pos]], dtype=np.int64),
+                })
+                logits = list(out.values())[0]
+                next_token = int(np.argmax(logits[0, -1, :]))
+                cur_pos += 1
+        else:
+            self._dec_req.reset_state()
+            out = self._dec_req.infer({0: combined, "position_ids": pos})
+            logits = list(out.values())[0]
+            next_token = int(np.argmax(logits[0, -1, :]))
+            cur_pos = seq_len
+
+            while next_token not in (eos, eot) and len(gen_tokens) < max_tokens:
+                gen_tokens.append(next_token)
+                emb = list(self._embedder(
+                    {"input_ids": np.array([[next_token]], dtype=np.int64)}
+                ).values())[0]
+                out = self._dec_req.infer(
+                    {0: emb, "position_ids": np.array([[cur_pos]], dtype=np.int64)}
+                )
+                logits = list(out.values())[0]
+                next_token = int(np.argmax(logits[0, -1, :]))
+                cur_pos += 1
+
         raw = self._processor.decode(gen_tokens)
         if "<asr_text>" in raw:
             raw = raw.split("<asr_text>", 1)[1]
@@ -189,6 +214,8 @@ class OpenVINOASREngine:
         self._audio_enc = None
         self._embedder = None
         self._dec_req = None
+        self._dec_prefill = None
+        self._dec_kv = None
         self._processor = None
         logger.info("OpenVINO ASR 模型已卸载")
 

@@ -10,7 +10,6 @@ def setup_logger():
     root = logging.getLogger()
     root.setLevel(logging.INFO)
 
-    # 清除已有 handler，避免第三方库提前配置导致 basicConfig 不生效
     root.handlers.clear()
 
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -22,3 +21,7 @@ def setup_logger():
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
     root.addHandler(stream_handler)
+
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.setLevel(logging.WARNING)
+    access_logger.propagate = False

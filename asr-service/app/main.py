@@ -37,12 +37,8 @@ def parse_args():
         help="不加载对齐模型",
     )
     parser.add_argument(
-        "--enable-punc", dest="enable_punc", action="store_true", default=True,
-        help="启用标点恢复 (default)",
-    )
-    parser.add_argument(
-        "--no-punc", dest="enable_punc", action="store_false",
-        help="不启用标点恢复",
+        "--use-punc", dest="enable_punc", action="store_true", default=False,
+        help="启用标点恢复",
     )
     parser.add_argument(
         "--model-source", choices=["modelscope", "huggingface"], default="modelscope",
@@ -93,6 +89,7 @@ def create_app(args=None) -> FastAPI:
     device = resolve_device(args.device, device_info=device_info)
     is_cpu = device == "cpu"
     vram_gb = device_info.get("vram_gb")
+    logger.info(f"当前运行模式：{"CPU" if is_cpu else "CUDA"}")
 
     # 自动选择模型大小
     model_size = args.model_size or auto_select_model_size(vram_gb)

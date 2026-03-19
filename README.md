@@ -152,7 +152,7 @@ CPU 模式：
 | `--device` | `auto` / `cuda` / `cpu` | `auto` | 运行设备，auto 自动检测 |
 | `--model-size` | `0.6b` / `1.7b` | 根据显存自动选择 | ASR 模型大小 |
 | `--enable-align` / `--no-align` | - | `--enable-align` | 是否加载对齐模型（单词级时间戳） |
-| `--enable-punc` / `--no-punc` | - | `--enable-punc` | 是否启用标点恢复 |
+| `--use-punc` | - | 关闭 | 是否启用标点恢复 |
 | `--model-source` | `modelscope` / `huggingface` | `modelscope` | 模型下载源 |
 | `--host` | IP 地址 | `127.0.0.1` | 监听地址，设为 `0.0.0.0` 可局域网访问 |
 | `--port` | 端口号 | `8765` | 监听端口 |
