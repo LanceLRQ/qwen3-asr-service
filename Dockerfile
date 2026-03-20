@@ -31,7 +31,7 @@ RUN pip install --no-cache-dir --ignore-installed -r requirements.txt \
         --extra-index-url https://download.pytorch.org/whl/cu121
 
 # 复制应用代码
-COPY asr-service/app /app/app
+COPY asr-service/ /app
 
 # 创建模型挂载目录
 RUN mkdir -p /app/models /app/logs
