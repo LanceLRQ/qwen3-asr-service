@@ -25,7 +25,7 @@ def ensure_openvino_model(model_size: str) -> str:
     local_dir = MODEL_LOCAL_MAP[local_key]
 
     # 检查是否已有完整模型文件
-    if _is_model_complete(local_dir):
+    if _is_model_complete(local_dir, model_size):
         logger.info(f"OpenVINO 模型已存在: {local_dir}")
         return local_dir
 
@@ -50,24 +50,34 @@ def ensure_openvino_model(model_size: str) -> str:
     return local_dir
 
 
-def _is_model_complete(model_dir: str) -> bool:
+def _is_model_complete(model_dir: str, model_size: str = "0.6b") -> bool:
     """检查模型目录是否包含必要的 OpenVINO 模型文件。"""
     if not os.path.exists(model_dir):
         return False
 
-    required_files = [
+    common_files = [
         "audio_encoder_model.xml",
         "audio_encoder_model.bin",
         "thinker_embeddings_model.xml",
         "thinker_embeddings_model.bin",
-        "decoder_model.xml",
-        "decoder_model.bin",
         "vocab.json",
-        "prompt_template.json",
-        "mel_filters.npy",
     ]
 
-    for fname in required_files:
+    # 1.7b 使用 KV cache 分离架构，decoder 文件名不同
+    if model_size == "1.7b":
+        decoder_files = [
+            "decoder_prefill_kv_model.xml",
+            "decoder_prefill_kv_model.bin",
+            "decoder_kv_model.xml",
+            "decoder_kv_model.bin",
+        ]
+    else:
+        decoder_files = [
+            "decoder_model.xml",
+            "decoder_model.bin",
+        ]
+
+    for fname in common_files + decoder_files:
         if not os.path.exists(os.path.join(model_dir, fname)):
             return False
 

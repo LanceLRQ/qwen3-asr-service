@@ -31,6 +31,65 @@ _N_SAMPLES = 480_000          # 30s × 16000
 _NB_FRAMES = 3000             # nb_max_frames
 _SR = 16_000
 
+# ── 内置默认 prompt template（与 0.6b 模型对齐） ──────────────────────
+# 0.6b HF 仓库不含 prompt_template.json，因此将共享的 token IDs 内置于此。
+# 若模型目录存在 prompt_template.json（如 1.7b），则以文件内容覆盖。
+_DEFAULT_PROMPT_TPL: dict = {
+    "prefix_ids": [151644, 8948, 198, 151645, 198, 151644, 872, 198, 151669],
+    "suffix_ids": [151670, 151645, 198, 151644, 77091, 198],
+    "n_audio_tokens": 390,
+    "audio_pad_id": 151676,
+    "eos_id": 151645,
+    "eot_id": 151645,
+    "special_ids": [
+        151643, 151644, 151645, 151646, 151647, 151648, 151649, 151650,
+        151651, 151652, 151653, 151654, 151655, 151656, 151669, 151670,
+        151671, 151672, 151673, 151674, 151676, 151677, 151678, 151679,
+        151680, 151681, 151682, 151683, 151684, 151685, 151686, 151687,
+        151688, 151689, 151690, 151691, 151692, 151693, 151694, 151695,
+        151696, 151697, 151698, 151699, 151700, 151701, 151702, 151703,
+    ],
+    "language_suffix_ids": {
+        "Chinese": [11528, 8453, 151704],
+        "English": [11528, 6364, 151704],
+        "Cantonese": [11528, 72366, 2367, 151704],
+        "Arabic": [11528, 34117, 151704],
+        "German": [11528, 5938, 151704],
+        "French": [11528, 8585, 151704],
+        "Spanish": [11528, 15154, 151704],
+        "Portuguese": [11528, 42188, 151704],
+        "Indonesian": [11528, 58829, 151704],
+        "Italian": [11528, 14811, 151704],
+        "Korean": [11528, 16134, 151704],
+        "Russian": [11528, 8522, 151704],
+        "Thai": [11528, 26392, 151704],
+        "Vietnamese": [11528, 48477, 151704],
+        "Japanese": [11528, 10769, 151704],
+        "Turkish": [11528, 23734, 151704],
+        "Hindi": [11528, 43980, 151704],
+        "Malay": [11528, 79140, 151704],
+        "Dutch": [11528, 23234, 151704],
+        "Swedish": [11528, 30109, 151704],
+        "Danish": [11528, 43680, 151704],
+        "Finnish": [11528, 57853, 151704],
+        "Polish": [11528, 31984, 151704],
+        "Czech": [11528, 33150, 151704],
+        "Filipino": [11528, 62417, 151704],
+        "Persian": [11528, 49861, 151704],
+        "Greek": [11528, 17860, 151704],
+        "Romanian": [11528, 73597, 151704],
+        "Hungarian": [11528, 56769, 151704],
+        "Macedonian": [11528, 56452, 75491, 151704],
+    },
+    "supported_languages": [
+        "Chinese", "English", "Cantonese", "Arabic", "German", "French",
+        "Spanish", "Portuguese", "Indonesian", "Italian", "Korean", "Russian",
+        "Thai", "Vietnamese", "Japanese", "Turkish", "Hindi", "Malay",
+        "Dutch", "Swedish", "Danish", "Finnish", "Polish", "Czech",
+        "Filipino", "Persian", "Greek", "Romanian", "Hungarian", "Macedonian",
+    ],
+}
+
 _MEL_FILTERS: np.ndarray | None = None
 
 
@@ -125,16 +184,14 @@ class LightProcessor:
         _load_mel_filters(model_dir)
         self._model_dir = model_dir
 
-        # 读取 prompt template
+        # 读取 prompt template（优先文件，fallback 内置默认值）
+        tpl = dict(_DEFAULT_PROMPT_TPL)
         tpl_path = model_dir / "prompt_template.json"
         if not tpl_path.exists():
             tpl_path = model_dir.parent / "prompt_template.json"
-        if not tpl_path.exists():
-            raise FileNotFoundError(
-                f"找不到 prompt_template.json，已搜索: {model_dir}, {model_dir.parent}"
-            )
-        with open(tpl_path, "r", encoding="utf-8") as f:
-            tpl = json.load(f)
+        if tpl_path.exists():
+            with open(tpl_path, "r", encoding="utf-8") as f:
+                tpl.update(json.load(f))
 
         self._prefix_ids: list[int] = tpl["prefix_ids"]
         self._suffix_ids: list[int] = tpl["suffix_ids"]
