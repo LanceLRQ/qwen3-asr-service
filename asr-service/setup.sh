@@ -8,19 +8,64 @@ echo "=========================================="
 echo "  Qwen3-ASR Service 环境初始化"
 echo "=========================================="
 
-# 1. 检查 Python3
-if ! command -v python3 &> /dev/null; then
-    echo "[ERROR] 未找到 python3，请先安装 Python 3.10+"
-    exit 1
-fi
+# 1. 检查 Python3 版本（按平台检测）
+PYTHON_BIN=""
 
-PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-echo "[INFO] Python 版本：$PYTHON_VERSION"
+detect_python() {
+    local os_name="$(uname -s)"
+
+    if [ "$os_name" = "Darwin" ]; then
+        # macOS: 优先使用 python3，如果为 3.10 则直接用
+        if command -v python3 &> /dev/null; then
+            local ver=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+            if [ "$ver" = "3.10" ]; then
+                PYTHON_BIN="python3"
+                echo "[INFO] macOS: 检测到 Python $ver，符合要求"
+                return 0
+            fi
+        fi
+
+        # 默认 python3 不是 3.10，尝试 homebrew python@3.12
+        if [ -x "/opt/homebrew/opt/python@3.12/bin/python3.12" ]; then
+            PYTHON_BIN="/opt/homebrew/opt/python@3.12/bin/python3.12"
+            echo "[INFO] macOS: 使用 Homebrew Python 3.12"
+            return 0
+        fi
+
+        echo "[ERROR] 未找到合适的 Python 版本（需要 3.10 或 3.12）"
+        echo "[ERROR] 请执行: brew install python@3.10"
+        exit 1
+
+    elif [ "$os_name" = "Linux" ]; then
+        # Linux: 要求 python3 为 3.12
+        if command -v python3 &> /dev/null; then
+            local ver=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+            if [ "$ver" = "3.12" ]; then
+                PYTHON_BIN="python3"
+                echo "[INFO] Linux: 检测到 Python $ver，符合要求"
+                return 0
+            fi
+            echo "[ERROR] 当前 Python 版本为 $ver，需要 3.12"
+        else
+            echo "[ERROR] 未找到 python3"
+        fi
+        echo "[ERROR] 请安装 Python 3.12 后重试"
+        exit 1
+
+    else
+        echo "[ERROR] 不支持的操作系统: $os_name"
+        exit 1
+    fi
+}
+
+detect_python
+PYTHON_VERSION=$($PYTHON_BIN -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+echo "[INFO] Python 版本：$PYTHON_VERSION (路径: $(command -v $PYTHON_BIN))"
 
 # 2. 创建 venv
 if [ ! -d "venv" ]; then
     echo "[INFO] 创建虚拟环境..."
-    python3 -m venv venv
+    $PYTHON_BIN -m venv venv
 else
     echo "[INFO] 虚拟环境已存在，跳过创建"
 fi
