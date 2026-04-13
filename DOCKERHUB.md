@@ -4,15 +4,24 @@
 
 基于 Qwen3-ASR 的开箱即用长语音识别 API 服务，支持 GPU（CUDA）和 CPU（OpenVINO INT8）双模式推理。
 
-### 镜像版本
+### Supported tags and respective Dockerfile links
 
-| Tag | 基础镜像 | 架构 | 适用场景 |
-|-----|---------|------|---------|
-| `latest` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | 有 NVIDIA GPU 的服务器 |
-| `latest-cpu` | `ubuntu:22.04` | amd64 | 无 GPU 的 x86 服务器 |
-| `latest-arm64` | `ubuntu:22.04` | arm64 | Apple Silicon / ARM64 服务器 |
+**GPU 版本**（CUDA 12.1，需要 NVIDIA GPU 和 nvidia-docker）
+- [`latest`, `1.1.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/Dockerfile)
 
-> 版本号镜像同理：`0.2.0`、`0.2.0-cpu`、`0.2.0-arm64`。
+**CPU 版本**（x86_64，无需 GPU，适用于普通 Linux/Windows 服务器）
+- [`latest-cpu`, `1.1.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/Dockerfile.cpu)
+
+**ARM64 版本**（arm64/aarch64，无需 GPU，适用于 Apple Silicon、ARM64 Linux 服务器）
+- [`latest-arm64`, `1.1.0-arm64`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/Dockerfile.cpu)
+
+### 镜像版本对比
+
+| Tag | 基础镜像 | 架构 | 推理引擎 | NVIDIA GPU | 镜像体积 |
+|-----|---------|------|---------|-----------|---------|
+| `latest` / `1.1.0` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | PyTorch (CUDA) | 需要 | ~8-10GB |
+| `latest-cpu` / `1.1.0-cpu` | `ubuntu:22.04` | amd64 | OpenVINO (INT8) | 不需要 | ~3-4GB |
+| `latest-arm64` / `1.1.0-arm64` | `ubuntu:22.04` | arm64 | OpenVINO (FP32) | 不需要 | ~3-4GB |
 
 ### 特性
 
@@ -192,15 +201,24 @@ curl http://localhost:8765/v1/health
 
 A ready-to-use long-form speech recognition API service based on Qwen3-ASR, supporting both GPU (CUDA) and CPU (OpenVINO INT8) inference.
 
-### Image Tags
+### Supported tags and respective Dockerfile links
 
-| Tag | Base Image | Arch | Use Case |
-|-----|-----------|------|----------|
-| `latest` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | Servers with NVIDIA GPU |
-| `latest-cpu` | `ubuntu:22.04` | amd64 | x86 servers without GPU |
-| `latest-arm64` | `ubuntu:22.04` | arm64 | Apple Silicon / ARM64 servers |
+**GPU** (CUDA 12.1, requires NVIDIA GPU and nvidia-docker)
+- [`latest`, `1.1.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/Dockerfile)
 
-> Versioned tags follow the same pattern: `0.2.0`, `0.2.0-cpu`, `0.2.0-arm64`.
+**CPU** (x86_64, no GPU required, for standard Linux/Windows servers)
+- [`latest-cpu`, `1.1.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/Dockerfile.cpu)
+
+**ARM64** (arm64/aarch64, no GPU required, for Apple Silicon and ARM64 Linux servers)
+- [`latest-arm64`, `1.1.0-arm64`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/Dockerfile.cpu)
+
+### Image tag comparison
+
+| Tag | Base Image | Arch | Inference Engine | NVIDIA GPU | Image Size |
+|-----|-----------|------|-----------------|-----------|-----------|
+| `latest` / `1.1.0` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | PyTorch (CUDA) | Required | ~8-10GB |
+| `latest-cpu` / `1.1.0-cpu` | `ubuntu:22.04` | amd64 | OpenVINO (INT8) | Not required | ~3-4GB |
+| `latest-arm64` / `1.1.0-arm64` | `ubuntu:22.04` | arm64 | OpenVINO (FP32) | Not required | ~3-4GB |
 
 ### Features
 
