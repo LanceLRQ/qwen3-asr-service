@@ -60,6 +60,14 @@ def parse_args():
         "--max-segment", type=int, default=5,
         help="VAD 切片合并最大时长，单位秒 (default: 5)",
     )
+    parser.add_argument(
+        "--api-key", default=None,
+        help="API 密钥，设置后启用 Bearer token 认证（覆盖 ASR_API_KEY 环境变量）",
+    )
+    parser.add_argument(
+        "--max-queue-size", type=int, default=None,
+        help=f"任务队列最大长度 (default: {cfg.MAX_QUEUE_SIZE})",
+    )
     return parser.parse_args()
 
 
@@ -83,6 +91,12 @@ def create_app(args=None) -> FastAPI:
         cfg.HOST = args.host
     if args.port is not None:
         cfg.PORT = args.port
+    if args.api_key is not None:
+        cfg.API_KEY = args.api_key
+    if args.max_queue_size is not None:
+        cfg.MAX_QUEUE_SIZE = args.max_queue_size
+    if cfg.API_KEY:
+        logger.info("API 密钥已配置，Bearer token 认证已启用")
 
     # 4. 检测设备并确定运行参数
     device_info = detect_device()
@@ -160,7 +174,7 @@ def create_app(args=None) -> FastAPI:
     )
 
     # 7. 创建任务管理器
-    task_manager = TaskManager()
+    task_manager = TaskManager(max_queue_size=cfg.MAX_QUEUE_SIZE)
 
     def process_task(task: dict):
         def on_progress(p):

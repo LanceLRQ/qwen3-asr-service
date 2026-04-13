@@ -1,10 +1,11 @@
 services:
   asr:
-    image: lancelrq/qwen3-asr-service:latest
+    image: lancelrq/qwen3-asr-service:latest-cpu
     # build:
     #   context: .
+    #   dockerfile: Dockerfile.cpu
     #   tags:
-    #     - lancelrq/qwen3-asr-service:latest
+    #     - lancelrq/qwen3-asr-service:latest-cpu
     ports:
       - "8765:8765"
     environment:
@@ -12,18 +13,9 @@ services:
     volumes:
       - ./asr-service/models:/app/models
       - ./asr-service/logs:/app/logs
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     command:
       - --model-size=0.6b        # 模型大小：0.6b / 1.7b
-      - --device=auto             # 运行设备：auto / cuda / cpu
       - --model-source=modelscope # 下载源：modelscope / huggingface
-      - --enable-align            # 启用对齐模型（不需要则改为 --no-align）
       # - --use-punc              # 启用标点恢复（按需开启）
       # - --api-key=sk-xxx        # API 密钥（覆盖 ASR_API_KEY 环境变量）
       - --web                     # 启用 Web UI（访问 /web-ui）

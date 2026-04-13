@@ -61,10 +61,14 @@ class OpenVINOASREngine:
 
         logger.info(f"开始编译 OpenVINO 模型（CPU）...")
 
+        import platform
         cpu_cfg = {
             "PERFORMANCE_HINT": "LATENCY",
             "ENABLE_HYPER_THREADING": "YES",
         }
+        if platform.machine() in ("aarch64", "arm64"):
+            cpu_cfg["INFERENCE_PRECISION_HINT"] = "f32"
+            logger.info("检测到 ARM64 架构，已启用 FP32 推理精度")
         core = ov.Core()
         self._audio_enc = core.compile_model(
             str(ov_dir / "audio_encoder_model.xml"), "CPU", cpu_cfg

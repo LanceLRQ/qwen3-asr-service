@@ -14,6 +14,7 @@ ASR_MODEL_SIZE = "0.6b"         # "0.6b" | "1.7b"
 ENABLE_ALIGN = True             # 是否加载对齐模型
 ENABLE_PUNC = True              # 是否启用标点恢复
 MODEL_SOURCE = os.environ.get("MODEL_SOURCE", "modelscope")
+API_KEY = os.environ.get("ASR_API_KEY", "")   # Bearer token，为空则不启用认证
 
 # ─── 模型路径 ───
 

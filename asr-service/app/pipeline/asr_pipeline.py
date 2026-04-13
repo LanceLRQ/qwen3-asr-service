@@ -121,7 +121,10 @@ class ASRPipeline:
                 logger.info(f"[Pipeline] 标点恢复完成: {punc_count}/{len(segments)} 个段落有变化")
 
             # 5. 合并全文
-            full_text = "".join(seg["text"] for seg in segments if seg["text"] != "[识别失败]")
+            full_text = "".join(
+                seg["text"] for seg in segments
+                if seg["text"] and seg["text"].strip() and seg["text"] != "[识别失败]"
+            )
 
             if progress_callback:
                 progress_callback(1.0)
@@ -208,7 +211,8 @@ class ASRPipeline:
                 }
                 if self.asr.align_enabled and words:
                     segment["words"] = words
-                segments.append(segment)
+                if text.strip():
+                    segments.append(segment)
 
             processed = batch_end
             logger.info(
@@ -255,7 +259,8 @@ class ASRPipeline:
                 if self.asr.align_enabled and words:
                     segment["words"] = words
 
-                segments.append(segment)
+                if text.strip():
+                    segments.append(segment)
             except Exception as e:
                 logger.error(f"chunk {i} 识别失败: {e}")
                 segments.append({

@@ -112,6 +112,12 @@ h1 { text-align: center; margin-bottom: 24px; color: #1a1a2e; font-size: 1.6em; 
 <div class="container">
   <h1>Qwen3-ASR Service</h1>
 
+  <!-- API Key（可选） -->
+  <div style="background:#fff;border-radius:10px;padding:12px 16px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;align-items:center;gap:10px;">
+    <label for="apiKeyInput" style="font-size:0.9em;color:#475569;white-space:nowrap;">API Key</label>
+    <input type="password" id="apiKeyInput" placeholder="留空表示无需认证" style="flex:1;border:1px solid #cbd5e1;border-radius:6px;padding:6px 10px;font-size:0.9em;outline:none;">
+  </div>
+
   <!-- 上传区域 -->
   <div class="upload-zone" id="uploadZone">
     <div class="icon">&#128190;</div>
@@ -179,10 +185,16 @@ h1 { text-align: center; margin-bottom: 24px; color: #1a1a2e; font-size: 1.6em; 
   const metaTags = $('metaTags'), segments = $('segments'), fullText = $('fullText');
   const jsonToggle = $('jsonToggle'), jsonContent = $('jsonContent'), downloadBtn = $('downloadBtn');
 
+  const apiKeyInput = $('apiKeyInput');
   let selectedFile = null;
   let audioObjectURL = null;
   let pollTimer = null;
   let resultData = null;
+
+  function authHeaders() {
+    const key = apiKeyInput.value.trim();
+    return key ? { 'Authorization': 'Bearer ' + key } : {};
+  }
 
   // 格式化时间 (秒 -> mm:ss.xx)
   function fmtTime(s) {
@@ -232,7 +244,7 @@ h1 { text-align: center; margin-bottom: 24px; color: #1a1a2e; font-size: 1.6em; 
     form.append('file', selectedFile);
 
     try {
-      const res = await fetch('/v1/asr', { method: 'POST', body: form });
+      const res = await fetch('/v1/asr', { method: 'POST', body: form, headers: authHeaders() });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: '上传失败' }));
         throw new Error(err.detail || '上传失败');
@@ -249,7 +261,7 @@ h1 { text-align: center; margin-bottom: 24px; color: #1a1a2e; font-size: 1.6em; 
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(async () => {
       try {
-        const res = await fetch('/v1/asr/' + taskId);
+        const res = await fetch('/v1/asr/' + taskId, { headers: authHeaders() });
         const data = await res.json();
         if (data.status === 'processing' || data.status === 'queued') {
           const pct = Math.round((data.progress || 0) * 100);

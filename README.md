@@ -1,5 +1,7 @@
 # Qwen3-ASR Service
 
+**中文** | [English](README_EN.md)
+
 基于 Qwen3-ASR 的开箱即用长语音识别 API 服务。
 
 ## 特性
@@ -12,6 +14,8 @@
 - **时间戳支持** - 句子级 / 单词级时间戳（GPU 模式）
 - **自动标点** - 集成 CT-Transformer 标点恢复模型
 - **Web UI** - 内置浏览器界面，支持音频上传、实时进度、结果播放和导出
+- **API 认证** - 可选的 Bearer Token 认证，兼容 OpenAI API 格式
+- **交互式管理** - CLI 管理脚本，支持 Docker / venv 双模式一键管理
 
 ## 系统要求
 
@@ -107,6 +111,72 @@ bash start.sh --host 0.0.0.0
 bash start.sh --host 0.0.0.0 --port 9000
 ```
 
+#### 启用 API 认证
+
+设置 API 密钥后，所有 `/v1/asr` 和 `/v1/asr/{task_id}` 接口需要携带 Bearer Token：
+
+```bash
+# 通过启动参数设置
+bash start.sh --api-key sk-your-key-here
+
+# 或通过环境变量设置
+export ASR_API_KEY=sk-your-key-here
+bash start.sh
+```
+
+### Docker 部署
+
+#### 使用预构建镜像
+
+```bash
+# 拉取镜像
+docker pull lancelrq/qwen3-asr-service:latest
+
+# 启动容器（GPU 模式）
+docker run -d --gpus all \
+  -p 8765:8765 \
+  -v ./asr-service/models:/app/models \
+  -v ./asr-service/logs:/app/logs \
+  --name qwen3-asr-service \
+  lancelrq/qwen3-asr-service:latest \
+  --model-size 0.6b --device auto --web
+```
+
+#### 使用 docker-compose
+
+```bash
+# 直接启动（使用 docker-compose.yml 中的默认配置）
+docker compose up -d
+
+# 停止
+docker compose down
+```
+
+`docker-compose.yml` 中可配置启动参数、API 密钥、端口映射等，详见文件内注释。
+
+#### 本地构建镜像
+
+```bash
+bash build.sh
+```
+
+### 交互式 CLI 管理
+
+项目提供交互式管理脚本，统一管理 Docker 和本地 venv 两种运行方式：
+
+```bash
+# Linux / macOS
+bash asr-service/cli.sh
+
+# Windows
+asr-service\cli.bat
+```
+
+CLI 管理脚本支持：
+- Docker 管理（拉取/构建镜像、启动/停止容器、查看日志）
+- 虚拟环境管理（安装/卸载/查看信息）
+- 启动服务（交互式配置参数，支持保存配置）
+
 ### 3. 验证服务
 
 ```bash
@@ -158,6 +228,8 @@ CPU 模式：
 | `--port` | 端口号 | `8765` | 监听端口 |
 | `--web` | - | 关闭 | 启用 Web UI（访问 `/web-ui`） |
 | `--max-segment` | 秒数 | `5` | VAD 切片合并最大时长 |
+| `--api-key` | 字符串 | 无 | API 密钥，设置后启用 Bearer Token 认证（覆盖 `ASR_API_KEY` 环境变量） |
+| `--max-queue-size` | 数字 | `100` | 任务队列最大长度 |
 
 ### 三种运行模式
 
@@ -205,6 +277,14 @@ curl -X POST http://127.0.0.1:8765/v1/asr \
 curl -X POST http://127.0.0.1:8765/v1/asr \
   -F "file=@/path/to/audio.mp3" \
   -F "language=zh"
+```
+
+如果启用了 API 认证，需要在请求中携带 Bearer Token：
+
+```bash
+curl -X POST http://127.0.0.1:8765/v1/asr \
+  -H "Authorization: Bearer sk-your-key-here" \
+  -F "file=@/path/to/audio.wav"
 ```
 
 | 参数 | 类型 | 默认值 | 说明 |
@@ -337,9 +417,15 @@ asr-service/
 ├── models/                        # 模型存放（自动下载，不提交 Git）
 ├── cache/                         # 运行时缓存（上传文件、音频切片）
 ├── logs/                          # 日志文件
-├── setup.sh                       # 环境初始化
-├── start.sh                       # 服务启动
+├── setup.sh / setup.bat           # 环境初始化
+├── start.sh / start.bat           # 服务启动
+├── cli.sh / cli.bat               # 交互式 CLI 管理脚本
 └── requirements.txt               # 依赖清单
+
+# 项目根目录
+├── Dockerfile                     # Docker 镜像构建
+├── docker-compose.yml             # Docker Compose 编排
+└── build.sh                       # 镜像构建脚本
 ```
 
 ## 处理流程
@@ -378,7 +464,7 @@ asr-service/
 | MAX_AUDIO_DURATION | 14400s | 最大音频时长（4 小时） |
 | MAX_AUDIO_FILE_SIZE | 1024MB | 最大文件大小 |
 | MIN_AUDIO_DURATION | 1.0s | 最短音频时长 |
-| MAX_QUEUE_SIZE | 100 | 最大任务队列长度 |
+| MAX_QUEUE_SIZE | 100 | 最大任务队列长度（可通过 `--max-queue-size` 启动参数覆盖） |
 | TASK_TIMEOUT | 1800s | 单任务超时（30 分钟） |
 
 ## 安全终止

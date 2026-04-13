@@ -1,0 +1,21 @@
+# 核心（CPU 推理）
+torch==2.6.0
+torchaudio==2.6.0
+funasr==1.3.1
+onnxruntime
+
+# OpenVINO（CPU 推理）
+openvino>=2024.0
+
+# Web 框架
+fastapi
+uvicorn[standard]
+python-multipart
+
+# 音频处理
+soundfile
+librosa
+
+# 模型管理
+huggingface_hub
+modelscope

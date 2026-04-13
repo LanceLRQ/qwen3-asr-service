@@ -1,12 +1,32 @@
 import os
 import uuid
+import hmac
 import logging
 import queue
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.api.schemas import ASRResponse, TaskStatusResponse, HealthResponse
 from app.config import UPLOADS_DIR, MAX_AUDIO_FILE_SIZE
+import app.config as cfg
 
 logger = logging.getLogger(__name__)
+
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+async def verify_api_key(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+):
+    """配置了 API_KEY 时，要求请求携带有效的 Bearer token"""
+    if not cfg.API_KEY:
+        return
+    if credentials is None or not hmac.compare_digest(credentials.credentials, cfg.API_KEY):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key",
+        )
+
+
 router = APIRouter(prefix="/v1")
 
 # 支持的音频文件扩展名
@@ -27,7 +47,7 @@ def init_routes(task_manager, service_info: dict):
     _service_info = service_info
 
 
-@router.post("/asr", response_model=ASRResponse)
+@router.post("/asr", response_model=ASRResponse, dependencies=[Depends(verify_api_key)])
 async def submit_asr(
     file: UploadFile = File(...),
     language: str | None = Form(None),
@@ -83,7 +103,7 @@ async def submit_asr(
     return ASRResponse(task_id=task_id)
 
 
-@router.get("/asr/{task_id}", response_model=TaskStatusResponse)
+@router.get("/asr/{task_id}", response_model=TaskStatusResponse, dependencies=[Depends(verify_api_key)])
 async def get_task_status(task_id: str):
     """查询任务状态"""
     if _task_manager is None:
