@@ -4,6 +4,16 @@
 
 基于 Qwen3-ASR 的开箱即用长语音识别 API 服务，支持 GPU（CUDA）和 CPU（OpenVINO INT8）双模式推理。
 
+### 镜像版本
+
+| Tag | 基础镜像 | 架构 | 适用场景 |
+|-----|---------|------|---------|
+| `latest` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | 有 NVIDIA GPU 的服务器 |
+| `latest-cpu` | `ubuntu:22.04` | amd64 | 无 GPU 的 x86 服务器 |
+| `latest-arm64` | `ubuntu:22.04` | arm64 | Apple Silicon / ARM64 服务器 |
+
+> 版本号镜像同理：`0.2.0`、`0.2.0-cpu`、`0.2.0-arm64`。
+
 ### 特性
 
 - 支持 1s ~ 4 小时的长语音文件，自动 VAD 切片处理
@@ -27,7 +37,7 @@ docker run -d --gpus all \
   lancelrq/qwen3-asr-service:latest
 ```
 
-#### CPU 模式
+#### CPU 模式（x86）
 
 ```bash
 docker run -d \
@@ -35,11 +45,23 @@ docker run -d \
   -v /path/to/models:/app/models \
   -v /path/to/logs:/app/logs \
   --name qwen3-asr-service \
-  lancelrq/qwen3-asr-service:latest \
-  --device cpu --model-size 0.6b
+  lancelrq/qwen3-asr-service:latest-cpu
+```
+
+#### ARM64 模式（Apple Silicon 等）
+
+```bash
+docker run -d \
+  -p 8765:8765 \
+  -v /path/to/models:/app/models \
+  -v /path/to/logs:/app/logs \
+  --name qwen3-asr-service \
+  lancelrq/qwen3-asr-service:latest-arm64
 ```
 
 首次启动会自动下载模型文件，挂载 `/app/models` 目录可持久化模型避免重复下载。
+
+> CPU 和 ARM64 镜像无需 NVIDIA GPU 和 nvidia-docker，开箱即用。
 
 ### Docker Compose
 
@@ -151,12 +173,14 @@ curl http://localhost:8765/v1/health
 
 ### 运行模式对比
 
-| | GPU 模式 | CPU 模式 |
-|--|---------|---------|
-| 推理引擎 | PyTorch (CUDA) | OpenVINO (INT8) |
-| 对齐（字级时间戳） | 支持 | 不支持 |
-| 显存/内存需求 | ~2-8GB 显存 | ~4-6GB 内存 |
-| 模型来源 | ModelScope / HuggingFace | HuggingFace |
+| | GPU 模式 | CPU 模式 | ARM64 模式 |
+|--|---------|---------|-----------|
+| 镜像 Tag | `latest` | `latest-cpu` | `latest-arm64` |
+| 推理引擎 | PyTorch (CUDA) | OpenVINO (INT8) | OpenVINO (FP32) |
+| 对齐（字级时间戳） | 支持 | 不支持 | 不支持 |
+| 显存/内存需求 | ~2-8GB 显存 | ~4-6GB 内存 | ~4-6GB 内存 |
+| 模型来源 | ModelScope / HuggingFace | HuggingFace | HuggingFace |
+| NVIDIA GPU | 需要 | 不需要 | 不需要 |
 
 > `--device auto` 时根据显存自动选择：>=6GB 用 1.7B，4-6GB 用 0.6B，无 GPU 回退 CPU。
 
@@ -167,6 +191,16 @@ curl http://localhost:8765/v1/health
 ---
 
 A ready-to-use long-form speech recognition API service based on Qwen3-ASR, supporting both GPU (CUDA) and CPU (OpenVINO INT8) inference.
+
+### Image Tags
+
+| Tag | Base Image | Arch | Use Case |
+|-----|-----------|------|----------|
+| `latest` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | Servers with NVIDIA GPU |
+| `latest-cpu` | `ubuntu:22.04` | amd64 | x86 servers without GPU |
+| `latest-arm64` | `ubuntu:22.04` | arm64 | Apple Silicon / ARM64 servers |
+
+> Versioned tags follow the same pattern: `0.2.0`, `0.2.0-cpu`, `0.2.0-arm64`.
 
 ### Features
 
@@ -191,7 +225,7 @@ docker run -d --gpus all \
   lancelrq/qwen3-asr-service:latest
 ```
 
-#### CPU Mode
+#### CPU Mode (x86)
 
 ```bash
 docker run -d \
@@ -199,11 +233,23 @@ docker run -d \
   -v /path/to/models:/app/models \
   -v /path/to/logs:/app/logs \
   --name qwen3-asr-service \
-  lancelrq/qwen3-asr-service:latest \
-  --device cpu --model-size 0.6b
+  lancelrq/qwen3-asr-service:latest-cpu
+```
+
+#### ARM64 Mode (Apple Silicon, etc.)
+
+```bash
+docker run -d \
+  -p 8765:8765 \
+  -v /path/to/models:/app/models \
+  -v /path/to/logs:/app/logs \
+  --name qwen3-asr-service \
+  lancelrq/qwen3-asr-service:latest-arm64
 ```
 
 Models are downloaded automatically on first startup. Mount `/app/models` to persist them across restarts.
+
+> CPU and ARM64 images do not require NVIDIA GPU or nvidia-docker.
 
 ### Docker Compose
 
@@ -315,12 +361,14 @@ curl http://localhost:8765/v1/health
 
 ### Mode Comparison
 
-| | GPU Mode | CPU Mode |
-|--|---------|---------|
-| Inference Engine | PyTorch (CUDA) | OpenVINO (INT8) |
-| Alignment (word timestamps) | Supported | Not supported |
-| VRAM / Memory | ~2-8GB VRAM | ~4-6GB RAM |
-| Model Source | ModelScope / HuggingFace | HuggingFace |
+| | GPU Mode | CPU Mode | ARM64 Mode |
+|--|---------|---------|-----------|
+| Image Tag | `latest` | `latest-cpu` | `latest-arm64` |
+| Inference Engine | PyTorch (CUDA) | OpenVINO (INT8) | OpenVINO (FP32) |
+| Alignment (word timestamps) | Supported | Not supported | Not supported |
+| VRAM / Memory | ~2-8GB VRAM | ~4-6GB RAM | ~4-6GB RAM |
+| Model Source | ModelScope / HuggingFace | HuggingFace | HuggingFace |
+| NVIDIA GPU | Required | Not required | Not required |
 
 > With `--device auto`, the service selects automatically: >=6GB VRAM uses 1.7B, 4-6GB uses 0.6B, no GPU falls back to CPU.
 
