@@ -58,16 +58,51 @@ detect_python() {
     fi
 }
 
+# 0. Linux 环境下建议使用 Docker 镜像
+if [ "$(uname -s)" = "Linux" ]; then
+    echo ""
+    echo "[推荐] 检测到 Linux 环境，建议使用 Docker 镜像部署，开箱即用无需手动配置环境："
+    echo ""
+    echo "  docker pull lancelrq/qwen3-asr-service:latest"
+    echo "  docker run -d --gpus all -p 8866:8866 lancelrq/qwen3-asr-service:latest"
+    echo ""
+    read -p "是否继续本地安装？[y/N]: " CONTINUE_LOCAL
+    CONTINUE_LOCAL=${CONTINUE_LOCAL:-N}
+    case "$CONTINUE_LOCAL" in
+        [Yy]|[Yy][Ee][Ss]|是|继续)
+            echo "[INFO] 继续本地安装..."
+            ;;
+        *)
+            echo "[INFO] 已取消本地安装。请使用 Docker 镜像部署。"
+            exit 0
+            ;;
+    esac
+    echo ""
+fi
+
 detect_python
 PYTHON_VERSION=$($PYTHON_BIN -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 echo "[INFO] Python 版本：$PYTHON_VERSION (路径: $(command -v $PYTHON_BIN))"
 
 # 2. 创建 venv
-if [ ! -d "venv" ]; then
+if [ -d "venv" ]; then
+    echo "[INFO] 检测到已有虚拟环境"
+    read -p "是否删除并重新安装？[y/N]: " REINSTALL_VENV
+    REINSTALL_VENV=${REINSTALL_VENV:-N}
+    case "$REINSTALL_VENV" in
+        [Yy]|[Yy][Ee][Ss]|是|重新安装)
+            echo "[INFO] 删除旧虚拟环境..."
+            rm -rf venv
+            echo "[INFO] 创建虚拟环境..."
+            $PYTHON_BIN -m venv venv
+            ;;
+        *)
+            echo "[INFO] 保留已有虚拟环境，跳过创建"
+            ;;
+    esac
+else
     echo "[INFO] 创建虚拟环境..."
     $PYTHON_BIN -m venv venv
-else
-    echo "[INFO] 虚拟环境已存在，跳过创建"
 fi
 
 source venv/bin/activate
