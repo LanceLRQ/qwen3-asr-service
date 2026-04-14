@@ -31,6 +31,7 @@
 - 句子级 / 单词级时间戳（GPU 模式）
 - 可选标点恢复（CT-Transformer）
 - 可选 Bearer Token API 认证（兼容 OpenAI 格式）
+- 任务管理：列表查询、状态筛选、任务取消
 - 内置 Web UI，支持音频上传、进度展示、结果播放和导出
 
 ### 快速启动
@@ -153,7 +154,7 @@ curl -X POST http://localhost:8765/v1/asr \
 #### 查询结果
 
 ```bash
-curl http://localhost:8765/v1/asr/{task_id}
+curl http://localhost:8765/v1/tasks/{task_id}
 ```
 
 响应：
@@ -172,7 +173,34 @@ curl http://localhost:8765/v1/asr/{task_id}
 }
 ```
 
-任务状态：`pending` → `processing` → `completed` / `failed`
+任务状态：`pending` → `processing` → `completed` / `failed` / `cancelled`
+
+#### 任务列表
+
+```bash
+# 获取全部任务
+curl http://localhost:8765/v1/tasks
+
+# 按状态筛选
+curl http://localhost:8765/v1/tasks?status=processing
+```
+
+响应：
+
+```json
+{
+  "total": 2,
+  "tasks": [
+    {"task_id": "...", "status": "completed", "progress": 1.0, "created_at": "...", "finished_at": null, "error": null}
+  ]
+}
+```
+
+#### 取消任务
+
+```bash
+curl -X DELETE http://localhost:8765/v1/asr/{task_id}
+```
 
 #### 健康检查
 
@@ -230,6 +258,7 @@ A ready-to-use long-form speech recognition API service based on Qwen3-ASR, supp
 - Sentence-level and word-level timestamps (GPU mode)
 - Optional punctuation restoration (CT-Transformer)
 - Optional Bearer Token API authentication (OpenAI-compatible format)
+- Task management: list, filter by status, cancel tasks
 - Built-in Web UI for uploading audio, tracking progress, playing results, and exporting
 
 ### Quick Start
@@ -352,7 +381,7 @@ Response:
 #### Query Result
 
 ```bash
-curl http://localhost:8765/v1/asr/{task_id}
+curl http://localhost:8765/v1/tasks/{task_id}
 ```
 
 Response:
@@ -371,7 +400,34 @@ Response:
 }
 ```
 
-Task status flow: `pending` → `processing` → `completed` / `failed`
+Task status flow: `pending` → `processing` → `completed` / `failed` / `cancelled`
+
+#### List Tasks
+
+```bash
+# List all tasks
+curl http://localhost:8765/v1/tasks
+
+# Filter by status
+curl http://localhost:8765/v1/tasks?status=processing
+```
+
+Response:
+
+```json
+{
+  "total": 2,
+  "tasks": [
+    {"task_id": "...", "status": "completed", "progress": 1.0, "created_at": "...", "finished_at": null, "error": null}
+  ]
+}
+```
+
+#### Cancel Task
+
+```bash
+curl -X DELETE http://localhost:8765/v1/asr/{task_id}
+```
 
 #### Health Check
 
