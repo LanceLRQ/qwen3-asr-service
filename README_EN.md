@@ -113,7 +113,7 @@ bash start.sh --host 0.0.0.0 --port 9000
 
 #### Enable API Authentication
 
-After setting an API key, all `/v1/asr` and `/v1/asr/{task_id}` endpoints require a Bearer Token:
+After setting an API key, all endpoints (except `/v1/health`) require a Bearer Token:
 
 ```bash
 # Set via startup parameter
@@ -303,7 +303,7 @@ Response:
 ### Query Task Status
 
 ```bash
-curl http://127.0.0.1:8765/v1/asr/{task_id}
+curl http://127.0.0.1:8765/v1/tasks/{task_id}
 ```
 
 Response (completed):
@@ -335,7 +335,72 @@ Response (completed):
 ```
 
 - The `words` field is only present when `align_enabled=true`
-- Task status flow: `pending` → `processing` → `completed` / `failed`
+- Task status flow: `pending` → `processing` → `completed` / `failed` / `cancelled`
+- Also available via `GET /v1/asr/{task_id}` (deprecated, same functionality)
+
+### List Tasks
+
+```bash
+# List all tasks
+curl http://127.0.0.1:8765/v1/tasks
+
+# Filter by status
+curl http://127.0.0.1:8765/v1/tasks?status=processing
+```
+
+Response:
+
+```json
+{
+  "total": 2,
+  "tasks": [
+    {
+      "task_id": "550e8400-...",
+      "status": "completed",
+      "progress": 1.0,
+      "language": null,
+      "created_at": "2026-04-14T10:30:00",
+      "finished_at": 1744615860.0,
+      "error": null
+    },
+    {
+      "task_id": "660e8400-...",
+      "status": "processing",
+      "progress": 0.45,
+      "language": "zh",
+      "created_at": "2026-04-14T10:31:00",
+      "finished_at": null,
+      "error": null
+    }
+  ]
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| status | string | null | Filter by status: `pending` / `processing` / `completed` / `failed` / `cancelled` |
+
+Tasks are sorted by creation time in descending order. Results are not included.
+
+### Cancel Task
+
+```bash
+curl -X DELETE http://127.0.0.1:8765/v1/asr/{task_id}
+```
+
+Response:
+
+```json
+{"task_id": "550e8400-...", "status": "cancelled", "message": "任务已取消"}
+```
+
+Cancel behavior:
+
+| Task Status | Behavior |
+|-------------|----------|
+| `pending` | Cancelled immediately |
+| `processing` | Stops after current chunk completes, returns partial results |
+| `completed` / `failed` / `cancelled` | Returns `already_*`, no state change |
 
 ### Health Check
 
@@ -381,6 +446,7 @@ Access `http://<host>:<port>/web-ui` for the following features:
 
 - Drag-and-drop or click to upload audio files
 - Real-time recognition progress display
+- Cancel recognition with one click during processing
 - Segmented results with clickable segments for audio playback at corresponding positions
 - Full text display
 - Raw JSON data viewing and download

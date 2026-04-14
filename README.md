@@ -113,7 +113,7 @@ bash start.sh --host 0.0.0.0 --port 9000
 
 #### 启用 API 认证
 
-设置 API 密钥后，所有 `/v1/asr` 和 `/v1/asr/{task_id}` 接口需要携带 Bearer Token：
+设置 API 密钥后，所有接口（除 `/v1/health` 外）需要携带 Bearer Token：
 
 ```bash
 # 通过启动参数设置
@@ -303,7 +303,7 @@ curl -X POST http://127.0.0.1:8765/v1/asr \
 ### 查询任务状态
 
 ```bash
-curl http://127.0.0.1:8765/v1/asr/{task_id}
+curl http://127.0.0.1:8765/v1/tasks/{task_id}
 ```
 
 响应（完成）：
@@ -335,7 +335,72 @@ curl http://127.0.0.1:8765/v1/asr/{task_id}
 ```
 
 - `words` 字段仅在 `align_enabled=true` 时存在
-- 任务状态流转：`pending` → `processing` → `completed` / `failed`
+- 任务状态流转：`pending` → `processing` → `completed` / `failed` / `cancelled`
+- 也可使用 `GET /v1/asr/{task_id}`（已过时，功能相同）
+
+### 获取任务列表
+
+```bash
+# 获取全部任务
+curl http://127.0.0.1:8765/v1/tasks
+
+# 按状态筛选
+curl http://127.0.0.1:8765/v1/tasks?status=processing
+```
+
+响应：
+
+```json
+{
+  "total": 2,
+  "tasks": [
+    {
+      "task_id": "550e8400-...",
+      "status": "completed",
+      "progress": 1.0,
+      "language": null,
+      "created_at": "2026-04-14T10:30:00",
+      "finished_at": 1744615860.0,
+      "error": null
+    },
+    {
+      "task_id": "660e8400-...",
+      "status": "processing",
+      "progress": 0.45,
+      "language": "zh",
+      "created_at": "2026-04-14T10:31:00",
+      "finished_at": null,
+      "error": null
+    }
+  ]
+}
+```
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| status | string | null | 筛选状态：`pending` / `processing` / `completed` / `failed` / `cancelled` |
+
+按创建时间倒序排列，不含识别结果。
+
+### 取消任务
+
+```bash
+curl -X DELETE http://127.0.0.1:8765/v1/asr/{task_id}
+```
+
+响应：
+
+```json
+{"task_id": "550e8400-...", "status": "cancelled", "message": "任务已取消"}
+```
+
+取消行为：
+
+| 任务状态 | 行为 |
+|---------|------|
+| `pending` | 立即取消 |
+| `processing` | 在当前 chunk 处理完成后停止，返回已识别的部分结果 |
+| `completed` / `failed` / `cancelled` | 返回 `already_*`，不改变状态 |
 
 ### 健康检查
 
@@ -381,6 +446,7 @@ bash start.sh --web
 
 - 拖拽或点击上传音频文件
 - 实时显示识别进度
+- 识别过程中可一键取消
 - 分段结果展示，点击片段可跳转播放对应音频位置
 - 完整文本展示
 - 原始 JSON 数据查看和下载
