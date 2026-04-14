@@ -5,7 +5,7 @@ import logging
 import queue
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from app.api.schemas import ASRResponse, TaskStatusResponse, CancelResponse, HealthResponse
+from app.api.schemas import ASRResponse, TaskStatusResponse, TaskListResponse, CancelResponse, HealthResponse
 from app.config import UPLOADS_DIR, MAX_AUDIO_FILE_SIZE
 import app.config as cfg
 
@@ -101,6 +101,16 @@ async def submit_asr(
         raise HTTPException(status_code=503, detail="任务队列已满，请稍后重试")
 
     return ASRResponse(task_id=task_id)
+
+
+@router.get("/asr", response_model=TaskListResponse, dependencies=[Depends(verify_api_key)])
+async def list_tasks(status: str | None = None):
+    """获取任务列表，可通过 status 参数筛选（pending/processing/completed/failed/cancelled）"""
+    if _task_manager is None:
+        raise HTTPException(status_code=503, detail="服务尚未就绪，请稍后重试")
+
+    tasks = _task_manager.list_tasks(status=status)
+    return TaskListResponse(total=len(tasks), tasks=tasks)
 
 
 @router.get("/asr/{task_id}", response_model=TaskStatusResponse, dependencies=[Depends(verify_api_key)])

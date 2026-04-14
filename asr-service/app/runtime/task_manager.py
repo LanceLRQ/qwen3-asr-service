@@ -66,6 +66,29 @@ class TaskManager:
         with self._lock:
             return self._tasks.get(task_id)
 
+    def list_tasks(self, status: str | None = None) -> list[dict]:
+        """列出任务，可按状态筛选，返回不含 result 的摘要（按创建时间倒序）"""
+        with self._lock:
+            tasks = list(self._tasks.values())
+
+        if status:
+            tasks = [t for t in tasks if t["status"] == status]
+
+        tasks.sort(key=lambda t: t.get("created_at", ""), reverse=True)
+
+        return [
+            {
+                "task_id": t["task_id"],
+                "status": t["status"],
+                "progress": t["progress"],
+                "language": t.get("language"),
+                "created_at": t["created_at"],
+                "finished_at": t.get("finished_at"),
+                "error": t.get("error"),
+            }
+            for t in tasks
+        ]
+
     def update_progress(self, task_id: str, progress: float):
         """更新任务进度"""
         with self._lock:

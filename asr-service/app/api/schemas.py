@@ -13,6 +13,21 @@ class TaskStatusResponse(BaseModel):
     error: str | None = None
 
 
+class TaskListItem(BaseModel):
+    task_id: str
+    status: str
+    progress: float
+    language: str | None = None
+    created_at: str
+    finished_at: float | None = None
+    error: str | None = None
+
+
+class TaskListResponse(BaseModel):
+    total: int
+    tasks: list[TaskListItem]
+
+
 class CancelResponse(BaseModel):
     task_id: str
     status: str     # "cancelled" | "already_completed" | "already_failed" | "already_cancelled" | "not_found"
