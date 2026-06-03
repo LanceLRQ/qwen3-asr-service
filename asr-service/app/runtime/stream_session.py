@@ -11,6 +11,7 @@ StreamSession 产出类型化信封事件 dict（{"type": "final", ...}）。
 """
 import asyncio
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -121,6 +122,7 @@ class StreamSession:
         self.seg_id = 0
         self.seg_start_ms = None
         self.buffer = None
+        self._frame_count = 0
 
     def configure(self, cfg_msg: dict):
         cfg_msg = cfg_msg or {}
@@ -132,6 +134,9 @@ class StreamSession:
         self.seg_id = 0
         self.seg_start_ms = None
         self.buffer = AudioBuffer(sr=_TARGET_SR)
+        self._frame_count = 0
+        logger.info(f"[stream] 会话配置 sid={self.sid[:8]} audio_fs={self.audio_fs} "
+                    f"language={self.language} wav={self.wav_name}")
 
     async def _in_thread(self, fn, *args):
         loop = asyncio.get_running_loop()
@@ -146,7 +151,14 @@ class StreamSession:
             arr = await self._in_thread(resample_to_16k, arr, self.audio_fs)
         self.buffer.append(arr)
 
+        self._frame_count += 1
         events = await self._in_thread(self._svad.process_chunk, arr, self.vad_cache, False)
+        if events:
+            logger.debug(f"[stream] frame#{self._frame_count} 收到{arr.size}样本 VAD事件={events}")
+        elif self._frame_count % 16 == 0:      # 约每 2s 一次心跳，监控缓冲是否无界增长
+            logger.debug(f"[stream] frame#{self._frame_count} 心跳 "
+                         f"buffer={self.buffer.end_ms - self.buffer.base_ms}ms "
+                         f"end_ms={self.buffer.end_ms} seg_start={self.seg_start_ms}")
         for ev in events:
             async for msg in self._on_event(ev):
                 yield msg
@@ -155,6 +167,7 @@ class StreamSession:
         if self.seg_start_ms is not None and \
                 self.buffer.end_ms - self.seg_start_ms >= self._max_segment_sec * 1000:
             end_ms = self.buffer.end_ms
+            logger.info(f"[stream] 长句兜底切分 seg_start={self.seg_start_ms} end={end_ms}")
             async for msg in self._emit_final(self.seg_start_ms, end_ms):
                 yield msg
             self.seg_start_ms = end_ms
@@ -164,6 +177,8 @@ class StreamSession:
         """收到 {type:"stop"} 时冲刷末句。"""
         if self.buffer is None:
             return
+        logger.debug(f"[stream] flush sid={self.sid[:8]} 总帧数={self._frame_count} "
+                     f"seg_start={self.seg_start_ms}")
         events = await self._in_thread(
             self._svad.process_chunk, np.zeros(0, dtype=np.float32), self.vad_cache, True
         )
@@ -192,15 +207,20 @@ class StreamSession:
     async def _emit_final(self, start_ms, end_ms):
         seg = self.buffer.slice_ms(start_ms, end_ms)
         if seg is None or seg.size == 0:
+            logger.debug(f"[stream] 跳过空段 start={start_ms} end={end_ms}")
             return
+        t0 = time.monotonic()
         async with self._asr_sem:                      # 串行化 GPU/ASR
             res = await self._in_thread(self._asr.transcribe_array, seg, _TARGET_SR, self.language)
+        decode_ms = (time.monotonic() - t0) * 1000
         text = _extract_text(res)
         if self._punc is not None and text.strip():
             try:
                 text = await self._in_thread(self._punc.restore, text)
             except Exception as e:
                 logger.warning(f"标点恢复失败，使用原始文本: {e}")
+        logger.info(f"[stream] final#{self.seg_id} 段[{int(start_ms)},{int(end_ms)}]"
+                    f"={int(end_ms - start_ms)}ms 样本={seg.size} 解码={decode_ms:.0f}ms 文本长度={len(text)}")
         msg = {
             "type": "final",
             "seg_id": self.seg_id,

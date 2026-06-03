@@ -56,6 +56,8 @@ async def stream(ws: WebSocket):
 
     await ws.accept()
     session = None
+    recv_bytes = 0
+    sent_msgs = 0
     try:
         # 连接即声明协议/后端/能力
         await ws.send_json(SessionCreated(
@@ -64,17 +66,25 @@ async def stream(ws: WebSocket):
             capabilities=_backend.capabilities,
         ).model_dump())
 
-        session = _backend.create_session(uuid4().hex)
-        session.configure(await ws.receive_json())     # 首条 {type:"start", ...}
+        sid = uuid4().hex
+        session = _backend.create_session(sid)
+        logger.info(f"[stream] WS accepted sid={sid[:8]}")
+        start_msg = await ws.receive_json()             # 首条 {type:"start", ...}
+        logger.info(f"[stream] 收到 start: {start_msg}")
+        session.configure(start_msg)
 
         while True:
             m = await ws.receive()
             if m["type"] == "websocket.disconnect":
+                logger.info(f"[stream] 客户端断开 sid={sid[:8]} "
+                            f"累计收字节={recv_bytes} 累计发消息={sent_msgs}")
                 break
             if m.get("bytes") is not None:
+                recv_bytes += len(m["bytes"])
                 try:
                     async for r in session.feed_audio(m["bytes"]):
                         await ws.send_json(r)
+                        sent_msgs += 1
                 except Exception as e:
                     logger.warning(f"音频处理失败: {e}")
                     await ws.send_json(ErrorMsg(code="feed_failed", message=str(e)).model_dump())
@@ -84,8 +94,10 @@ async def stream(ws: WebSocket):
                 except (ValueError, TypeError):
                     typ = None
                 if typ == "stop":
+                    logger.info(f"[stream] 收到 stop sid={sid[:8]} 累计收字节={recv_bytes}")
                     async for r in session.flush():
                         await ws.send_json(r)
+                        sent_msgs += 1
                     break
     except WebSocketDisconnect:
         pass

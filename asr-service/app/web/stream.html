@@ -78,6 +78,7 @@ input[type=text], input[type=password] { border: 1px solid #cbd5e1; border-radiu
     <div class="row" style="margin-top:10px;">
       <span class="status"><span class="dot" id="dot"></span><span id="status">未连接</span></span>
     </div>
+    <div class="muted" id="diag" style="margin-top:8px;"></div>
     <div class="cap" id="cap"></div>
   </div>
 
@@ -136,7 +137,7 @@ input[type=text], input[type=password] { border: 1px solid #cbd5e1; border-radiu
   const RT_SR = 16000;
   const FRAME = 3200;                 // 200ms @16k
   let ws = null, source = 'mic';
-  let micCtx = null, micProc = null, micSrc = null, micStream = null;
+  let micCtx = null, micNode = null, micSrc = null, micStream = null;
   let fileAborted = false;
   const BP_LIMIT = 1 << 20;            // 1MB 发送缓冲上限（背压，防止灌爆内存卡死）
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -147,6 +148,40 @@ input[type=text], input[type=password] { border: 1px solid #cbd5e1; border-radiu
         if (!ws || ws.readyState !== WebSocket.OPEN || ws.bufferedAmount < BP_LIMIT) { clearInterval(iv); res(); }
       }, 20);
     });
+  }
+
+  // ── 控制台调试（页面冻死后 DevTools Console 仍保留日志，可事后回看冻死前那几秒）──
+  // 不逐帧打印（避免 console 自身成为噪音），只打印：启动参数、每秒汇总、关键事件。
+  const DBG = false;       // 设为 true 可在控制台输出实时诊断（采集/发送/卡顿等），排障用
+  function dbg(...a) { if (DBG) console.log('[stream ' + new Date().toISOString().substr(11, 12) + ']', ...a); }
+
+  // ── 诊断条（定位卡顿来源：发送/接收速率、WS 缓冲、主线程卡顿；稳定后可移除）──
+  // 冻结时 setInterval/rAF 会停更，屏幕上最后一行数值即定格在冻死前一刻。
+  let diagTimer = null, rafId = null, sentFrames = 0, recvMsgs = 0, lastRaf = 0, maxStall = 0, maxFrame = 0;
+  function startDiag() {
+    sentFrames = 0; recvMsgs = 0; maxStall = 0; lastRaf = 0; maxFrame = 0;
+    const tick = (now) => {
+      if (lastRaf) {
+        const gap = now - lastRaf;
+        if (gap > maxStall) maxStall = gap;
+        if (gap > 200) dbg('⚠️ 主线程卡顿', Math.round(gap) + 'ms');   // 单次大停顿即时告警
+      }
+      lastRaf = now;
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    diagTimer = setInterval(() => {
+      const buf = ws ? ws.bufferedAmount : 0;
+      $('diag').textContent = '诊断 · 发送 ' + sentFrames + ' 帧/s · 接收 ' + recvMsgs +
+        ' 条/s · WS缓冲 ' + Math.round(buf / 1024) + ' KB · 最大帧 ' + maxFrame + ' 样本 · 主线程最大卡顿 ' + Math.round(maxStall) + ' ms';
+      dbg('每秒汇总: 发送=' + sentFrames + '帧 接收=' + recvMsgs + '条 WS缓冲=' +
+        Math.round(buf / 1024) + 'KB 最大帧=' + maxFrame + '样本 最大卡顿=' + Math.round(maxStall) + 'ms');
+      sentFrames = 0; recvMsgs = 0; maxStall = 0; maxFrame = 0;
+    }, 1000);
+  }
+  function stopDiag() {
+    if (diagTimer) { clearInterval(diagTimer); diagTimer = null; }
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
   }
 
   // ── 状态/日志 ──
@@ -181,6 +216,7 @@ input[type=text], input[type=password] { border: 1px solid #cbd5e1; border-radiu
   function escapeHtml(s) { const d = document.createElement('div'); d.appendChild(document.createTextNode(s || '')); return d.innerHTML; }
 
   // ── 结果渲染 ──
+  const MAX_TRANSCRIPT_LINES = 200;     // 结果区封顶，防长时间录音 DOM 膨胀
   function clearResults() { $('transcript').innerHTML = ''; $('partial').textContent = ''; }
   function appendFinal(m) {
     const line = document.createElement('div');
@@ -188,7 +224,9 @@ input[type=text], input[type=password] { border: 1px solid #cbd5e1; border-radiu
     const t = (m.start != null) ? ('<span class="t">[' + fmtMs(m.start) + ']</span>') : '';
     const w = (m.words && m.words.length) ? ' <span class="muted">(' + m.words.length + ' 词)</span>' : '';
     line.innerHTML = t + escapeHtml(m.text || '') + w;
-    $('transcript').appendChild(line);
+    const tr = $('transcript');
+    tr.appendChild(line);
+    while (tr.childNodes.length > MAX_TRANSCRIPT_LINES) tr.removeChild(tr.firstChild);
   }
   function showCap(m) {
     $('cap').style.display = 'block';
@@ -236,19 +274,24 @@ input[type=text], input[type=password] { border: 1px solid #cbd5e1; border-radiu
     setStatus('连接中...');
     ws = new WebSocket(url);
     ws.binaryType = 'arraybuffer';
-    ws.onopen = () => log('evt', 'WS open');
+    ws.onopen = () => { log('evt', 'WS open'); dbg('WS open'); };
     ws.onmessage = (ev) => {
+      recvMsgs++;
       let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
       log('recv', m);
-      if (m.type === 'session.created') { showCap(m); setStatus('已连接 · ' + m.backend, 'on'); onReady && onReady(); }
+      if (m.type === 'session.created') { showCap(m); setStatus('已连接 · ' + m.backend, 'on'); dbg('session.created', m); onReady && onReady(); }
       else if (m.type === 'partial') { $('partial').textContent = m.text || ''; }
-      else if (m.type === 'final') { appendFinal(m); $('partial').textContent = ''; }
-      else if (m.type === 'error') { showHint('[' + m.code + '] ' + m.message); }
-      else if (m.type === 'session.closed') { setStatus('会话结束'); }
+      else if (m.type === 'final') {
+        dbg('final #' + m.seg_id + ' 文本长度=' + (m.text || '').length + ' start=' + m.start + ' end=' + m.end);
+        appendFinal(m); $('partial').textContent = '';
+      }
+      else if (m.type === 'error') { showHint('[' + m.code + '] ' + m.message); dbg('错误信封', m); }
+      else if (m.type === 'session.closed') { setStatus('会话结束'); dbg('session.closed'); }
     };
-    ws.onerror = () => { log('evt', 'WS error'); };
+    ws.onerror = () => { log('evt', 'WS error'); dbg('WS error'); };
     ws.onclose = (ev) => {
       log('evt', 'WS close code=' + ev.code);
+      dbg('WS close code=' + ev.code);
       setStatus('已断开 (' + ev.code + ')');
       if (ev.code === 1008) showHint('鉴权失败：请检查 API Key。');
       else if (ev.code === 1013) showHint('并发会话已满（1013）。');
@@ -265,21 +308,51 @@ input[type=text], input[type=password] { border: 1px solid #cbd5e1; border-radiu
   }
 
   // ── 麦克风模式 ──
+  // 采集走 AudioWorklet（独立音频线程），替代已废弃的 ScriptProcessorNode（其回调在主线程，
+  // 与 UI/渲染抢线程导致录音时页面卡死）。worklet 仅把 Float32 帧 postMessage 回主线程，
+  // 主线程负责重采样到 16k 并经 WS 发送。无构建页面用 Blob URL 内联 worklet 模块。
+  let workletUrl = null;
+  function getWorkletUrl() {
+    if (workletUrl) return workletUrl;
+    const code = "class PCMWorklet extends AudioWorkletProcessor{" +
+      "constructor(){super();this._buf=[];this._count=0;this._target=2048;}" +
+      "process(inputs){const ch=inputs[0]&&inputs[0][0];" +
+      "if(ch&&ch.length){this._buf.push(new Float32Array(ch));this._count+=ch.length;" +
+      "if(this._count>=this._target){const m=new Float32Array(this._count);let o=0;" +
+      "for(const b of this._buf){m.set(b,o);o+=b.length;}" +
+      "this.port.postMessage(m,[m.buffer]);this._buf=[];this._count=0;}}return true;}}" +
+      "registerProcessor('pcm-worklet',PCMWorklet);";
+    workletUrl = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
+    return workletUrl;
+  }
   async function startMic() {
     clearHint();
     try { micStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
     catch (e) { showHint('麦克风访问失败: ' + e.message); return; }
-    openWs(() => {
+    openWs(async () => {
       wsSendJson(startMsg());
-      micCtx = new (window.AudioContext || window.webkitAudioContext)();
+      // 直接建 16kHz 上下文：免主线程重采样、并把 worklet 投递频率降到 ~8/s；不支持则回退默认采样率
+      const AC = window.AudioContext || window.webkitAudioContext;
+      try { micCtx = new AC({ sampleRate: RT_SR }); } catch (e) { micCtx = new AC(); }
+      try { await micCtx.audioWorklet.addModule(getWorkletUrl()); }
+      catch (e) { showHint('AudioWorklet 加载失败: ' + e.message); cleanupMic(); closeWs(); resetButtons(); return; }
       micSrc = micCtx.createMediaStreamSource(micStream);
-      micProc = micCtx.createScriptProcessor(4096, 1, 1);
-      micSrc.connect(micProc); micProc.connect(micCtx.destination);
-      micProc.onaudioprocess = (e) => {
+      micNode = new AudioWorkletNode(micCtx, 'pcm-worklet');
+      try {
+        const ts = micStream.getAudioTracks()[0];
+        dbg('录音启动: AudioContext.sampleRate=' + micCtx.sampleRate +
+          ' 麦克风轨道设置=', ts && ts.getSettings ? ts.getSettings() : 'n/a');
+      } catch (e) {}
+      micNode.port.onmessage = (ev) => {
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
-        if (ws.bufferedAmount > BP_LIMIT) return;     // 背压：缓冲过高时丢弃实时帧，避免堆积卡死
-        ws.send(micFloatTo16kPCM(e.inputBuffer.getChannelData(0), micCtx.sampleRate).buffer);
+        if (ev.data.length > maxFrame) maxFrame = ev.data.length;
+        if (ws.bufferedAmount > BP_LIMIT) { dbg('背压丢帧: WS缓冲=' + Math.round(ws.bufferedAmount / 1024) + 'KB'); return; }
+        ws.send(micFloatTo16kPCM(ev.data, micCtx.sampleRate).buffer);
+        sentFrames++;
       };
+      // worklet 不写 output → 输出静音；连 destination 仅为驱动音频图，无回授（不会播回扬声器）
+      micSrc.connect(micNode); micNode.connect(micCtx.destination);
+      startDiag();
       setStatus('🔴 录音中...', 'rec');
     });
     $('micStart').style.display = 'none'; $('micStop').style.display = 'inline-block';
@@ -291,7 +364,8 @@ input[type=text], input[type=password] { border: 1px solid #cbd5e1; border-radiu
     $('micStart').style.display = 'inline-block'; $('micStop').style.display = 'none';
   }
   function cleanupMic() {
-    try { if (micProc) { micProc.disconnect(); micProc.onaudioprocess = null; micProc = null; } } catch (e) {}
+    stopDiag();
+    try { if (micNode) { micNode.port.onmessage = null; micNode.disconnect(); micNode = null; } } catch (e) {}
     try { if (micSrc) { micSrc.disconnect(); micSrc = null; } } catch (e) {}
     try { if (micCtx) { micCtx.close(); micCtx = null; } } catch (e) {}
     try { if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; } } catch (e) {}
