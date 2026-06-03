@@ -74,6 +74,18 @@ def parse_args():
         "--max-queue-size", type=int, default=None,
         help=f"任务队列最大长度 (default: {cfg.MAX_QUEUE_SIZE})",
     )
+    parser.add_argument(
+        "--enable-stream", dest="enable_stream", action="store_true", default=False,
+        help="挂载实时转写端点 WS /v2/asr/stream（路线B，standard 模式）",
+    )
+    parser.add_argument(
+        "--max-stream-sessions", type=int, default=None,
+        help=f"实时最大并发会话数 (default: {cfg.MAX_STREAM_SESSIONS})",
+    )
+    parser.add_argument(
+        "--stream-asr-concurrency", type=int, default=None,
+        help=f"实时 ASR 解码并发上限 (default: {cfg.STREAM_ASR_CONCURRENCY})",
+    )
     return parser.parse_args()
 
 
@@ -89,6 +101,12 @@ def _apply_cli_config(args):
         cfg.API_KEY = args.api_key
     if args.max_queue_size is not None:
         cfg.MAX_QUEUE_SIZE = args.max_queue_size
+    cfg.SERVE_MODE = getattr(args, "serve_mode", "standard")
+    cfg.ENABLE_STREAM = getattr(args, "enable_stream", False)
+    if getattr(args, "max_stream_sessions", None) is not None:
+        cfg.MAX_STREAM_SESSIONS = args.max_stream_sessions
+    if getattr(args, "stream_asr_concurrency", None) is not None:
+        cfg.STREAM_ASR_CONCURRENCY = args.stream_asr_concurrency
     if cfg.API_KEY:
         logger.info("API 密钥已配置，Bearer token 认证已启用")
 
@@ -218,16 +236,16 @@ def _assemble_standard(app: FastAPI, args) -> None:
     task_manager.start()
 
     # 构建服务信息（mode-aware，供 /health、/capabilities 使用）
+    stream_enabled = getattr(args, "enable_stream", False)
     capabilities = {
         "mode": "standard",
         "offline_api": True,
         "stream": {
-            # 实时 Route B 接通后（T09）据 enable_stream 置位
-            "enabled": False,
-            "backend": None,
-            "path": None,
+            "enabled": stream_enabled,
+            "backend": "vad-offline" if stream_enabled else None,
+            "path": "/v2/asr/stream" if stream_enabled else None,
             "partial_results": False,
-            "word_timestamps": False,
+            "word_timestamps": enable_align if stream_enabled else False,
         },
     }
     service_info = {
@@ -253,12 +271,21 @@ def _assemble_standard(app: FastAPI, args) -> None:
     app.include_router(build_offline_router("/v1", include_deprecated=True))
     app.include_router(build_offline_router("/v2"))
 
-    # TODO(T09): 实时 Route B —— 当 args.enable_stream 时挂载 WS /v2/asr/stream
-    #   from app.api.ws_routes import ws_router_stream, init_ws_stream
-    #   from app.runtime.stream_session import VadOfflineBackend
-    #   init_ws_stream(VadOfflineBackend(asr_engine, vad_engine, punc_engine, ...))
-    #   app.include_router(ws_router_stream)
-    #   并将 capabilities["stream"] 置为 enabled/backend="vad-offline"/path="/v2/asr/stream"
+    # 实时 Route B：按 --enable-stream 挂载统一端点 WS /v2/asr/stream
+    stream_backend = None
+    if stream_enabled:
+        from app.api.ws_routes import ws_router_stream, init_ws_stream
+        from app.runtime.stream_session import VadOfflineBackend
+        stream_backend = VadOfflineBackend(
+            asr_engine, vad_engine, punc_engine,
+            max_sessions=cfg.MAX_STREAM_SESSIONS,
+            asr_concurrency=cfg.STREAM_ASR_CONCURRENCY,
+            max_segment_sec=cfg.STREAM_MAX_SEGMENT_SEC,
+            vad_chunk_ms=cfg.STREAM_VAD_CHUNK_MS,
+        )
+        init_ws_stream(stream_backend)
+        app.include_router(ws_router_stream)
+        logger.info("实时转写已启用：WS /v2/asr/stream（路线B / vad-offline）")
 
     # 条件挂载 Web UI
     if getattr(args, "web", False):
@@ -270,6 +297,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
     def on_shutdown():
         logger.info("收到终止信号，正在安全关闭服务...")
         task_manager.shutdown()
+        if stream_backend is not None:
+            stream_backend.shutdown()
         logger.info("Qwen3-ASR Service 已安全退出")
 
     logger.info(f"运行模式: {service_info}")

@@ -6,6 +6,7 @@ mode 正确、不误挂离线接口。standard 分支需加载真实模型，留
 """
 import logging
 import types
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,7 +34,8 @@ def isolated_create_app(tmp_path, monkeypatch):
     root = logging.getLogger()
     saved_handlers = root.handlers[:]
     saved_level = root.level
-    keys = ("MODEL_SOURCE", "MAX_SEGMENT_DURATION", "HOST", "PORT", "API_KEY", "MAX_QUEUE_SIZE")
+    keys = ("MODEL_SOURCE", "MAX_SEGMENT_DURATION", "HOST", "PORT", "API_KEY", "MAX_QUEUE_SIZE",
+            "SERVE_MODE", "ENABLE_STREAM", "MAX_STREAM_SESSIONS", "STREAM_ASR_CONCURRENCY")
     snapshot = {k: getattr(cfg, k) for k in keys}
 
     yield
@@ -69,3 +71,119 @@ def test_vllm_mode_mounts_common_only(isolated_create_app):
     assert client.get("/v1/tasks").status_code == 404
     assert client.get("/v2/tasks").status_code == 404
     assert client.post("/v1/asr", files={"file": ("a.wav", b"x", "audio/wav")}).status_code == 404
+
+
+# ─── T09: 实时配置与启动参数 ───
+
+def test_standard_mode_with_stream_mounts_ws(isolated_create_app, monkeypatch):
+    """standard + --enable-stream：WS /v2/asr/stream 挂载、capabilities 反映、session.created 可达。
+
+    mock 重引擎/设备，避免真实模型加载；强制 GPU 分支走 QwenASREngine（被 mock）。
+    """
+    import app.main as main
+
+    monkeypatch.setattr(main, "check_ffmpeg", lambda: None)
+    monkeypatch.setattr(main, "detect_device",
+                        lambda: {"type": "cuda", "vram_gb": 24.0, "name": "FakeGPU"})
+    monkeypatch.setattr(main, "resolve_device", lambda req, device_info=None: "cuda")
+
+    class FakeVAD:
+        BACKEND = "pytorch"
+        def __init__(self, *a, **k): self._model = MagicMock()
+        def load(self): pass
+
+    class FakeASR:
+        def __init__(self, *a, **k): self._model = MagicMock()
+        def load(self): pass
+        @property
+        def align_enabled(self): return True
+
+    class FakePunc:
+        BACKEND = "pytorch"
+        def __init__(self, *a, **k): self._model = MagicMock()
+        def load(self): pass
+
+    class FakeTM:
+        def __init__(self, *a, **k): pass
+        def set_processor(self, fn): pass
+        def start(self): pass
+        def shutdown(self): pass
+
+    monkeypatch.setattr(main, "VADEngine", FakeVAD)
+    monkeypatch.setattr(main, "QwenASREngine", FakeASR)
+    monkeypatch.setattr(main, "PuncEngine", FakePunc)
+    monkeypatch.setattr(main, "TaskManager", FakeTM)
+
+    app = main.create_app(_args(serve_mode="standard", device="auto", enable_stream=True))
+    client = TestClient(app)
+
+    # capabilities 反映实时已启用
+    caps = client.get("/v1/capabilities").json()
+    assert caps["mode"] == "standard"
+    assert caps["offline_api"] is True
+    assert caps["stream"]["enabled"] is True
+    assert caps["stream"]["backend"] == "vad-offline"
+    assert caps["stream"]["path"] == "/v2/asr/stream"
+    assert caps["stream"]["word_timestamps"] is True   # 对齐开启
+
+    # 离线接口仍在
+    assert client.get("/v1/health").json()["mode"] == "standard"
+
+    # 实时端点已挂载：连接即收到 session.created
+    with client.websocket_connect("/v2/asr/stream") as ws:
+        created = ws.receive_json()
+        assert created["type"] == "session.created"
+        assert created["backend"] == "vad-offline"
+        assert created["mode"] == "standard"
+
+
+def test_config_stream_defaults():
+    import app.config as cfg
+    assert cfg.SERVE_MODE == "standard"
+    assert cfg.ENABLE_STREAM is False
+    assert cfg.MAX_STREAM_SESSIONS == 16
+    assert cfg.STREAM_VAD_CHUNK_MS == 200
+    assert cfg.STREAM_ASR_CONCURRENCY == 2
+    assert cfg.STREAM_MAX_SEGMENT_SEC == 12
+    assert cfg.STREAM_MAX_SESSION_SECONDS == 3600
+    assert cfg.STREAM_SAMPLE_RATE == 16000
+
+
+def test_parse_args_defaults(monkeypatch):
+    from app.main import parse_args
+    monkeypatch.setattr("sys.argv", ["prog"])
+    args = parse_args()
+    assert args.serve_mode == "standard"
+    assert args.enable_stream is False
+    assert args.max_stream_sessions is None
+    assert args.stream_asr_concurrency is None
+
+
+def test_parse_args_stream_flags(monkeypatch):
+    from app.main import parse_args
+    monkeypatch.setattr("sys.argv", [
+        "prog", "--serve-mode", "standard", "--enable-stream",
+        "--max-stream-sessions", "8", "--stream-asr-concurrency", "3",
+    ])
+    args = parse_args()
+    assert args.enable_stream is True
+    assert args.max_stream_sessions == 8
+    assert args.stream_asr_concurrency == 3
+
+
+def test_apply_cli_config_writes_stream(monkeypatch):
+    import app.config as cfg
+    from app.main import _apply_cli_config, parse_args
+    monkeypatch.setattr("sys.argv", [
+        "prog", "--enable-stream", "--max-stream-sessions", "5", "--stream-asr-concurrency", "4",
+    ])
+    saved = {k: getattr(cfg, k) for k in ("SERVE_MODE", "ENABLE_STREAM", "MAX_STREAM_SESSIONS",
+                                          "STREAM_ASR_CONCURRENCY", "MODEL_SOURCE", "MAX_SEGMENT_DURATION")}
+    try:
+        _apply_cli_config(parse_args())
+        assert cfg.ENABLE_STREAM is True
+        assert cfg.MAX_STREAM_SESSIONS == 5
+        assert cfg.STREAM_ASR_CONCURRENCY == 4
+    finally:
+        for k, v in saved.items():
+            setattr(cfg, k, v)

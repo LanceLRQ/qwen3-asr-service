@@ -100,3 +100,21 @@ MAX_QUEUE_SIZE = 100
 TASK_TIMEOUT = 1800             # 单任务超时 30 分钟（秒）
 TASK_RESULT_TTL = 3600          # 已完成任务保留时长（秒），默认 1 小时
 TASK_CLEANUP_INTERVAL = 300     # 清理扫描间隔（秒），默认 5 分钟
+
+# ─── serve-mode ───
+
+SERVE_MODE = "standard"         # "standard" | "vllm"（由 main.py argparse 覆盖）
+
+# ─── 实时流式转写（路线 B / WS /v2/asr/stream）───
+
+ENABLE_STREAM = False           # 是否挂载实时端点（standard 模式下 --enable-stream 开启）
+MAX_STREAM_SESSIONS = 16        # 最大并发会话数（超额 WS 关闭 1013）
+STREAM_VAD_CHUNK_MS = 200       # 在线 VAD 分块时长（毫秒）
+STREAM_ASR_CONCURRENCY = 2      # ASR 解码并发上限（信号量串行化 GPU）
+STREAM_MAX_SEGMENT_SEC = 12     # 长无停顿句兜底切分阈值（秒）
+STREAM_MAX_SESSION_SECONDS = 3600   # 单会话最长时长（秒）
+STREAM_SAMPLE_RATE = 16000      # 内部统一采样率
+
+# ─── vLLM（Phase 3）───
+
+VLLM_GPU_MEMORY_UTILIZATION = 0.8
