@@ -9,6 +9,7 @@ import difflib
 import logging
 import os
 import shutil
+from collections.abc import Hashable
 
 import yaml
 
@@ -46,6 +47,7 @@ def resolve_config_path(cli_value: str | None, no_config: bool) -> str | None:
     if os.path.isfile(example):
         try:
             shutil.copyfile(example, yaml_path)   # 引导生成：首启即获得可编辑的真实配置
+            os.chmod(yaml_path, 0o600)            # 该文件后续可能写入 api_key，收紧为仅属主可读写
         except OSError as e:
             logger.warning(f"config.yaml 生成失败（{e}），本次直接加载 {EXAMPLE_NAME}")
             return example
@@ -55,6 +57,21 @@ def resolve_config_path(cli_value: str | None, no_config: bool) -> str | None:
     return None
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """重复键硬报错的 SafeLoader——YAML 规范默认末值静默胜出，
+    会掩盖配置文件中的拼写残留/合并事故，与"未知键硬报错"同一防线。"""
+
+    def construct_mapping(self, node, deep=False):
+        seen = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if isinstance(key, Hashable):     # 不可哈希键交由父类按 YAML 规范报错
+                if key in seen:
+                    raise yaml.YAMLError(f"重复的配置键: {key}（第 {key_node.start_mark.line + 1} 行）")
+                seen.add(key)
+        return super().construct_mapping(node, deep)
+
+
 def load_config_file(path: str) -> dict:
     """YAML 解析 + schema 校验，返回 dest 键的扁平 dict。任何错误 SystemExit 带可读信息。
 
@@ -62,7 +79,7 @@ def load_config_file(path: str) -> dict:
     """
     try:
         with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f)
+            data = yaml.load(f, Loader=_UniqueKeyLoader)
     except OSError as e:
         raise SystemExit(f"配置文件无法读取: {path}: {e}")
     except yaml.YAMLError as e:
@@ -87,17 +104,20 @@ def validate_config(data: dict, source: str = "<config>") -> dict:
         if value is None:
             errors.append(f"{key}: 值为空（如需使用默认值请删除该键）")
             continue
+        # 类型错误时附带合法值提示——最常见的笔误（如 model_size: 1.7 漏写 b 被 YAML
+        # 解析为浮点）应得到"可选 0.6b | 1.7b"而非干巴巴的类型报错
+        choices_hint = f"（可选 {' | '.join(spec.choices)}）" if spec.choices else ""
         if spec.type is bool:
             if not isinstance(value, bool):
-                errors.append(f"{key}: 期望 true/false，实得 {value!r}")
+                errors.append(f"{key}: 期望 true/false，实得 {value!r}{choices_hint}")
                 continue
         elif spec.type is int:
             if isinstance(value, bool) or not isinstance(value, int):
-                errors.append(f"{key}: 期望整数，实得 {value!r}")
+                errors.append(f"{key}: 期望整数，实得 {value!r}{choices_hint}")
                 continue
         else:
             if not isinstance(value, str):
-                errors.append(f"{key}: 期望字符串，实得 {value!r}")
+                errors.append(f"{key}: 期望字符串，实得 {value!r}{choices_hint}")
                 continue
         if spec.choices and value not in spec.choices:
             errors.append(f"{key}: 非法取值 {value!r}，可选 {' | '.join(spec.choices)}")

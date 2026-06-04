@@ -67,6 +67,8 @@ def test_bootstrap_copies_example(service_root):
     path = cf.resolve_config_path(None, False)
     assert path == str(service_root / "config.yaml")
     assert (service_root / "config.yaml").read_text(encoding="utf-8") == example.read_text(encoding="utf-8")
+    # 生成文件后续可能写入 api_key，必须仅属主可读写
+    assert (service_root / "config.yaml").stat().st_mode & 0o777 == 0o600
 
 
 def test_bootstrap_copy_failure_degrades_to_example(service_root, monkeypatch):
@@ -137,6 +139,19 @@ def test_type_and_choices_validation(service_root, data, msg):
         cf.validate_config(data)
 
 
+def test_duplicate_key_exits(service_root):
+    """YAML 规范默认重复键末值静默胜出——本服务按坏文件硬报错处理。"""
+    p = _write(service_root, "device: cpu\nport: 9000\ndevice: cuda\n")
+    with pytest.raises(SystemExit, match="重复的配置键: device"):
+        cf.load_config_file(p)
+
+
+def test_type_error_includes_choices_hint(service_root):
+    """最常见笔误 model_size: 1.7（YAML 浮点）应提示合法值，而非干巴巴的类型报错。"""
+    with pytest.raises(SystemExit, match=r"model_size: 期望字符串.*可选 0\.6b \| 1\.7b"):
+        cf.validate_config({"model_size": 1.7})
+
+
 def test_errors_are_aggregated(service_root):
     """多处错误一次性全部报出，不挤牙膏。"""
     with pytest.raises(SystemExit) as ei:
@@ -183,6 +198,14 @@ def test_merge_cli_explicit_default_over_file(service_root):
     _write(service_root, "device: cpu\n")
     merged = cf.merge_runtime_config(_ns(device="auto"))
     assert merged.device == "auto"
+
+
+def test_merge_cli_negative_bool_over_file(service_root):
+    """反向 flag（--no-stream 等）使 CLI 能把文件设 true 的布尔开关覆盖回 false。"""
+    _write(service_root, "enable_stream: true\nweb: true\n")
+    merged = cf.merge_runtime_config(_ns(enable_stream=False))
+    assert merged.enable_stream is False    # CLI 显式 false 胜过文件 true
+    assert merged.web is True               # 未覆盖的文件值保留
 
 
 def test_merge_records_config_file_basename(service_root):

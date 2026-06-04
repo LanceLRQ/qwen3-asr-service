@@ -56,6 +56,7 @@ ARG_SPECS = (
         key="use_punc", flags=("--use-punc",), default=False, type=bool,
         dest="enable_punc",
         help="启用标点恢复",
+        negative_flags=("--no-punc",), negative_help="禁用标点恢复（覆盖配置文件）",
     ),
     ArgSpec(
         key="model_source", flags=("--model-source",), default="modelscope",
@@ -73,6 +74,7 @@ ARG_SPECS = (
     ArgSpec(
         key="web", flags=("--web",), default=False, type=bool,
         help="启用 Web UI (访问 /web-ui)",
+        negative_flags=("--no-web",), negative_help="禁用 Web UI（覆盖配置文件）",
     ),
     ArgSpec(
         key="max_segment", flags=("--max-segment",), default=5, type=int,
@@ -89,6 +91,7 @@ ARG_SPECS = (
     ArgSpec(
         key="enable_stream", flags=("--enable-stream",), default=False, type=bool,
         help="挂载实时转写端点 WS /v2/asr/stream（路线B，standard 模式）",
+        negative_flags=("--no-stream",), negative_help="不挂载实时转写端点（覆盖配置文件）",
     ),
     ArgSpec(
         key="max_stream_sessions", flags=("--max-stream-sessions",), default=None, type=int,

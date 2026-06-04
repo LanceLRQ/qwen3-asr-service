@@ -66,9 +66,19 @@ def test_explicit_default_value_still_present():
     assert ns.device == "auto"
 
 
-def test_bool_pair_negative_flag():
-    ns = build_parser().parse_args(["--no-align"])
-    assert ns.enable_align is False
+@pytest.mark.parametrize("flag,attr", [
+    ("--no-align", "enable_align"),
+    ("--no-punc", "enable_punc"),
+    ("--no-web", "web"),
+    ("--no-stream", "enable_stream"),
+])
+def test_negative_flags_force_false(flag, attr):
+    """全部布尔开关都有反向 flag——CLI 才能把配置文件设 true 的开关覆盖回 false。"""
+    ns = build_parser().parse_args([flag])
+    assert getattr(ns, attr) is False
+
+
+def test_bool_pair_positive_flag():
     ns = build_parser().parse_args(["--enable-align"])
     assert ns.enable_align is True
 
