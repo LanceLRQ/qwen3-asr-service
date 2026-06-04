@@ -149,6 +149,25 @@ bash start.sh --no-config
 - 未知键 / 类型错误 / 取值越界会在启动时直接报错，防止拼写错误静默生效。
 - `config.yaml` 可能包含 `api_key`，已加入 `.gitignore`，请勿提交；`GET /health` 的 `config_file` 字段会回显本次生效的配置文件名。
 
+#### 离线任务持久化（tasks.db）
+
+默认情况下任务只存在内存中，服务重启后结果不可查。开启任务持久化后（`config.example.yaml` 生成的配置中默认开启），任务元数据与最终结果会写入 `asr-service/data/tasks.db`（SQLite），跨重启可查：
+
+```yaml
+# config.yaml
+enable_task_store: true     # 开关（命令行对应 --enable-task-store / --no-task-store）
+# task_db_path: data/tasks.db
+# task_retention_days: 7    # 过期清理窗口（天）；0 = 永不清理
+```
+
+行为说明：
+
+- **结果可查，不做断点续跑**：重启时上次未完成（pending/processing）的任务标记为 `failed`（`error: "service restarted"`），不会自动重跑。
+- **过期清理仅在服务启动时执行**：终态超过 `task_retention_days` 天的记录被删除并回收空间。
+- 历史任务通过 `GET /tasks?history=true` 与 `GET /tasks/{task_id}` 查询；`DELETE /tasks/{task_id}` 对历史任务 = 删除记录。
+- 持久化只保存文本结果与元数据，**不留存音频原件**；写入失败只告警，不影响任务执行。
+- 删除 `data/tasks.db` = 清空历史记录，不影响服务功能。如对内容留存有更严格要求，可调小 `task_retention_days` 或关闭开关。
+
 ### Docker 部署
 
 #### 使用预构建镜像
@@ -255,6 +274,9 @@ CPU 模式：
 | `--max-segment` | 秒数 | `5` | VAD 切片合并最大时长 |
 | `--api-key` | 字符串 | 无 | API 密钥，设置后启用 Bearer Token 认证（覆盖 `ASR_API_KEY` 环境变量） |
 | `--max-queue-size` | 数字 | `100` | 任务队列最大长度 |
+| `--enable-task-store` / `--no-task-store` | - | 关闭（example 生成的配置中开启） | 离线任务持久化（结果跨重启可查） |
+| `--task-db-path` | 路径 | `data/tasks.db` | 任务库路径（相对服务根目录） |
+| `--task-retention-days` | 天数 | `7` | 过期任务清理窗口，启动时执行；`0` = 永不清理 |
 
 ### 三种运行模式
 
@@ -371,6 +393,9 @@ curl http://127.0.0.1:8765/v1/tasks
 
 # 按状态筛选
 curl http://127.0.0.1:8765/v1/tasks?status=processing
+
+# 包含历史任务（需开启任务持久化 enable_task_store）
+curl "http://127.0.0.1:8765/v1/tasks?history=true&limit=20"
 ```
 
 响应：
@@ -404,6 +429,8 @@ curl http://127.0.0.1:8765/v1/tasks?status=processing
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | status | string | null | 筛选状态：`pending` / `processing` / `completed` / `failed` / `cancelled` |
+| history | bool | false | 合并持久化库中的历史任务（需开启 `enable_task_store`，否则无效果） |
+| limit | int | 50 | `history=true` 时返回的最大条数 |
 
 按创建时间倒序排列，不含识别结果。
 
@@ -426,6 +453,7 @@ curl -X DELETE http://127.0.0.1:8765/v1/tasks/{task_id}
 | `pending` | 立即取消 |
 | `processing` | 在当前 chunk 处理完成后停止，返回已识别的部分结果 |
 | `completed` / `failed` / `cancelled` | 返回 `already_*`，不改变状态 |
+| 仅存在于持久化库的历史任务 | 删除该条记录，返回 `deleted`（需开启 `enable_task_store`） |
 
 ### 健康检查
 

@@ -24,10 +24,12 @@ enable_stream: true         # WS /v2/asr/stream（standard 模式）
 # max_stream_sessions: 16   # 实时最大并发会话数
 # stream_asr_concurrency: 1 # 实时 ASR 解码并发上限（模型层有推理锁，>1 无收益）
 
+# ── 离线任务持久化 ──
+enable_task_store: true     # 任务结果跨重启可查（data/tasks.db）；重启时未完成任务标记为失败
+# task_db_path: data/tasks.db
+# task_retention_days: 7    # 过期任务清理窗口（天，启动时执行；0 = 永不清理）
+
 # ── 预留：随对应特性落地后取消注释（当前版本写入会校验报错）──
 # enable_speaker: true            # 说话人分离
 # enable_speaker_db: true         # 声纹库（要求 api_key 非空，否则该模块自动降级关闭）
 # speaker_db_path: data/speakers.db
-# enable_task_store: true         # 离线任务持久化
-# task_db_path: data/tasks.db
-# task_retention_days: 7          # 过期任务清理窗口（启动时执行；0 = 永不清理）

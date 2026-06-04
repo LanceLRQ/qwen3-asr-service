@@ -245,3 +245,141 @@ def test_v2_has_no_deprecated_asr_task_route(make_client):
     # v1 仍保留 deprecated 别名
     tm.get_task.return_value = None
     assert client.get("/v1/asr/t1").status_code == 200
+
+
+# ─── 任务持久化（P2）：库兜底读 / history 合并 / 历史删除 ───
+
+def _history_row(task_id, created_at, status="completed", **extra):
+    row = {
+        "task_id": task_id, "status": status, "progress": 1.0,
+        "language": "zh", "wav_name": f"{task_id}.wav",
+        "created_at": created_at, "finished_at": created_at, "error": None,
+    }
+    row.update(extra)
+    return row
+
+
+def test_get_task_detail_falls_back_to_store(make_client):
+    tm = MagicMock()
+    tm.get_task.return_value = None        # 内存 miss
+    store = MagicMock()
+    store.get_task.return_value = _history_row("h1", "2026-06-01T10:00:00") | {
+        "result": {"full_text": "历史结果"},
+    }
+    client = make_client(task_manager=tm, task_store=store)
+    body = client.get("/v1/tasks/h1").json()
+    assert body["status"] == "completed"
+    assert body["result"] == {"full_text": "历史结果"}
+    assert body["wav_name"] == "h1.wav"
+    assert body["finished_at"] == "2026-06-01T10:00:00"
+    store.get_task.assert_called_once_with("h1")
+
+
+def test_get_task_detail_store_miss_not_found(make_client):
+    tm = MagicMock()
+    tm.get_task.return_value = None
+    store = MagicMock()
+    store.get_task.return_value = None
+    client = make_client(task_manager=tm, task_store=store)
+    assert client.get("/v1/tasks/x").json()["status"] == "not_found"
+
+
+def test_get_task_detail_memory_hit_skips_store(make_client):
+    tm = MagicMock()
+    tm.get_task.return_value = {"task_id": "t1", "status": "processing", "progress": 0.5,
+                                "result": None, "error": None}
+    store = MagicMock()
+    client = make_client(task_manager=tm, task_store=store)
+    assert client.get("/v1/tasks/t1").json()["status"] == "processing"
+    store.get_task.assert_not_called()
+
+
+def test_list_tasks_default_excludes_history(make_client):
+    tm = MagicMock()
+    tm.list_tasks.return_value = []
+    store = MagicMock()
+    client = make_client(task_manager=tm, task_store=store)
+    assert client.get("/v1/tasks").json()["total"] == 0
+    store.list_history.assert_not_called()      # 默认行为不变，不触达库
+
+
+def test_list_tasks_history_merges_dedup_sorted(make_client):
+    tm = MagicMock()
+    tm.list_tasks.return_value = [
+        {"task_id": "m1", "status": "processing", "progress": 0.5, "language": None,
+         "wav_name": None, "created_at": "2026-06-03T12:00:00", "finished_at": None, "error": None},
+    ]
+    store = MagicMock()
+    store.list_history.return_value = [
+        _history_row("m1", "2026-06-03T12:00:00"),   # 与内存重复 -> 去重，内存版本（processing）保留
+        _history_row("h1", "2026-06-04T08:00:00"),   # 比内存新 -> 排前
+        _history_row("h2", "2026-06-01T08:00:00"),
+    ]
+    client = make_client(task_manager=tm, task_store=store)
+    body = client.get("/v1/tasks", params={"history": "true"}).json()
+    assert [t["task_id"] for t in body["tasks"]] == ["h1", "m1", "h2"]
+    assert body["tasks"][1]["status"] == "processing"   # 去重保内存版本
+    store.list_history.assert_called_once_with(50)
+
+
+def test_list_tasks_history_limit_truncates(make_client):
+    tm = MagicMock()
+    tm.list_tasks.return_value = []
+    store = MagicMock()
+    store.list_history.return_value = [
+        _history_row(f"h{i}", f"2026-06-0{i + 1}T08:00:00") for i in range(3)
+    ]
+    client = make_client(task_manager=tm, task_store=store)
+    body = client.get("/v1/tasks", params={"history": "true", "limit": 2}).json()
+    assert body["total"] == 2
+    store.list_history.assert_called_once_with(2)
+
+
+def test_list_tasks_history_respects_status_filter(make_client):
+    tm = MagicMock()
+    tm.list_tasks.return_value = []
+    store = MagicMock()
+    store.list_history.return_value = [
+        _history_row("ok", "2026-06-02T08:00:00", status="completed"),
+        _history_row("bad", "2026-06-03T08:00:00", status="failed"),
+    ]
+    client = make_client(task_manager=tm, task_store=store)
+    body = client.get("/v1/tasks", params={"history": "true", "status": "failed"}).json()
+    assert [t["task_id"] for t in body["tasks"]] == ["bad"]
+
+
+def test_cancel_history_task_deletes_record(make_client):
+    tm = MagicMock()
+    tm.cancel_task.return_value = None      # 内存不存在
+    store = MagicMock()
+    store.delete_task.return_value = True
+    client = make_client(task_manager=tm, task_store=store)
+    body = client.delete("/v1/tasks/h1").json()
+    assert body["status"] == "deleted"
+    store.delete_task.assert_called_once_with("h1")
+
+
+def test_cancel_unknown_with_store_still_not_found(make_client):
+    tm = MagicMock()
+    tm.cancel_task.return_value = None
+    store = MagicMock()
+    store.delete_task.return_value = False
+    client = make_client(task_manager=tm, task_store=store)
+    assert client.delete("/v1/tasks/x").json()["status"] == "not_found"
+
+
+def test_cancel_active_task_does_not_touch_store(make_client):
+    tm = MagicMock()
+    tm.cancel_task.return_value = "pending"
+    store = MagicMock()
+    client = make_client(task_manager=tm, task_store=store)
+    assert client.delete("/v1/tasks/t1").json()["status"] == "cancelled"
+    store.delete_task.assert_not_called()
+
+
+def test_submit_passes_wav_name(make_client):
+    tm = MagicMock()
+    tm.submit.return_value = "tid-1"
+    client = make_client(task_manager=tm)
+    client.post("/v1/asr", files={"file": ("voice.mp3", b"abc", "audio/mpeg")})
+    assert tm.submit.call_args.kwargs["wav_name"] == "voice.mp3"

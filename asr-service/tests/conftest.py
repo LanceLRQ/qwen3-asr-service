@@ -40,8 +40,8 @@ def tm_factory():
 
     created = []
 
-    def _make(max_queue_size=100, start=False, processor=None):
-        tm = TaskManager(max_queue_size=max_queue_size)
+    def _make(max_queue_size=100, start=False, processor=None, store=None):
+        tm = TaskManager(max_queue_size=max_queue_size, store=store)
         if processor is not None:
             tm.set_processor(processor)
         if start:
@@ -72,14 +72,15 @@ def make_client(tmp_path, monkeypatch):
 
     monkeypatch.setattr(routes, "UPLOADS_DIR", str(tmp_path / "uploads"))
 
-    def _make(task_manager=None, service_info=None, include_offline=True, include_common=True):
+    def _make(task_manager=None, service_info=None, task_store=None,
+              include_offline=True, include_common=True):
         app = FastAPI()
         if include_common:
             common_routes.init_common(service_info)
             app.include_router(common_routes.build_common_router("/v1"))
             app.include_router(common_routes.build_common_router("/v2"))
         if include_offline:
-            routes.init_routes(task_manager)
+            routes.init_routes(task_manager, task_store)
             app.include_router(routes.build_offline_router("/v1", include_deprecated=True))
             app.include_router(routes.build_offline_router("/v2"))
         return TestClient(app)

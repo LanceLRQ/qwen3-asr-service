@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 import uvicorn
 from fastapi import FastAPI
@@ -158,8 +159,27 @@ def _assemble_standard(app: FastAPI, args) -> None:
         punc_engine=punc_engine,
     )
 
+    # 任务持久化（可选）：建库失败只告警不中断启动（附属能力不拖垮主链路）
+    task_store = None
+    if getattr(args, "enable_task_store", False):
+        from app.runtime.task_store import TaskStore
+        db_path = args.task_db_path
+        if not os.path.isabs(db_path):
+            db_path = os.path.join(cfg.BASE_DIR, db_path)
+        try:
+            task_store = TaskStore(db_path, retention_days=args.task_retention_days)
+            dangling = task_store.close_dangling()
+            if dangling:
+                logger.warning(f"上次退出时有 {dangling} 个未完成任务，已标记为失败（service restarted）")
+            expired = task_store.cleanup_expired()
+            if expired:
+                logger.info(f"已清理 {expired} 个过期历史任务（>{args.task_retention_days} 天）")
+        except Exception as e:
+            logger.error(f"任务持久化初始化失败，本次以纯内存模式运行: {e}")
+            task_store = None
+
     # 创建任务管理器
-    task_manager = TaskManager(max_queue_size=cfg.MAX_QUEUE_SIZE)
+    task_manager = TaskManager(max_queue_size=cfg.MAX_QUEUE_SIZE, store=task_store)
 
     def process_task(task: dict):
         def on_progress(p):
@@ -209,7 +229,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
     app.include_router(build_common_router("/v2"))
 
     # 离线路由：v1（含 deprecated 别名）+ v2（同名复用）
-    init_routes(task_manager)
+    init_routes(task_manager, task_store)
     app.include_router(build_offline_router("/v1", include_deprecated=True))
     app.include_router(build_offline_router("/v2"))
 
@@ -241,6 +261,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
         task_manager.shutdown()
         if stream_backend is not None:
             stream_backend.shutdown()
+        if task_store is not None:
+            task_store.close()
         logger.info("Qwen3-ASR Service 已安全退出")
 
     logger.info(f"运行模式: {service_info}")

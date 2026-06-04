@@ -101,6 +101,19 @@ ARG_SPECS = (
         key="stream_asr_concurrency", flags=("--stream-asr-concurrency",), default=None, type=int,
         help=f"实时 ASR 解码并发上限 (default: {cfg.STREAM_ASR_CONCURRENCY})",
     ),
+    ArgSpec(
+        key="enable_task_store", flags=("--enable-task-store",), default=False, type=bool,
+        help="离线任务持久化（data/tasks.db）：结果跨重启可查",
+        negative_flags=("--no-task-store",), negative_help="关闭任务持久化（覆盖配置文件）",
+    ),
+    ArgSpec(
+        key="task_db_path", flags=("--task-db-path",), default="data/tasks.db",
+        help="任务库路径，相对服务根目录 (default: data/tasks.db)",
+    ),
+    ArgSpec(
+        key="task_retention_days", flags=("--task-retention-days",), default=7, type=int,
+        help="过期任务清理窗口（天），启动时执行；0=永不清理 (default: 7)",
+    ),
 )
 
 

@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 import hmac
@@ -35,12 +36,14 @@ UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1MB
 
 # 运行时依赖，由 main.py 启动时注入
 _task_manager = None
+_task_store = None
 
 
-def init_routes(task_manager):
-    """注入运行时依赖（离线控制器仅依赖 task_manager；health 已迁至 common_routes）"""
-    global _task_manager
+def init_routes(task_manager, task_store=None):
+    """注入运行时依赖（task_store 可选：任务持久化关闭时为 None，读路径行为与现状一致）"""
+    global _task_manager, _task_store
     _task_manager = task_manager
+    _task_store = task_store
 
 
 # ─── 离线批处理控制器（纯函数，v1/v2 共用同一组实现）───
@@ -92,6 +95,7 @@ async def submit_asr(
         task_id = _task_manager.submit(
             file_path=save_path,
             language=language,
+            wav_name=file.filename,
         )
     except queue.Full:
         os.remove(save_path)
@@ -100,21 +104,39 @@ async def submit_asr(
     return ASRResponse(task_id=task_id)
 
 
-async def list_tasks(status: str | None = None) -> TaskListResponse:
-    """获取任务列表，可通过 status 参数筛选（pending/processing/completed/failed/cancelled）"""
+async def list_tasks(
+    status: str | None = None,
+    history: bool = False,
+    limit: int = 50,
+) -> TaskListResponse:
+    """获取任务列表，可通过 status 参数筛选（pending/processing/completed/failed/cancelled）。
+
+    history=true 且任务持久化开启时，合并库内历史任务（task_id 去重内存优先，
+    created_at 倒序，截断 limit 条）。
+    """
     if _task_manager is None:
         raise HTTPException(status_code=503, detail="服务尚未就绪，请稍后重试")
 
     tasks = _task_manager.list_tasks(status=status)
+    if history and _task_store is not None:
+        seen = {t["task_id"] for t in tasks}
+        rows = await asyncio.to_thread(_task_store.list_history, limit)
+        if status:
+            rows = [r for r in rows if r["status"] == status]
+        tasks.extend(r for r in rows if r["task_id"] not in seen)
+        tasks.sort(key=lambda t: t.get("created_at") or "", reverse=True)
+        tasks = tasks[:limit]
     return TaskListResponse(total=len(tasks), tasks=tasks)
 
 
 async def get_task_detail(task_id: str) -> TaskStatusResponse:
-    """查询单个任务详情（含识别结果）"""
+    """查询单个任务详情（含识别结果）。内存未命中时查持久化库（历史任务兜底）。"""
     if _task_manager is None:
         raise HTTPException(status_code=503, detail="服务尚未就绪，请稍后重试")
 
     task = _task_manager.get_task(task_id)
+    if not task and _task_store is not None:
+        task = await asyncio.to_thread(_task_store.get_task, task_id)
     if not task:
         return TaskStatusResponse(
             task_id=task_id,
@@ -128,6 +150,9 @@ async def get_task_detail(task_id: str) -> TaskStatusResponse:
         progress=task["progress"],
         result=task.get("result"),
         error=task.get("error"),
+        wav_name=task.get("wav_name"),
+        created_at=task.get("created_at"),
+        finished_at=task.get("finished_at"),
     )
 
 
@@ -137,13 +162,20 @@ async def get_task_status(task_id: str) -> TaskStatusResponse:
 
 
 async def cancel_asr(task_id: str) -> CancelResponse:
-    """取消 ASR 任务"""
+    """取消 ASR 任务；对仅存在于持久化库的历史（终态）任务 = 删除记录"""
     if _task_manager is None:
         raise HTTPException(status_code=503, detail="服务尚未就绪，请稍后重试")
 
     previous_status = _task_manager.cancel_task(task_id)
 
     if previous_status is None:
+        # 内存不存在：若持久化库有该历史记录则删除（对终态任务"取消"即"删除"）
+        if _task_store is not None and await asyncio.to_thread(_task_store.delete_task, task_id):
+            return CancelResponse(
+                task_id=task_id,
+                status="deleted",
+                message="历史任务记录已删除",
+            )
         return CancelResponse(
             task_id=task_id,
             status="not_found",
