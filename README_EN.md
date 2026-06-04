@@ -14,7 +14,7 @@ An out-of-the-box long-form speech recognition API service based on Qwen3-ASR, w
 - **Multi-format Support** - WAV / MP3 / FLAC / M4A / AAC / OGG and more
 - **Timestamps** - Sentence-level / word-level timestamps (GPU mode)
 - **Auto Punctuation** - Integrated CT-Transformer punctuation restoration model
-- **Web UI** - Built-in offline transcription demo page and real-time test page
+- **Web UI** - Built-in offline transcription demo page, real-time test page and offline documentation center
 - **API Authentication** - Optional Bearer Token authentication
 - **Flexible Configuration** - Four priority layers: YAML config file / CLI arguments / environment variables
 - **Interactive Management** - CLI management script supporting Docker / venv dual-mode management

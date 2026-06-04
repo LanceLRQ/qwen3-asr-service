@@ -41,7 +41,7 @@ All parameters are passed through `bash start.sh <args>`. Config-file key = long
 |-----------|--------|---------|-------------|
 | `--host` | IP address | `127.0.0.1` | Listen address, `0.0.0.0` for LAN access |
 | `--port` | Port number | `8765` | Listen port |
-| `--web` / `--no-web` | - | Disabled | Web UI (`/web-ui` offline demo, `/web-ui/stream` real-time test page) |
+| `--web` / `--no-web` | - | Disabled | Web UI (`/web-ui` offline demo, `/web-ui/stream` real-time test page, `/web-ui/docs` documentation center) |
 | `--api-key` | String | None | API key; enables Bearer Token auth (overrides the `ASR_API_KEY` env var) |
 | `--max-segment` | Seconds | `5` | Max VAD segment merge duration |
 | `--max-queue-size` | Number | `100` | Max offline task queue length |

@@ -6,6 +6,8 @@ All endpoints are prefixed with `/v2`. Default base URL: `http://127.0.0.1:8765`
 
 v1 is kept for legacy clients; its offline endpoints are identical to v2 (only the prefix differs). See the [v1 reference](v1_EN.md).
 
+> While the service is running, `http://127.0.0.1:8765/docs` opens Swagger UI (FastAPI's auto-generated interactive API playground). Note: this link only works against a running service — it won't navigate when reading this document on GitHub — and the Swagger page loads its static assets from a public CDN, so it won't render in offline environments.
+
 ## Table of Contents
 
 - [Authentication](#authentication)

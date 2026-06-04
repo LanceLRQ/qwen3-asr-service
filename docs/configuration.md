@@ -41,7 +41,7 @@
 |------|------|--------|------|
 | `--host` | IP 地址 | `127.0.0.1` | 监听地址，`0.0.0.0` 可局域网访问 |
 | `--port` | 端口号 | `8765` | 监听端口 |
-| `--web` / `--no-web` | - | 关闭 | Web UI（`/web-ui` 离线演示页、`/web-ui/stream` 实时测试页） |
+| `--web` / `--no-web` | - | 关闭 | Web UI（`/web-ui` 离线演示页、`/web-ui/stream` 实时测试页、`/web-ui/docs` 文档中心） |
 | `--api-key` | 字符串 | 无 | API 密钥，设置后启用 Bearer Token 认证（覆盖 `ASR_API_KEY` 环境变量） |
 | `--max-segment` | 秒数 | `5` | VAD 切片合并最大时长 |
 | `--max-queue-size` | 数字 | `100` | 离线任务队列最大长度 |
