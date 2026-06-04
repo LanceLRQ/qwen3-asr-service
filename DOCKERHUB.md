@@ -31,7 +31,9 @@
 - 句子级 / 单词级时间戳（GPU 模式）
 - 可选标点恢复（CT-Transformer）
 - 可选 Bearer Token API 认证（兼容 OpenAI 格式）
-- 任务管理：列表查询、状态筛选、任务取消
+- 任务管理：列表查询、状态筛选、任务取消、历史任务持久化（跨重启可查）
+- 实时语音转写（WebSocket 端点，`--enable-stream` 开启）
+- YAML 配置文件统一管理启动参数（首启自动生成）
 - 内置 Web UI，支持音频上传、进度展示、结果播放和导出
 
 ### 快速启动
@@ -118,8 +120,11 @@ services:
 | `--max-segment` | 秒数 | `5` | VAD 切片合并最大时长 |
 | `--api-key` | 字符串 | 无 | API 密钥，启用 Bearer Token 认证 |
 | `--max-queue-size` | 数字 | `100` | 任务队列最大长度 |
+| `--enable-stream` | - | 关闭 | 实时转写端点 `WS /v2/asr/stream` |
+| `--enable-task-store` | - | 关闭 | 离线任务持久化（结果跨重启可查） |
 
 > 容器内部固定监听 `0.0.0.0`，通过 `-p` 映射端口即可从外部访问。
+> 完整参数表与 YAML 配置文件用法见 [配置文档](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/configuration.md)。
 
 ### 数据卷
 
@@ -127,85 +132,27 @@ services:
 |---------|------|
 | `/app/models` | 模型文件（首次启动自动下载，建议挂载持久化） |
 | `/app/logs` | 服务日志 |
+| `/app/data` | 任务持久化库 tasks.db（启用 `--enable-task-store` 时建议挂载） |
 
 ### API 使用
 
-#### 提交 ASR 任务
+完整接口文档（参数、响应结构、错误码、WebSocket 实时协议）见 GitHub 仓库：
+
+- [API 文档 v2（默认版本）](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/api/v2.md)
+- [API 文档 v1（兼容版本）](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/api/v1.md)
+- [配置文档（启动参数 / config.yaml / 任务持久化）](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/configuration.md)
+
+快速验证：
 
 ```bash
-curl -X POST http://localhost:8765/v1/asr \
-  -F "file=@audio.wav"
-```
+# 健康检查
+curl http://localhost:8765/v2/health
 
-如启用了 API 认证：
+# 提交任务（启用认证时加 -H "Authorization: Bearer sk-your-key-here"）
+curl -X POST http://localhost:8765/v2/asr -F "file=@audio.wav"
 
-```bash
-curl -X POST http://localhost:8765/v1/asr \
-  -H "Authorization: Bearer sk-your-key-here" \
-  -F "file=@audio.wav"
-```
-
-响应：
-
-```json
-{"task_id": "550e8400-e29b-41d4-a716-446655440000"}
-```
-
-#### 查询结果
-
-```bash
-curl http://localhost:8765/v1/tasks/{task_id}
-```
-
-响应：
-
-```json
-{
-  "task_id": "550e8400-...",
-  "status": "completed",
-  "progress": 1.0,
-  "result": {
-    "segments": [
-      {"start": 0.0, "end": 3.2, "text": "识别的文本内容"}
-    ],
-    "full_text": "识别的文本内容"
-  }
-}
-```
-
-任务状态：`pending` → `processing` → `completed` / `failed` / `cancelled`
-
-#### 任务列表
-
-```bash
-# 获取全部任务
-curl http://localhost:8765/v1/tasks
-
-# 按状态筛选
-curl http://localhost:8765/v1/tasks?status=processing
-```
-
-响应：
-
-```json
-{
-  "total": 2,
-  "tasks": [
-    {"task_id": "...", "status": "completed", "progress": 1.0, "created_at": "...", "finished_at": null, "error": null}
-  ]
-}
-```
-
-#### 取消任务
-
-```bash
-curl -X DELETE http://localhost:8765/v1/tasks/{task_id}
-```
-
-#### 健康检查
-
-```bash
-curl http://localhost:8765/v1/health
+# 查询结果
+curl http://localhost:8765/v2/tasks/{task_id}
 ```
 
 ### 运行模式对比
@@ -258,7 +205,9 @@ A ready-to-use long-form speech recognition API service based on Qwen3-ASR, supp
 - Sentence-level and word-level timestamps (GPU mode)
 - Optional punctuation restoration (CT-Transformer)
 - Optional Bearer Token API authentication (OpenAI-compatible format)
-- Task management: list, filter by status, cancel tasks
+- Task management: list, filter by status, cancel tasks, persisted task history (survives restarts)
+- Real-time speech transcription (WebSocket endpoint, enabled via `--enable-stream`)
+- YAML config file for unified parameter management (auto-generated on first startup)
 - Built-in Web UI for uploading audio, tracking progress, playing results, and exporting
 
 ### Quick Start
@@ -345,8 +294,11 @@ All parameters are passed via `command`:
 | `--max-segment` | Seconds | `5` | Max VAD segment merge duration |
 | `--api-key` | String | None | API key, enables Bearer Token authentication |
 | `--max-queue-size` | Number | `100` | Max task queue size |
+| `--enable-stream` | - | Disabled | Real-time endpoint `WS /v2/asr/stream` |
+| `--enable-task-store` | - | Disabled | Offline task persistence (results survive restarts) |
 
 > The container always listens on `0.0.0.0` internally. Use `-p` to map the port for external access.
+> Full parameter table and YAML config-file usage: see the [configuration reference](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/configuration_EN.md).
 
 ### Volumes
 
@@ -354,85 +306,27 @@ All parameters are passed via `command`:
 |---------------|-------------|
 | `/app/models` | Model files (auto-downloaded on first run, mount to persist) |
 | `/app/logs` | Service logs |
+| `/app/data` | Task persistence database tasks.db (mount when `--enable-task-store` is on) |
 
 ### API Usage
 
-#### Submit ASR Task
+Full API documentation (parameters, response structures, error codes, WebSocket real-time protocol) is in the GitHub repository:
+
+- [API reference v2 (default version)](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/api/v2_EN.md)
+- [API reference v1 (legacy version)](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/api/v1_EN.md)
+- [Configuration reference (startup parameters / config.yaml / task persistence)](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/configuration_EN.md)
+
+Quick check:
 
 ```bash
-curl -X POST http://localhost:8765/v1/asr \
-  -F "file=@audio.wav"
-```
+# Health check
+curl http://localhost:8765/v2/health
 
-With API authentication enabled:
+# Submit a task (add -H "Authorization: Bearer sk-your-key-here" when auth is enabled)
+curl -X POST http://localhost:8765/v2/asr -F "file=@audio.wav"
 
-```bash
-curl -X POST http://localhost:8765/v1/asr \
-  -H "Authorization: Bearer sk-your-key-here" \
-  -F "file=@audio.wav"
-```
-
-Response:
-
-```json
-{"task_id": "550e8400-e29b-41d4-a716-446655440000"}
-```
-
-#### Query Result
-
-```bash
-curl http://localhost:8765/v1/tasks/{task_id}
-```
-
-Response:
-
-```json
-{
-  "task_id": "550e8400-...",
-  "status": "completed",
-  "progress": 1.0,
-  "result": {
-    "segments": [
-      {"start": 0.0, "end": 3.2, "text": "Transcribed text content"}
-    ],
-    "full_text": "Transcribed text content"
-  }
-}
-```
-
-Task status flow: `pending` → `processing` → `completed` / `failed` / `cancelled`
-
-#### List Tasks
-
-```bash
-# List all tasks
-curl http://localhost:8765/v1/tasks
-
-# Filter by status
-curl http://localhost:8765/v1/tasks?status=processing
-```
-
-Response:
-
-```json
-{
-  "total": 2,
-  "tasks": [
-    {"task_id": "...", "status": "completed", "progress": 1.0, "created_at": "...", "finished_at": null, "error": null}
-  ]
-}
-```
-
-#### Cancel Task
-
-```bash
-curl -X DELETE http://localhost:8765/v1/tasks/{task_id}
-```
-
-#### Health Check
-
-```bash
-curl http://localhost:8765/v1/health
+# Query the result
+curl http://localhost:8765/v2/tasks/{task_id}
 ```
 
 ### Mode Comparison

@@ -11,6 +11,9 @@ class TaskStatusResponse(BaseModel):
     progress: float
     result: dict | None = None
     error: str | None = None
+    wav_name: str | None = None      # 原始文件名（展示用）
+    created_at: str | None = None
+    finished_at: str | None = None
 
 
 class TaskListItem(BaseModel):
@@ -18,6 +21,7 @@ class TaskListItem(BaseModel):
     status: str
     progress: float
     language: str | None = None
+    wav_name: str | None = None      # 原始文件名（展示用）
     created_at: str
     finished_at: str | None = None
     error: str | None = None
@@ -30,7 +34,8 @@ class TaskListResponse(BaseModel):
 
 class CancelResponse(BaseModel):
     task_id: str
-    status: str     # "cancelled" | "already_completed" | "already_failed" | "already_cancelled" | "not_found"
+    status: str     # "cancelled" | "already_completed" | "already_failed" | "already_cancelled"
+                    # | "deleted"（持久化历史记录已删除） | "not_found"
     message: str
 
 

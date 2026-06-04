@@ -9,3 +9,4 @@ __pycache__/
 .cli_launch_config
 config.yaml
 config.yml
+data/

@@ -25,6 +25,10 @@ LEGACY_DEFAULTS = {
     "enable_stream": False,
     "max_stream_sessions": None,
     "stream_asr_concurrency": None,
+    # ── P 系列（任务持久化）新增，非重构前遗留 ──
+    "enable_task_store": False,
+    "task_db_path": "data/tasks.db",
+    "task_retention_days": 7,
 }
 
 

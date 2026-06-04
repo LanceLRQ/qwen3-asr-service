@@ -1,0 +1,149 @@
+# Qwen3-ASR Service 配置文档
+
+**中文** | [English](configuration_EN.md)
+
+服务配置共四层，优先级从低到高：
+
+```
+内置默认值  <  环境变量  <  配置文件 config.yaml  <  命令行显式参数
+```
+
+同一参数高层覆盖低层；命令行**显式传入**的值永远最高（包括显式传默认值，如 `--device auto`）。
+
+## 目录
+
+- [启动参数（完整表）](#启动参数完整表)
+- [配置文件（config.yaml）](#配置文件configyaml)
+- [环境变量](#环境变量)
+- [离线任务持久化（tasks.db）](#离线任务持久化tasksdb)
+- [内置常量（app/config.py）](#内置常量appconfigpy)
+
+---
+
+## 启动参数（完整表）
+
+所有参数通过 `bash start.sh <参数>` 透传给服务；同名配置文件键 = 长参数横线转下划线（如 `--model-size` → `model_size`，唯一例外：`--use-punc` → `use_punc`）。
+
+### 基础
+
+| 参数 | 取值 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--serve-mode` | `standard` / `vllm` | `standard` | 运行模式；`vllm` 为 Phase 3 占位，暂未实现（仅提供 /health /capabilities） |
+| `--device` | `auto` / `cuda` / `cpu` | `auto` | 运行设备，`auto` 自动检测（≥6GB 显存选 1.7B，4–6GB 选 0.6B，<4GB 关对齐，无 GPU 回退 CPU/OpenVINO） |
+| `--model-size` | `0.6b` / `1.7b` | 按显存自动选择 | ASR 模型大小 |
+| `--enable-align` / `--no-align` | - | 开启 | 对齐模型（单词级时间戳）；CPU 模式强制关闭 |
+| `--use-punc` / `--no-punc` | - | 关闭 | 标点恢复 |
+| `--model-source` | `modelscope` / `huggingface` | `modelscope` | 模型下载源（国内推荐 modelscope） |
+
+### 服务
+
+| 参数 | 取值 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--host` | IP 地址 | `127.0.0.1` | 监听地址，`0.0.0.0` 可局域网访问 |
+| `--port` | 端口号 | `8765` | 监听端口 |
+| `--web` / `--no-web` | - | 关闭 | Web UI（`/web-ui` 离线演示页、`/web-ui/stream` 实时测试页、`/web-ui/docs` 文档中心） |
+| `--api-key` | 字符串 | 无 | API 密钥，设置后启用 Bearer Token 认证（覆盖 `ASR_API_KEY` 环境变量） |
+| `--max-segment` | 秒数 | `5` | VAD 切片合并最大时长 |
+| `--max-queue-size` | 数字 | `100` | 离线任务队列最大长度 |
+
+### 实时转写
+
+| 参数 | 取值 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--enable-stream` / `--no-stream` | - | 关闭（example 生成的配置中开启） | 挂载实时端点 `WS /v2/asr/stream`（standard 模式） |
+| `--max-stream-sessions` | 数字 | `16` | 实时最大并发会话数（超额连接以 1013 关闭） |
+| `--stream-asr-concurrency` | 数字 | `1` | 实时 ASR 解码并发上限（模型层有推理锁，>1 无收益） |
+
+### 任务持久化
+
+| 参数 | 取值 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--enable-task-store` / `--no-task-store` | - | 关闭（example 生成的配置中开启） | 离线任务持久化（结果跨重启可查） |
+| `--task-db-path` | 路径 | `data/tasks.db` | 任务库路径（相对服务根目录） |
+| `--task-retention-days` | 天数 | `7` | 过期任务清理窗口，启动时执行；`0` = 永不清理 |
+
+### 配置文件元参数
+
+| 参数 | 说明 |
+|------|------|
+| `--config <PATH>` | 显式指定 YAML 配置文件（文件不存在则启动报错） |
+| `--no-config` | 跳过配置文件加载与引导生成（纯默认值 + 环境变量 + 命令行，排障用） |
+
+## 配置文件（config.yaml）
+
+启动参数可通过 YAML 配置文件统一管理，不必每次写一长串命令行。
+
+### 自动发现与引导生成
+
+```bash
+# 默认行为：自动加载 asr-service/config.yaml（支持 config.yml 别名）；
+# 首次启动若不存在，会自动从 config.example.yaml 拷贝生成一份可编辑的 config.yaml
+bash start.sh
+
+# 显式指定配置文件
+bash start.sh --config /path/to/my-config.yaml
+
+# 命令行参数临时覆盖配置文件（只影响本次启动，不改文件）
+bash start.sh --device cpu
+
+# 跳过配置文件
+bash start.sh --no-config
+```
+
+- 扫描目录为服务根目录（`asr-service/`），`config.yaml` 优先于 `config.yml`（并存时告警并取 `.yaml`）。
+- **删除 `config.yaml` 后重启 = 重置配置**（重新由 example 生成默认配置）。
+- 引导生成的 `config.yaml` 权限为 `600`（该文件可能写入 `api_key`）。
+
+### 格式与校验
+
+- 仅支持 YAML，顶层为扁平键值映射；全部可配键见 [`asr-service/config.example.yaml`](../asr-service/config.example.yaml)。
+- **启动时硬校验**：未知键（带近似拼写提示）、空值、类型错误、取值越界、重复键均直接报错退出，防止拼写错误静默生效；多处错误一次性全部报出。
+- 布尔开关在配置文件设 `true` 后，命令行可用反向参数覆盖（`--no-punc` / `--no-web` / `--no-stream` / `--no-align` / `--no-task-store`）。
+
+### 安全
+
+- `config.yaml` / `config.yml` 已加入 `.gitignore`，请勿提交（可能含 `api_key`）。
+- `GET /health` 的 `config_file` 字段回显本次生效的配置文件名，便于确认加载来源（防"幽灵配置"）。
+
+## 环境变量
+
+| 变量 | 对应配置键 | 说明 |
+|------|-----------|------|
+| `ASR_API_KEY` | `api_key` | API 密钥；优先级低于配置文件与命令行（配置文件中 `api_key: ""` 也会覆盖它——想用环境变量请删除该行） |
+| `MODEL_SOURCE` | `model_source` | 模型下载源 |
+
+空值环境变量视为未设置。
+
+## 离线任务持久化（tasks.db）
+
+默认（内置默认值）任务只存在内存：终态结果保留 1 小时，重启后全部丢失。开启任务持久化后，任务元数据与最终结果写入 `asr-service/data/tasks.db`（SQLite），跨重启可查。
+
+```yaml
+# config.yaml（由 config.example.yaml 生成的配置默认已开启）
+enable_task_store: true
+# task_db_path: data/tasks.db
+# task_retention_days: 7    # 过期清理窗口（天）；0 = 永不清理
+```
+
+### 行为说明
+
+- **结果可查，不做断点续跑**：重启时上次未完成（`pending` / `processing`）的任务标记为 `failed`（`error: "service restarted"`），不会自动重跑。
+- **过期清理仅在服务启动时执行**：终态超过 `task_retention_days` 天的记录被删除并回收空间。
+- 历史任务的查询与删除接口见 [API 文档 · 任务持久化对 API 的影响](api/v2.md#任务持久化对-api-的影响)。
+- 只保存文本结果与元数据，**不留存音频原件**；持久化写入失败只告警，不影响任务执行。
+- 删除 `data/tasks.db` = 清空历史记录，不影响服务功能。对内容留存有更严格要求时，调小 `task_retention_days` 或关闭开关。
+
+## 内置常量（app/config.py）
+
+不走启动参数/配置文件的内置限制（修改需直接编辑 `app/config.py`）：
+
+| 配置 | 默认值 | 说明 |
+|------|--------|------|
+| MAX_AUDIO_DURATION | 14400s | 最大音频时长（4 小时） |
+| MAX_AUDIO_FILE_SIZE | 1024MB | 最大上传文件大小 |
+| MIN_AUDIO_DURATION | 1.0s | 最短音频时长 |
+| TASK_TIMEOUT | 1800s | 单任务超时（30 分钟） |
+| TASK_RESULT_TTL | 3600s | 内存中终态任务保留时长（持久化历史不受此限） |
+| STREAM_MAX_SESSION_SECONDS | 3600s | 实时单会话最长时长 |
+| STREAM_MAX_FRAME_BYTES | 2MB | 实时单条二进制帧上限 |
+| STREAM_MAX_BACKLOG_BYTES | 8MB | 实时处理积压上限（超限断开） |

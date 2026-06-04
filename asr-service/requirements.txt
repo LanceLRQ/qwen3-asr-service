@@ -11,6 +11,9 @@ fastapi
 uvicorn[standard]
 python-multipart
 
+# 文档中心（/web-ui/docs 服务端 Markdown 渲染）
+markdown
+
 # 配置文件（funasr 已传递依赖，此处显式声明）
 pyyaml
 

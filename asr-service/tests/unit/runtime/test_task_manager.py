@@ -65,7 +65,8 @@ def test_list_tasks_summary_excludes_result_and_path(tm_factory):
     assert "result" not in item
     assert "file_path" not in item
     assert set(item.keys()) == {
-        "task_id", "status", "progress", "language", "created_at", "finished_at", "error",
+        "task_id", "status", "progress", "language", "wav_name",
+        "created_at", "finished_at", "error",
     }
 
 
@@ -202,3 +203,74 @@ def test_worker_skips_cancelled_pending(tm_factory):
     time.sleep(0.3)
     assert tm.get_task(tid)["status"] == "cancelled"
     assert processed == []
+
+
+# ─── 持久化 write-through 钩子（P2，注入记录调用的假 store）───
+
+class _FakeStore:
+    """记录钩子调用的桩。真实 TaskStore 内部自吞库异常，桩只验证调用契约。"""
+
+    def __init__(self):
+        self.calls = []
+
+    def insert_task(self, task):
+        self.calls.append(("insert", task["task_id"], task["status"]))
+
+    def update_status(self, task_id, status):
+        self.calls.append(("status", task_id, status))
+
+    def save_progress(self, task_id, progress):
+        self.calls.append(("progress", task_id, progress))
+
+    def finalize_task(self, task):
+        self.calls.append(("finalize", task["task_id"], task["status"]))
+
+
+def test_store_hooks_submit_and_complete(tm_factory):
+    store = _FakeStore()
+    tm = tm_factory(start=True, processor=lambda task: {"full_text": "hi"}, store=store)
+    tid = tm.submit("/tmp/a.wav", wav_name="a.wav")
+    assert wait_for(lambda: ("finalize", tid, "completed") in store.calls)
+    assert ("insert", tid, "pending") in store.calls
+    assert ("status", tid, "processing") in store.calls
+
+
+def test_store_hooks_failure_finalized(tm_factory):
+    def boom(task):
+        raise ValueError("x")
+
+    store = _FakeStore()
+    tm = tm_factory(start=True, processor=boom, store=store)
+    tid = tm.submit("/tmp/a.wav")
+    assert wait_for(lambda: ("finalize", tid, "failed") in store.calls)
+
+
+def test_store_hooks_cancel_pending_finalized(tm_factory):
+    store = _FakeStore()
+    tm = tm_factory(store=store)  # 不启动 worker
+    tid = tm.submit("/tmp/a.wav")
+    tm.cancel_task(tid)
+    assert ("finalize", tid, "cancelled") in store.calls
+
+
+def test_store_hooks_progress(tm_factory):
+    store = _FakeStore()
+    tm = tm_factory(store=store)
+    tid = tm.submit("/tmp/a.wav")
+    tm.update_progress(tid, 0.5)
+    assert ("progress", tid, 0.5) in store.calls
+    tm.update_progress("nope", 0.9)  # 未知任务不触达 store
+    assert not any(c[1] == "nope" for c in store.calls)
+
+
+def test_submit_wav_name_recorded(tm_factory):
+    tm = tm_factory()
+    tid = tm.submit("/tmp/a.wav", wav_name="原始文件.mp3")
+    assert tm.get_task(tid)["wav_name"] == "原始文件.mp3"
+
+
+def test_no_store_zero_behavior_change(tm_factory):
+    """store=None（schema 默认关闭）时任务状态机与现状一致。"""
+    tm = tm_factory(start=True, processor=lambda task: {"ok": 1})
+    tid = tm.submit("/tmp/a.wav")
+    assert wait_for(lambda: tm.get_task(tid)["status"] == "completed")

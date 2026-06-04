@@ -8,6 +8,5 @@ asr-service/__pycache__/
 *.pyo
 .git
 .gitignore
-docs/
+docs/plan/
 LICENSE
-README.md

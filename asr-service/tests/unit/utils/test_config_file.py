@@ -228,3 +228,4 @@ def test_example_passes_schema_validation():
     assert parsed["enable_stream"] is True
     assert parsed["web"] is True
     assert parsed["api_key"] == ""
+    assert parsed["enable_task_store"] is True   # P 系列：example 默认开启（schema 默认关闭）

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class TaskManager:
-    def __init__(self, max_queue_size=100):
+    def __init__(self, max_queue_size=100, store=None):
         self._queue = queue.Queue(maxsize=max_queue_size)
         self._tasks = {}  # task_id -> task_dict
         self._cancel_events: dict[str, threading.Event] = {}  # task_id -> cancel event
@@ -21,6 +21,9 @@ class TaskManager:
         self._process_fn = None
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._stop_event = threading.Event()
+        # 可选持久化（app.runtime.task_store.TaskStore）：write-through，
+        # store 内部自吞库异常，钩子调用一律放在 self._lock 之外（锁内不做 I/O）
+        self._store = store
 
     @property
     def is_stopping(self) -> bool:
@@ -38,7 +41,8 @@ class TaskManager:
         self._cleanup_thread.start()
         logger.info("任务工作线程和清理线程已启动")
 
-    def submit(self, file_path: str, language: str | None = None) -> str:
+    def submit(self, file_path: str, language: str | None = None,
+               wav_name: str | None = None) -> str:
         """提交任务，返回 task_id"""
         task_id = str(uuid.uuid4())
         task = {
@@ -47,6 +51,7 @@ class TaskManager:
             "progress": 0.0,
             "file_path": file_path,
             "language": language,
+            "wav_name": wav_name,
             "result": None,
             "error": None,
             "created_at": datetime.now().isoformat(),
@@ -58,6 +63,8 @@ class TaskManager:
             self._cancel_events[task_id] = threading.Event()
 
         self._queue.put_nowait(task_id)  # 队列满时抛出 queue.Full
+        if self._store:
+            self._store.insert_task(task)
         logger.info(f"任务已提交: {task_id}")
         return task_id
 
@@ -82,6 +89,7 @@ class TaskManager:
                 "status": t["status"],
                 "progress": t["progress"],
                 "language": t.get("language"),
+                "wav_name": t.get("wav_name"),
                 "created_at": t["created_at"],
                 "finished_at": t.get("finished_at"),
                 "error": t.get("error"),
@@ -92,8 +100,11 @@ class TaskManager:
     def update_progress(self, task_id: str, progress: float):
         """更新任务进度"""
         with self._lock:
-            if task_id in self._tasks:
-                self._tasks[task_id]["progress"] = progress
+            if task_id not in self._tasks:
+                return
+            self._tasks[task_id]["progress"] = progress
+        if self._store:
+            self._store.save_progress(task_id, progress)  # store 内部 1s 节流
 
     def cancel_task(self, task_id: str) -> str | None:
         """请求取消任务。返回取消前的状态，或 None 表示任务不存在。"""
@@ -120,6 +131,8 @@ class TaskManager:
                 # processing 中，pipeline 将在下一个 chunk 边界检测到取消
                 logger.info(f"任务取消请求已发送 (processing): {task_id}")
 
+        if status == "pending" and self._store:
+            self._store.finalize_task(task)
         return status
 
     def is_cancelled(self, task_id: str) -> bool:
@@ -138,12 +151,16 @@ class TaskManager:
             with self._lock:
                 task = self._tasks.get(task_id)
                 if not task:
+                    self._queue.task_done()
                     continue
                 # pending 时已被取消的任务，跳过处理
                 if task.get("status") == "cancelled":
                     self._queue.task_done()
                     continue
                 task["status"] = "processing"
+
+            if self._store:
+                self._store.update_status(task_id, "processing")  # 状态跃迁立即落库
 
             cancel_event = self._cancel_events.get(task_id)
             start_time = time.time()
@@ -165,6 +182,8 @@ class TaskManager:
                         task["result"] = result
                         task["finished_at"] = datetime.now().isoformat()
                         logger.info(f"任务完成: {task_id} ({elapsed:.1f}s)")
+                if self._store:
+                    self._store.finalize_task(task)
             except FuturesTimeoutError:
                 elapsed = time.time() - start_time
                 future.cancel()
@@ -172,6 +191,8 @@ class TaskManager:
                     task["status"] = "failed"
                     task["error"] = f"处理超时（>{TASK_TIMEOUT}s）"
                     task["finished_at"] = datetime.now().isoformat()
+                if self._store:
+                    self._store.finalize_task(task)
                 logger.error(f"任务超时: {task_id} ({elapsed:.0f}s)")
             except Exception as e:
                 if self._stop_event.is_set():
@@ -180,12 +201,18 @@ class TaskManager:
                     task["status"] = "failed"
                     task["error"] = "内部处理错误，请检查服务日志"
                     task["finished_at"] = datetime.now().isoformat()
+                if self._store:
+                    self._store.finalize_task(task)
                 logger.error(f"任务失败: {task_id}, 错误: {e}", exc_info=True)
             finally:
                 self._queue.task_done()
 
-    def shutdown(self):
-        """安全终止：停止工作线程并关闭线程池"""
+    def shutdown(self) -> bool:
+        """安全终止：停止工作线程并关闭线程池。
+
+        返回工作线程是否已退出；False 表示仍有任务在收尾（finalize 可能尚未完成），
+        调用方不应在此时关闭 task_store 连接（避免与 finalize 落库竞态）。
+        """
         logger.info("正在终止任务管理器...")
         self._stop_event.set()
         self._executor.shutdown(wait=False, cancel_futures=True)
@@ -193,7 +220,9 @@ class TaskManager:
             self._worker_thread.join(timeout=5)
         if self._cleanup_thread and self._cleanup_thread.is_alive():
             self._cleanup_thread.join(timeout=2)
+        worker_exited = not (self._worker_thread and self._worker_thread.is_alive())
         logger.info("任务管理器已终止")
+        return worker_exited
 
     def _cleanup_loop(self):
         """定期清理已完成/失败的过期任务"""
