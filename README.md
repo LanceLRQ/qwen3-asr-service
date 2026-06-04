@@ -124,6 +124,31 @@ export ASR_API_KEY=sk-your-key-here
 bash start.sh
 ```
 
+#### 配置文件（config.yaml）
+
+启动参数也可以通过 YAML 配置文件统一管理，不必每次写一长串命令行：
+
+```bash
+# 默认行为：自动加载 asr-service/config.yaml（支持 config.yml 别名）；
+# 首次启动若不存在，会自动从 config.example.yaml 拷贝生成一份可编辑的 config.yaml
+bash start.sh
+
+# 显式指定配置文件
+bash start.sh --config /path/to/my-config.yaml
+
+# 命令行参数临时覆盖配置文件（只影响本次启动，不改文件）
+bash start.sh --device cpu
+
+# 跳过配置文件（纯默认值 + 环境变量 + 命令行启动，排障用）
+bash start.sh --no-config
+```
+
+- **优先级**（低 → 高）：内置默认值 < 环境变量（`ASR_API_KEY`/`MODEL_SOURCE`）< 配置文件 < 命令行显式参数。
+- 配置键名 = 命令行长参数横线转下划线（如 `--model-size` → `model_size`），全部可配项见 [`asr-service/config.example.yaml`](asr-service/config.example.yaml)。
+- **删除 `config.yaml` 后重启 = 重置配置**（重新由 example 生成默认配置）。
+- 未知键 / 类型错误 / 取值越界会在启动时直接报错，防止拼写错误静默生效。
+- `config.yaml` 可能包含 `api_key`，已加入 `.gitignore`，请勿提交；`GET /health` 的 `config_file` 字段会回显本次生效的配置文件名。
+
 ### Docker 部署
 
 #### 使用预构建镜像

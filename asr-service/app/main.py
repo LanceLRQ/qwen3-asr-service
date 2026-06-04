@@ -1,10 +1,11 @@
-import argparse
 import logging
 import sys
 import uvicorn
 from fastapi import FastAPI
 
 from app.utils.logger import setup_logger
+from app.utils.arg_schema import build_parser
+from app.utils.config_file import merge_runtime_config
 import app.config as cfg
 from app.runtime.device import detect_device, resolve_device, auto_select_model_size, should_disable_align
 from app.runtime.task_manager import TaskManager
@@ -19,74 +20,14 @@ from app.api.common_routes import init_common, build_common_router
 logger = logging.getLogger(__name__)
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Qwen3-ASR Service")
-    parser.add_argument(
-        "--serve-mode", dest="serve_mode", choices=["standard", "vllm"], default="standard",
-        help="服务运行模式：standard=transformers/OpenVINO 离线+实时(路线B)；"
-             "vllm=vLLM 原生流式(Phase 3) (default: standard)",
-    )
-    parser.add_argument(
-        "--device", choices=["auto", "cuda", "cpu"], default="auto",
-        help="运行设备 (default: auto)",
-    )
-    parser.add_argument(
-        "--model-size", choices=["0.6b", "1.7b"], default=None,
-        help="ASR 模型大小 (default: 根据显存自动选择)",
-    )
-    parser.add_argument(
-        "--enable-align", dest="enable_align", action="store_true", default=True,
-        help="加载对齐模型 (default)",
-    )
-    parser.add_argument(
-        "--no-align", dest="enable_align", action="store_false",
-        help="不加载对齐模型",
-    )
-    parser.add_argument(
-        "--use-punc", dest="enable_punc", action="store_true", default=False,
-        help="启用标点恢复",
-    )
-    parser.add_argument(
-        "--model-source", choices=["modelscope", "huggingface"], default="modelscope",
-        help="模型下载源 (default: modelscope)",
-    )
-    parser.add_argument(
-        "--host", default=None,
-        help="监听地址 (default: 127.0.0.1)",
-    )
-    parser.add_argument(
-        "--port", type=int, default=None,
-        help="监听端口 (default: 8765)",
-    )
-    parser.add_argument(
-        "--web", action="store_true", default=False,
-        help="启用 Web UI (访问 /web-ui)",
-    )
-    parser.add_argument(
-        "--max-segment", type=int, default=5,
-        help="VAD 切片合并最大时长，单位秒 (default: 5)",
-    )
-    parser.add_argument(
-        "--api-key", default=None,
-        help="API 密钥，设置后启用 Bearer token 认证（覆盖 ASR_API_KEY 环境变量）",
-    )
-    parser.add_argument(
-        "--max-queue-size", type=int, default=None,
-        help=f"任务队列最大长度 (default: {cfg.MAX_QUEUE_SIZE})",
-    )
-    parser.add_argument(
-        "--enable-stream", dest="enable_stream", action="store_true", default=False,
-        help="挂载实时转写端点 WS /v2/asr/stream（路线B，standard 模式）",
-    )
-    parser.add_argument(
-        "--max-stream-sessions", type=int, default=None,
-        help=f"实时最大并发会话数 (default: {cfg.MAX_STREAM_SESSIONS})",
-    )
-    parser.add_argument(
-        "--stream-asr-concurrency", type=int, default=None,
-        help=f"实时 ASR 解码并发上限 (default: {cfg.STREAM_ASR_CONCURRENCY})",
-    )
-    return parser.parse_args()
+def parse_args(argv=None):
+    """解析 CLI 并应用配置链：schema 默认值 < 环境变量 < 配置文件 < CLI 显式参数。
+
+    参数定义见 app/utils/arg_schema.py（单一 schema，argparse 全 SUPPRESS）；
+    配置文件的发现/引导生成/校验/合并见 app/utils/config_file.py。
+    """
+    cli_ns = build_parser().parse_args(argv)
+    return merge_runtime_config(cli_ns)
 
 
 def _apply_cli_config(args):
@@ -258,6 +199,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
         "asr_backend": asr_backend,
         "vad_backend": VADEngine.BACKEND,
         "punc_backend": PuncEngine.BACKEND if enable_punc else "disabled",
+        "config_file": cfg.CONFIG_FILE,
         "capabilities": capabilities,
     }
 
@@ -334,6 +276,7 @@ def _assemble_vllm(app: FastAPI, args) -> None:
         "status": "ready",
         "mode": "vllm",
         "device": device,
+        "config_file": cfg.CONFIG_FILE,
         "capabilities": capabilities,
     }
 

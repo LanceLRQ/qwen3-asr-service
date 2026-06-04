@@ -1,0 +1,33 @@
+# Qwen3-ASR Service 配置文件
+#
+# 首次启动时若无 config.yaml，将自动由本文件（config.example.yaml）拷贝生成 config.yaml；
+# 删除 config.yaml 后重启 = 重置为本文件的默认配置。
+# 优先级：命令行显式参数 > 本文件 > 环境变量 > 内置默认值；--no-config 可完全跳过本文件。
+# 注意：真实配置 config.yaml 可能含 api_key，已加入 .gitignore 请勿提交，建议 chmod 600 config.yaml。
+
+serve_mode: standard        # standard | vllm（vllm 为 Phase 3 占位，暂未实现，仅提供 /health /capabilities）
+device: cuda                # auto | cuda | cpu
+model_size: 0.6b            # 0.6b | 1.7b（删除本行 = 按显存自动选择）
+enable_align: false         # 词级时间戳对齐模型（需要时打开；CPU 模式不支持）
+use_punc: false             # 标点恢复
+model_source: modelscope    # modelscope | huggingface
+
+host: 127.0.0.1
+port: 8765
+web: true                   # /web-ui 演示页
+api_key: ""                 # 留空 = 不鉴权（本行会覆盖 ASR_API_KEY 环境变量；想用环境变量请删除本行）
+max_segment: 5              # VAD 切片合并最大时长（秒）
+# max_queue_size: 100       # 任务队列最大长度
+
+# ── 实时转写 ──
+enable_stream: true         # WS /v2/asr/stream（standard 模式）
+# max_stream_sessions: 16   # 实时最大并发会话数
+# stream_asr_concurrency: 1 # 实时 ASR 解码并发上限（模型层有推理锁，>1 无收益）
+
+# ── 预留：随对应特性落地后取消注释（当前版本写入会校验报错）──
+# enable_speaker: true            # 说话人分离
+# enable_speaker_db: true         # 声纹库（要求 api_key 非空，否则该模块自动降级关闭）
+# speaker_db_path: data/speakers.db
+# enable_task_store: true         # 离线任务持久化
+# task_db_path: data/tasks.db
+# task_retention_days: 7          # 过期任务清理窗口（启动时执行；0 = 永不清理）

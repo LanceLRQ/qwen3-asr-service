@@ -36,7 +36,8 @@ def isolated_create_app(tmp_path, monkeypatch):
     saved_handlers = root.handlers[:]
     saved_level = root.level
     keys = ("MODEL_SOURCE", "MAX_SEGMENT_DURATION", "HOST", "PORT", "API_KEY", "MAX_QUEUE_SIZE",
-            "SERVE_MODE", "ENABLE_STREAM", "MAX_STREAM_SESSIONS", "STREAM_ASR_CONCURRENCY")
+            "SERVE_MODE", "ENABLE_STREAM", "MAX_STREAM_SESSIONS", "STREAM_ASR_CONCURRENCY",
+            "CONFIG_FILE")
     snapshot = {k: getattr(cfg, k) for k in keys}
 
     yield
@@ -156,7 +157,8 @@ def test_config_stream_defaults():
 
 def test_parse_args_defaults(monkeypatch):
     from app.main import parse_args
-    monkeypatch.setattr("sys.argv", ["prog"])
+    # --no-config：隔离配置文件自动发现/引导生成，验证纯默认值与重构前一致
+    monkeypatch.setattr("sys.argv", ["prog", "--no-config"])
     args = parse_args()
     assert args.serve_mode == "standard"
     assert args.enable_stream is False
@@ -167,7 +169,7 @@ def test_parse_args_defaults(monkeypatch):
 def test_parse_args_stream_flags(monkeypatch):
     from app.main import parse_args
     monkeypatch.setattr("sys.argv", [
-        "prog", "--serve-mode", "standard", "--enable-stream",
+        "prog", "--no-config", "--serve-mode", "standard", "--enable-stream",
         "--max-stream-sessions", "8", "--stream-asr-concurrency", "3",
     ])
     args = parse_args()
@@ -176,11 +178,24 @@ def test_parse_args_stream_flags(monkeypatch):
     assert args.stream_asr_concurrency == 3
 
 
+def test_health_echoes_config_file(isolated_create_app, monkeypatch):
+    """/health 回显本次生效的配置文件名（防"幽灵配置"，vllm 占位分支即可覆盖）。"""
+    import app.config as cfg
+    from app.main import create_app
+
+    monkeypatch.setattr(cfg, "CONFIG_FILE", "config.yaml")
+    app = create_app(_args(serve_mode="vllm", device="cpu"))
+    client = TestClient(app)
+    assert client.get("/v1/health").json()["config_file"] == "config.yaml"
+    assert client.get("/v2/health").json()["config_file"] == "config.yaml"
+
+
 def test_apply_cli_config_writes_stream(monkeypatch):
     import app.config as cfg
     from app.main import _apply_cli_config, parse_args
     monkeypatch.setattr("sys.argv", [
-        "prog", "--enable-stream", "--max-stream-sessions", "5", "--stream-asr-concurrency", "4",
+        "prog", "--no-config", "--enable-stream",
+        "--max-stream-sessions", "5", "--stream-asr-concurrency", "4",
     ])
     saved = {k: getattr(cfg, k) for k in ("SERVE_MODE", "ENABLE_STREAM", "MAX_STREAM_SESSIONS",
                                           "STREAM_ASR_CONCURRENCY", "MODEL_SOURCE", "MAX_SEGMENT_DURATION")}
