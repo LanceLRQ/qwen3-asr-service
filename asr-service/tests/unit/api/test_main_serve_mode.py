@@ -207,3 +207,15 @@ def test_apply_cli_config_writes_stream(monkeypatch):
     finally:
         for k, v in saved.items():
             setattr(cfg, k, v)
+
+
+def test_log_effective_config_masks_api_key(caplog):
+    from app.main import _log_effective_config
+    args = _args(api_key="sk-secret-123456")
+    with caplog.at_level(logging.INFO, logger="app.main"):
+        _log_effective_config(args)
+    text = caplog.text
+    assert "生效配置" in text
+    assert "serve_mode" in text and "device" in text
+    assert "sk-s****" in text                  # 脱敏后前缀可辨
+    assert "sk-secret-123456" not in text      # 明文绝不落日志

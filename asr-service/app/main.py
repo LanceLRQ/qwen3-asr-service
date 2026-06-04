@@ -7,7 +7,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.utils.logger import setup_logger
-from app.utils.arg_schema import build_parser
+from app.utils.arg_schema import build_parser, ARG_SPECS
 from app.utils.config_file import merge_runtime_config
 import app.config as cfg
 from app.runtime.device import detect_device, resolve_device, auto_select_model_size, should_disable_align
@@ -31,6 +31,54 @@ def parse_args(argv=None):
     """
     cli_ns = build_parser().parse_args(argv)
     return merge_runtime_config(cli_ns)
+
+
+# 生效配置打印的分组（不在表内的新 schema 键自动落入"其他"组，不会漏打）
+_CONFIG_GROUPS = (
+    ("服务", ("serve_mode", "host", "port", "api_key", "web")),
+    ("模型", ("device", "model_size", "enable_align", "use_punc", "model_source")),
+    ("离线任务", ("max_segment", "max_queue_size", "enable_task_store",
+                  "task_db_path", "task_retention_days")),
+    ("实时转写", ("enable_stream", "max_stream_sessions", "stream_asr_concurrency")),
+)
+
+
+def _log_effective_config(args):
+    """启动时打印生效配置（四层合并结果），便于核对实际运行参数；api_key 脱敏。
+
+    输出只用 ASCII 字符（=/-/.）做边框与点线对齐——框线字符（─│┌）在部分
+    控制台字体/缩放下半宽全宽不一致会走样，这里刻意避开。
+    """
+    specs = {s.key: s for s in ARG_SPECS}
+
+    def fmt(key):
+        val = getattr(args, specs[key].attr, None)
+        if key == "api_key" and val:
+            val = (val[:4] + "****") if len(val) > 4 else "****"
+        if val is None:
+            val = "(未指定)"
+        dots = "." * max(2, 25 - len(key))
+        return f"    {key} {dots} {val}"
+
+    bar = "=" * 62
+    lines = ["", bar,
+             "  Qwen3-ASR 生效配置（默认值 < 环境变量 < 配置文件 < CLI）",
+             f"  配置文件: {cfg.CONFIG_FILE or '未使用'}",
+             "-" * 62]
+    seen = set()
+    for title, keys in _CONFIG_GROUPS:
+        group = [k for k in keys if k in specs]
+        if not group:
+            continue
+        lines.append(f"  [{title}]")
+        lines.extend(fmt(k) for k in group)
+        seen.update(group)
+    rest = [s.key for s in ARG_SPECS if s.key not in seen]
+    if rest:
+        lines.append("  [其他]")
+        lines.extend(fmt(k) for k in rest)
+    lines.append(bar)
+    logger.info("\n".join(lines))
 
 
 def _apply_cli_config(args):
@@ -63,6 +111,7 @@ def create_app(args=None) -> FastAPI:
     # 1. 配置日志
     setup_logger()
     logger.info("Qwen3-ASR Service 启动中...")
+    _log_effective_config(args)
 
     # 2. 写入全局配置（模式无关）
     _apply_cli_config(args)
