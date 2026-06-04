@@ -137,7 +137,6 @@ body.dark .status-pill.streaming { color: #f87171; }
 .diag-row { display: flex; gap: 30px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
 .diag-unit { font-size: .6em; opacity: .65; }
 .vu-canvas { display: block; width: 100%; height: 12px; border-radius: 6px; background: rgba(127, 127, 127, .13); }
-.file-input { font-size: .85em; }
 .transcript-line { display: flex; gap: 12px; padding: 3px 0; }
 .transcript-line .t {
   flex: 0 0 80px; text-align: right; padding: 5px 10px 0 0;

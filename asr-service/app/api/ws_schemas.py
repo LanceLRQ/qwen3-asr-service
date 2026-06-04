@@ -32,6 +32,7 @@ class SessionCreated(BaseModel):
     backend: str                       # "vad-offline" | "vllm-native"
     sample_rate: int = 16000
     capabilities: dict                 # {partial_results, word_timestamps, languages_auto}
+    limits: dict = {}                  # {max_frame_bytes, max_backlog_bytes}，客户端据此控速
 
 
 class PartialMsg(BaseModel):

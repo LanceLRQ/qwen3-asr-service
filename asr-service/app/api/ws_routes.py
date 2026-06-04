@@ -63,11 +63,15 @@ async def stream(ws: WebSocket):
     backlog_bytes = 0      # 已入队未处理完的字节数（接收侧增、消费侧减，单循环内无竞态）
     try:
         await ws.accept()
-        # 连接即声明协议/后端/能力
+        # 连接即声明协议/后端/能力/服务端限制（客户端据 limits 自适应控速）
         await ws.send_json(SessionCreated(
             mode=_backend.mode,
             backend=_backend.backend,
             capabilities=_backend.capabilities,
+            limits={
+                "max_frame_bytes": cfg.STREAM_MAX_FRAME_BYTES,
+                "max_backlog_bytes": cfg.STREAM_MAX_BACKLOG_BYTES,
+            },
         ).model_dump())
 
         sid = uuid4().hex

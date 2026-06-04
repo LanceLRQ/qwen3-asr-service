@@ -155,6 +155,7 @@
       function openWs(onReady) {
         hint.value = '';
         clearResults();
+        pushedBytes = 0; pushStartTs = 0; procEndMs = 0;   // 流控状态按会话重置
         const t = apiKey.value.trim();
         const proto = location.protocol === 'https:' ? 'wss' : 'ws';
         const url = proto + '://' + location.host + '/v2/asr/stream' + (t ? '?token=' + encodeURIComponent(t) : '');
@@ -169,6 +170,9 @@
           try { m = JSON.parse(ev.data); } catch (e) { return; }
           log('recv', m);
           if (m.type === 'session.created') {
+            if (m.limits && m.limits.max_backlog_bytes) {
+              backlogBudget = Math.floor(m.limits.max_backlog_bytes * 0.75);
+            }
             capInfo.value = '协议 ' + m.protocol + ' v' + m.protocol_version + ' · 模式 ' + m.mode +
               ' · 后端 ' + m.backend + ' · 采样率 ' + m.sample_rate + ' · 能力 ' + JSON.stringify(m.capabilities);
             statusText.value = '已连接 · ' + m.backend;
@@ -177,6 +181,7 @@
           } else if (m.type === 'partial') {
             partial.value = m.text || '';
           } else if (m.type === 'final') {
+            if (m.end != null && m.end > procEndMs) procEndMs = m.end;   // 服务端处理进度反馈
             appendFinal(m);
             partial.value = '';
           } else if (m.type === 'error') {
@@ -318,15 +323,43 @@
       }
 
       // —— 文件模拟推流 ——
-      const fileInputRef = ref(null);
+      const streamFile = ref(null);
+      const streamFileList = ref([]);
       const noThrottle = ref(false);
       const fileProgress = ref(0);
       const fileRunning = ref(false);
       let fileAborted = false;
+      function onStreamUploadChange(payload) {
+        const list = payload.fileList;
+        const item = list.length ? list[list.length - 1] : null;
+        streamFileList.value = item ? [item] : [];
+        streamFile.value = item && item.file ? item.file : null;
+        fileProgress.value = 0;
+      }
+      const streamFileSize = computed(() =>
+        streamFile.value ? (streamFile.value.size / 1024 / 1024).toFixed(2) + ' MB' : ''
+      );
+
+      // —— 不限速流控：贴着服务端积压上限推，而非无脑全速（避免 backlog_overflow 断连）——
+      // 预算 = session.created 下发的 max_backlog_bytes × 75%（留 25% 余量）；
+      // 估算服务端未处理积压 = 已发字节 − max(实时消耗 32000B/s, final.end 反馈的已处理进度)，
+      // 服务端处理快（GPU）则 final 反馈快、预算回填快，自动逼近其最大吞吐。
+      const DEFAULT_BACKLOG_BYTES = 8 * 1024 * 1024;
+      const BYTES_PER_SEC = RT_SR * 2;            // PCM16 单声道字节率
+      let backlogBudget = Math.floor(DEFAULT_BACKLOG_BYTES * 0.75);
+      let pushedBytes = 0, pushStartTs = 0, procEndMs = 0;
+      function estBacklog() {
+        const byTime = pushStartTs ? (performance.now() - pushStartTs) / 1000 * BYTES_PER_SEC : 0;
+        const byFinal = procEndMs / 1000 * BYTES_PER_SEC;
+        return pushedBytes - Math.max(byTime, byFinal);
+      }
+      async function waitBacklogBudget() {
+        while (!fileAborted && ws && ws.readyState === WebSocket.OPEN &&
+               estBacklog() + FRAME * 2 > backlogBudget) await sleep(50);
+      }
       async function startFile() {
         hint.value = '';
-        const el = fileInputRef.value;
-        const file = el && el.files[0];
+        const file = streamFile.value;
         if (!file) { hint.value = '请先选择音频文件。'; return; }
         fileRunning.value = true;
         fileProgress.value = 0;
@@ -347,12 +380,17 @@
           wsSendJson(startMsg());
           statusText.value = '推流中…';
           startDiag();
+          pushStartTs = performance.now();
           const total = pcm16.length;
           const frameMs = FRAME / RT_SR * 1000;   // 200ms
           for (let i = 0; i < total; i += FRAME) {
             if (fileAborted || !ws || ws.readyState !== WebSocket.OPEN) { fileRunning.value = false; return; }
             await waitDrain();                     // 背压：发送缓冲过高时等排空
-            ws.send(pcm16.subarray(i, Math.min(i + FRAME, total)));
+            if (noThrottle.value) await waitBacklogBudget();   // 不限速＝贴服务端积压上限控速
+            if (fileAborted || !ws || ws.readyState !== WebSocket.OPEN) { fileRunning.value = false; return; }
+            const chunk = pcm16.subarray(i, Math.min(i + FRAME, total));
+            ws.send(chunk);
+            pushedBytes += chunk.byteLength;
             sentFrames++;
             fileProgress.value = Math.round(Math.min(i + FRAME, total) / total * 100);
             if (!noThrottle.value) await sleep(frameMs);
@@ -395,7 +433,8 @@
         capWarning, hint, capInfo, diag, vuRef,
         finals, partial, fmtMs, transcriptRef,
         logs, logOpen, logRef,
-        fileInputRef, noThrottle, fileProgress, fileRunning,
+        streamFile, streamFileList, streamFileSize, onStreamUploadChange,
+        noThrottle, fileProgress, fileRunning,
         startMic, stopMic, startFile, stopFile,
       };
     },
@@ -437,8 +476,20 @@
                 </n-tab-pane>
                 <n-tab-pane name="file" tab="文件模拟" :disabled="busy && source !== 'file'">
                   <n-space vertical size="medium" style="margin-top:12px;">
-                    <input id="fileInput" ref="fileInputRef" type="file" accept="audio/*" class="file-input">
-                    <n-checkbox v-model:checked="noThrottle" size="small">不限速（尽快推送）</n-checkbox>
+                    <n-upload :file-list="streamFileList" :default-upload="false" :max="1" :show-file-list="false"
+                              :disabled="busy || fileRunning" accept="audio/*" @change="onStreamUploadChange">
+                      <n-upload-dragger>
+                        <div style="color:#14b8a6;margin-bottom:6px;"><a-icon name="file" size="26"></a-icon></div>
+                        <n-text style="font-size:.88em;font-weight:600;">点击或拖拽选择音频文件</n-text>
+                        <n-p depth="3" style="font-size:.74em;margin:5px 0 0;">解码后按 200ms 分帧模拟实时推流</n-p>
+                      </n-upload-dragger>
+                    </n-upload>
+                    <div v-if="streamFile" class="file-meta" style="margin-top:0;">
+                      <a-icon name="file" size="14"></a-icon>
+                      <span class="file-name" :title="streamFile.name">{{ streamFile.name }}</span>
+                      <n-tag size="tiny" :bordered="false">{{ streamFileSize }}</n-tag>
+                    </div>
+                    <n-checkbox v-model:checked="noThrottle" size="small">不限速（自适应最大速率）</n-checkbox>
                     <n-button v-if="!busy && !fileRunning" type="primary" size="large" block strong @click="startFile">
                       <a-icon name="play" size="15" style="margin-right:7px;"></a-icon>开始模拟推流
                     </n-button>
@@ -447,7 +498,7 @@
                     </n-button>
                     <n-progress v-if="fileRunning || fileProgress > 0" type="line" :percentage="fileProgress" :height="8" :border-radius="4" :show-indicator="false"></n-progress>
                     <n-text depth="3" style="font-size:.74em;line-height:1.6;">
-                      按需加载 ffmpeg-wasm 解码（需外网，首次约 25–30MB，仅本次会话加载一次；失败自动回退浏览器原生解码）→ 转 16k 单声道 → 200ms 分帧推流，模拟实时输入。
+                      按需加载 ffmpeg-wasm 解码（需外网，首次约 25–30MB，仅本次会话加载一次；失败自动回退浏览器原生解码）→ 转 16k 单声道 → 200ms 分帧推流，模拟实时输入。勾选不限速时按服务端积压上限自适应控速，不会触发 backlog_overflow。
                     </n-text>
                   </n-space>
                 </n-tab-pane>
