@@ -1,8 +1,11 @@
 """app/api/ws_routes.py 测试（TestClient websocket + 注入 fake backend）。
 
 验证 session.created 握手、start→PCM→stop 流程、session.closed 收尾、release 释放，
-以及鉴权(1008)与并发超额(1013)。
+以及鉴权(1008)与并发超额(1013)、错误信封（invalid_config/frame_too_large/
+session_timeout/feed_failed/backlog_overflow）。
 """
+import asyncio
+
 import pytest
 from fastapi import FastAPI, WebSocketDisconnect
 from fastapi.testclient import TestClient
@@ -163,5 +166,57 @@ def test_release_called_when_create_session_fails():
         assert ws.receive_json()["type"] == "session.created"
         err = ws.receive_json()
         assert err["type"] == "error" and err["code"] == "internal"
+        assert ws.receive_json()["type"] == "session.closed"
+    assert backend.released is True
+
+
+def test_feed_error_sends_feed_failed_session_continues():
+    # 处理异常 → feed_failed 信封（非致命），会话可继续直至 stop
+    class FailingFeedSession(FakeSession):
+        async def feed_audio(self, data):
+            raise RuntimeError("boom")
+            yield  # pragma: no cover  # 使其成为异步生成器
+
+    class FailingFeedBackend(FakeBackend):
+        def create_session(self, sid):
+            return FailingFeedSession()
+
+    backend = FailingFeedBackend()
+    client = _make_client(backend)
+    with client.websocket_connect("/v2/asr/stream") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "start"})
+        ws.send_bytes(b"\x00\x00")
+        err = ws.receive_json()
+        assert err["type"] == "error" and err["code"] == "feed_failed"
+        ws.send_json({"type": "stop"})
+        assert ws.receive_json()["type"] == "final"          # flush 仍工作
+        assert ws.receive_json()["type"] == "session.closed"
+    assert backend.released is True
+
+
+def test_backlog_overflow_closes_session(monkeypatch):
+    # 消费侧阻塞时积压超限 → backlog_overflow 致命错误 + 收尾
+    monkeypatch.setattr("app.config.STREAM_MAX_BACKLOG_BYTES", 4)
+
+    class SlowSession(FakeSession):
+        async def feed_audio(self, data):
+            await asyncio.sleep(30)                          # 模拟推理争锁阻塞
+            yield {"type": "final", "seg_id": 0, "text": "x", "start": 0, "end": 1}
+
+    class SlowBackend(FakeBackend):
+        def create_session(self, sid):
+            return SlowSession()
+
+    backend = SlowBackend()
+    client = _make_client(backend)
+    with client.websocket_connect("/v2/asr/stream") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "start"})
+        ws.send_bytes(b"\x00\x00")                           # backlog=2，消费侧挂起
+        ws.send_bytes(b"\x00\x00\x00")                       # 2+3 > 4 → 溢出
+        err = ws.receive_json()
+        assert err["type"] == "error" and err["code"] == "backlog_overflow"
+        assert err["fatal"] is True
         assert ws.receive_json()["type"] == "session.closed"
     assert backend.released is True

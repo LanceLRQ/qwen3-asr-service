@@ -57,8 +57,10 @@ async def stream(ws: WebSocket):
 
     # acquire 成功后任何失败路径（含 accept 异常）都必须经 finally 释放计数
     session = None
+    consume_task = None
     recv_bytes = 0
     sent_msgs = 0
+    backlog_bytes = 0      # 已入队未处理完的字节数（接收侧增、消费侧减，单循环内无竞态）
     try:
         await ws.accept()
         # 连接即声明协议/后端/能力
@@ -87,7 +89,42 @@ async def stream(ws: WebSocket):
                 code="invalid_config", message=str(e), fatal=True).model_dump())
             return
 
+        # ── 收发解耦：接收循环只入队，独立任务消费（VAD/ASR/发送）──
+        # 推理慢于实时时积压留在应用层队列，接收不阻塞，pong 可被及时读取，
+        # 避免 websockets 接收队列满 → 读帧暂停 → keepalive 误判超时杀连接。
+        frame_q: asyncio.Queue = asyncio.Queue()
+
+        async def _consume():
+            nonlocal backlog_bytes, sent_msgs
+            while True:
+                item = await frame_q.get()
+                if item is None:                    # stop 哨兵：冲刷末句后结束
+                    async for r in session.flush():
+                        await ws.send_json(r)
+                        sent_msgs += 1
+                    return
+                try:
+                    async for r in session.feed_audio(item):
+                        await ws.send_json(r)
+                        sent_msgs += 1
+                except WebSocketDisconnect:
+                    raise                           # 连接已断，交由主循环统一收尾
+                except Exception as e:
+                    logger.warning(f"音频处理失败: {e}", exc_info=True)
+                    try:
+                        await ws.send_json(ErrorMsg(
+                            code="feed_failed", message="音频处理失败").model_dump())
+                    except Exception:
+                        return                      # 连接不可用，结束消费
+                finally:
+                    backlog_bytes -= len(item)
+
+        consume_task = asyncio.create_task(_consume())
+
         while True:
+            if consume_task.done():
+                consume_task.result()               # 消费侧异常上抛；正常结束则连接已不可用
+                break
             m = await asyncio.wait_for(ws.receive(), timeout=deadline - loop.time())
             if m["type"] == "websocket.disconnect":
                 logger.info(f"[stream] 客户端断开 sid={sid[:8]} "
@@ -101,15 +138,17 @@ async def stream(ws: WebSocket):
                         code="frame_too_large",
                         message=f"单帧超过上限 {cfg.STREAM_MAX_FRAME_BYTES} 字节").model_dump())
                     continue
-                recv_bytes += len(m["bytes"])
-                try:
-                    async for r in session.feed_audio(m["bytes"]):
-                        await ws.send_json(r)
-                        sent_msgs += 1
-                except Exception as e:
-                    logger.warning(f"音频处理失败: {e}", exc_info=True)
+                if backlog_bytes + len(m["bytes"]) > cfg.STREAM_MAX_BACKLOG_BYTES:
+                    logger.warning(f"[stream] 处理积压超限断开 sid={sid[:8]} "
+                                   f"backlog={backlog_bytes}B > {cfg.STREAM_MAX_BACKLOG_BYTES}B")
                     await ws.send_json(ErrorMsg(
-                        code="feed_failed", message="音频处理失败").model_dump())
+                        code="backlog_overflow",
+                        message="服务端处理积压超限，请降低推流速率或稍后重试",
+                        fatal=True).model_dump())
+                    break
+                recv_bytes += len(m["bytes"])
+                backlog_bytes += len(m["bytes"])
+                frame_q.put_nowait(m["bytes"])
             elif m.get("text"):
                 try:
                     typ = json.loads(m["text"]).get("type")
@@ -117,9 +156,8 @@ async def stream(ws: WebSocket):
                     typ = None
                 if typ == "stop":
                     logger.info(f"[stream] 收到 stop sid={sid[:8]} 累计收字节={recv_bytes}")
-                    async for r in session.flush():
-                        await ws.send_json(r)
-                        sent_msgs += 1
+                    frame_q.put_nowait(None)
+                    await consume_task              # 消费完积压并冲刷末句
                     break
     except WebSocketDisconnect:
         pass
@@ -138,6 +176,13 @@ async def stream(ws: WebSocket):
         except Exception:
             pass
     finally:
+        # 先停消费任务再发收尾消息，避免两个协程并发写同一 WS
+        if consume_task is not None and not consume_task.done():
+            consume_task.cancel()
+            try:
+                await consume_task
+            except (asyncio.CancelledError, Exception):
+                pass
         try:
             await ws.send_json(SessionClosed(reason="end").model_dump())
         except Exception:

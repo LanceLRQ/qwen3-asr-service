@@ -146,9 +146,11 @@ def test_config_stream_defaults():
     assert cfg.ENABLE_STREAM is False
     assert cfg.MAX_STREAM_SESSIONS == 16
     assert cfg.STREAM_VAD_CHUNK_MS == 200
-    assert cfg.STREAM_ASR_CONCURRENCY == 2
+    assert cfg.STREAM_ASR_CONCURRENCY == 1   # 模型层推理锁串行化，>1 无收益
     assert cfg.STREAM_MAX_SEGMENT_SEC == 12
     assert cfg.STREAM_MAX_SESSION_SECONDS == 3600
+    assert cfg.STREAM_MAX_FRAME_BYTES == 2 * 1024 * 1024
+    assert cfg.STREAM_MAX_BACKLOG_BYTES == 8 * 1024 * 1024
     assert cfg.STREAM_SAMPLE_RATE == 16000
 
 

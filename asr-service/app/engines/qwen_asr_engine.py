@@ -1,4 +1,5 @@
 import logging
+import threading
 import warnings
 import torch
 from app.utils.model_manager import ensure_model
@@ -20,6 +21,10 @@ class QwenASREngine:
         self._device = device
         self._enable_align = enable_align
         self._model = None
+        # Qwen3ASRModel.generate 非线程安全：prefill 写 self.rope_deltas、
+        # decode 步回读（modeling_qwen3_asr.py:1221/1224），并发调用会交叉污染
+        # 位置编码（同形状静默劣化、异形状崩溃）。离线/流式路径共用此锁串行化。
+        self._infer_lock = threading.Lock()
 
     def load(self):
         from qwen_asr import Qwen3ASRModel
@@ -81,11 +86,12 @@ class QwenASREngine:
         if self._model is None:
             raise RuntimeError("ASR 模型未加载，请先调用 load()")
 
-        results = self._model.transcribe(
-            audio=audio_path,
-            language=language,
-            return_time_stamps=self._enable_align,
-        )
+        with self._infer_lock:
+            results = self._model.transcribe(
+                audio=audio_path,
+                language=language,
+                return_time_stamps=self._enable_align,
+            )
         return results
 
     def batch_transcribe(
@@ -109,11 +115,12 @@ class QwenASREngine:
         if not audio_paths:
             return []
 
-        results = self._model.transcribe(
-            audio=audio_paths,
-            language=language,
-            return_time_stamps=self._enable_align,
-        )
+        with self._infer_lock:
+            results = self._model.transcribe(
+                audio=audio_paths,
+                language=language,
+                return_time_stamps=self._enable_align,
+            )
         return results
 
     def transcribe_array(
@@ -135,11 +142,12 @@ class QwenASREngine:
         if self._model is None:
             raise RuntimeError("ASR 模型未加载，请先调用 load()")
 
-        results = self._model.transcribe(
-            audio=(audio, sr),
-            language=language,
-            return_time_stamps=self._enable_align,
-        )
+        with self._infer_lock:
+            results = self._model.transcribe(
+                audio=(audio, sr),
+                language=language,
+                return_time_stamps=self._enable_align,
+            )
         return results
 
     def unload(self):

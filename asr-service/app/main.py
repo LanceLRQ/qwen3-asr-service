@@ -358,4 +358,10 @@ if __name__ == "__main__":
         cfg.HOST = args.host
     if args.port is not None:
         cfg.PORT = args.port
-    uvicorn.run("app.main:get_app", host=cfg.HOST, port=cfg.PORT, reload=False, factory=True)
+    uvicorn.run(
+        "app.main:get_app", host=cfg.HOST, port=cfg.PORT, reload=False, factory=True,
+        # 实时流式：放宽 keepalive 与接收队列，配合应用层收发解耦/积压上限，
+        # 避免推理负载高时 pong 读取延迟被误判为超时（1011 keepalive ping timeout）
+        ws_ping_timeout=60,
+        ws_max_queue=256,
+    )

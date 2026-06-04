@@ -2,6 +2,8 @@
 
 行为依源码确认（qwen_asr_engine.py:10/24/70/91/119/129）。
 """
+import threading
+import time
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -103,6 +105,39 @@ def test_transcribe_array_align_false():
     kwargs = eng._model.transcribe.call_args.kwargs
     assert kwargs["audio"][1] == 8000
     assert kwargs["return_time_stamps"] is False
+
+
+def test_inference_serialized_across_threads():
+    # 推理锁串行化并发调用（Qwen3ASRModel.rope_deltas 实例状态非线程安全），
+    # 覆盖离线 transcribe 与流式 transcribe_array 混合并发
+    eng = QwenASREngine(enable_align=False)
+    eng._model = MagicMock()
+    active, max_active = 0, 0
+    stat_lock = threading.Lock()
+
+    def fake_transcribe(**kwargs):
+        nonlocal active, max_active
+        with stat_lock:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.02)
+        with stat_lock:
+            active -= 1
+        return []
+
+    eng._model.transcribe.side_effect = fake_transcribe
+    threads = [
+        threading.Thread(target=eng.transcribe, args=("x.wav",)),
+        threading.Thread(target=eng.transcribe_array, args=(np.zeros(8, dtype=np.float32),)),
+        threading.Thread(target=eng.batch_transcribe, args=(["a.wav", "b.wav"],)),
+        threading.Thread(target=eng.transcribe_array, args=(np.zeros(8, dtype=np.float32),)),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert max_active == 1                  # 任意时刻仅一个线程在推理
+    assert eng._model.transcribe.call_count == 4
 
 
 def test_load_assembles_kwargs_and_sets_model(mocker):
