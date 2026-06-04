@@ -105,6 +105,10 @@ TASK_CLEANUP_INTERVAL = 300     # 清理扫描间隔（秒），默认 5 分钟
 
 SERVE_MODE = "standard"         # "standard" | "vllm"（由 main.py argparse 覆盖）
 
+# ─── 配置文件 ───
+
+CONFIG_FILE = None              # 本次生效的配置文件名（basename，/health 回显；None = 未加载）
+
 # ─── 实时流式转写（路线 B / WS /v2/asr/stream）───
 
 ENABLE_STREAM = False           # 是否挂载实时端点（standard 模式下 --enable-stream 开启）

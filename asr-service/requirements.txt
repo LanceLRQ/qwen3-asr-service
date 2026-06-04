@@ -11,6 +11,9 @@ fastapi
 uvicorn[standard]
 python-multipart
 
+# 配置文件（funasr 已传递依赖，此处显式声明）
+pyyaml
+
 # 音频处理
 soundfile
 librosa

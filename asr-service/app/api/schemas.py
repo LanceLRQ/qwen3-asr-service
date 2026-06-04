@@ -60,4 +60,5 @@ class HealthResponse(BaseModel):
     asr_backend: str | None = None     # "qwen_asr" | "openvino"
     vad_backend: str | None = None     # "pytorch" | "onnx"
     punc_backend: str | None = None    # "pytorch" | "onnx"
+    config_file: str | None = None     # 本次生效的配置文件名（None = 未加载配置文件）
     capabilities: CapabilitiesResponse | None = None
