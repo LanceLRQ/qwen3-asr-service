@@ -29,6 +29,12 @@ LEGACY_DEFAULTS = {
     "enable_task_store": False,
     "task_db_path": "data/tasks.db",
     "task_retention_days": 7,
+    # ── S 系列（说话人分离）新增，非重构前遗留 ──
+    "enable_speaker": False,
+    "speaker_threshold": 0.5,
+    "speaker_max": 8,
+    "speaker_min_seg_ms": 1500,
+    "speaker_max_windows": 4000,
 }
 
 
@@ -58,6 +64,8 @@ def test_each_spec_present_when_passed(spec):
         argv, expected = [spec.flags[0], spec.choices[0]], spec.choices[0]
     elif spec.type is int:
         argv, expected = [spec.flags[0], "7"], 7
+    elif spec.type is float:
+        argv, expected = [spec.flags[0], "0.45"], 0.45
     else:
         argv, expected = [spec.flags[0], "value-x"], "value-x"
     ns = build_parser().parse_args(argv)
@@ -75,6 +83,7 @@ def test_explicit_default_value_still_present():
     ("--no-punc", "enable_punc"),
     ("--no-web", "web"),
     ("--no-stream", "enable_stream"),
+    ("--no-speaker", "enable_speaker"),
 ])
 def test_negative_flags_force_false(flag, attr):
     """全部布尔开关都有反向 flag——CLI 才能把配置文件设 true 的开关覆盖回 false。"""

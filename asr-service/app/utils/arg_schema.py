@@ -18,7 +18,7 @@ class ArgSpec:
     key: str                      # 配置文件键名（= CLI 长参数横线转下划线）
     flags: tuple                  # CLI flag（bool 型为"开启" flag）
     default: object = None        # 实义默认值（argparse 一律 SUPPRESS）
-    type: type = str              # str / int / bool（bool 走 store_true/store_false）
+    type: type = str              # str / int / float / bool（bool 走 store_true/store_false）
     choices: tuple = None
     help: str = ""
     dest: str = None              # argparse dest，缺省 = key
@@ -123,6 +123,32 @@ ARG_SPECS = (
         key="task_retention_days", flags=("--task-retention-days",), default=7, type=int,
         group="离线任务",
         help="过期任务清理窗口（天），启动时执行；0=永不清理 (default: 7)",
+    ),
+    ArgSpec(
+        key="enable_speaker", flags=("--enable-speaker",), default=False, type=bool,
+        group="说话人分离",
+        help="说话人分离：离线 segment.speaker / 实时 final.speaker（匿名 A/B/C…）",
+        negative_flags=("--no-speaker",), negative_help="关闭说话人分离（覆盖配置文件）",
+    ),
+    ArgSpec(
+        key="speaker_threshold", flags=("--speaker-threshold",), default=0.5, type=float,
+        group="说话人分离",
+        help="实时在线归簇余弦阈值，实测可用区间 [0.35, 0.65] (default: 0.5)",
+    ),
+    ArgSpec(
+        key="speaker_max", flags=("--speaker-max",), default=8, type=int,
+        group="说话人分离",
+        help="说话人数上限：实时硬上限，离线谱聚类簇数搜索上界 (default: 8)",
+    ),
+    ArgSpec(
+        key="speaker_min_seg_ms", flags=("--speaker-min-seg-ms",), default=1500, type=int,
+        group="说话人分离",
+        help="实时短段门槛（毫秒）：短于此不建新簇/不更新质心 (default: 1500)",
+    ),
+    ArgSpec(
+        key="speaker_max_windows", flags=("--speaker-max-windows",), default=4000, type=int,
+        group="说话人分离",
+        help="离线滑窗数上限，超出均匀抽稀（超长音频内存防护） (default: 4000)",
     ),
 )
 

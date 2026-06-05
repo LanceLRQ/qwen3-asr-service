@@ -23,6 +23,7 @@
         if (r.language) tags.push('语言: ' + r.language);
         if (r.align_enabled != null) tags.push('对齐: ' + (r.align_enabled ? '开启' : '关闭'));
         if (r.punc_enabled != null) tags.push('标点: ' + (r.punc_enabled ? '开启' : '关闭'));
+        if (r.speakers && r.speakers.length) tags.push('说话人: ' + r.speakers.length);
         if (r.duration != null) tags.push('时长: ' + r.duration.toFixed(1) + 's');
         return tags;
       });
@@ -36,7 +37,9 @@
         URL.revokeObjectURL(a.href);
       }
       function seek(seg) { if (props.onSeek && seg.start != null) props.onSeek(seg); }
-      return { result, segments, metaTags, jsonText, downloadJson, seek, fmtTime };
+      // 说话人徽标取色：标签字母 → 固定 8 色板下标（同标签恒同色）
+      function spkIdx(label) { return ((label.charCodeAt(0) - 65) % 8 + 8) % 8; }
+      return { result, segments, metaTags, jsonText, downloadJson, seek, fmtTime, spkIdx };
     },
     template: `
       <div>
@@ -48,7 +51,7 @@
         <div v-else>
           <div v-for="(seg, i) in segments" :key="i" class="seg-row" :class="{ static: !onSeek }" @click="seek(seg)">
             <span class="seg-time">{{ fmtTime(seg.start) }}</span>
-            <span class="seg-text">{{ seg.text }}</span>
+            <span class="seg-text"><span v-if="seg.speaker" class="speaker-badge" :class="'spk-' + spkIdx(seg.speaker)">{{ seg.speaker }}</span>{{ seg.text }}</span>
             <span v-if="onSeek" class="seg-play"><a-icon name="play" size="14"></a-icon></span>
           </div>
         </div>

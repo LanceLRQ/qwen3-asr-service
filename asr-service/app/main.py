@@ -102,6 +102,15 @@ def _apply_cli_config(args):
         cfg.MAX_STREAM_SESSIONS = args.max_stream_sessions
     if getattr(args, "stream_asr_concurrency", None) is not None:
         cfg.STREAM_ASR_CONCURRENCY = args.stream_asr_concurrency
+    cfg.ENABLE_SPEAKER = getattr(args, "enable_speaker", False)
+    if getattr(args, "speaker_threshold", None) is not None:
+        cfg.SPEAKER_THRESHOLD = args.speaker_threshold
+    if getattr(args, "speaker_max", None) is not None:
+        cfg.SPEAKER_MAX = args.speaker_max
+    if getattr(args, "speaker_min_seg_ms", None) is not None:
+        cfg.SPEAKER_MIN_SEG_MS = args.speaker_min_seg_ms
+    if getattr(args, "speaker_max_windows", None) is not None:
+        cfg.SPEAKER_MAX_WINDOWS = args.speaker_max_windows
     if cfg.API_KEY:
         logger.info("API 密钥已配置，Bearer token 认证已启用")
 
@@ -208,11 +217,24 @@ def _assemble_standard(app: FastAPI, args) -> None:
             punc_engine = None
             enable_punc = False
 
+    # 说话人分离引擎（可选）：加载失败降级关闭，不影响转写主链路（容错对齐标点）
+    speaker_engine = None
+    if cfg.ENABLE_SPEAKER:
+        from app.engines.speaker_embedding_engine import SpeakerEmbeddingEngine
+        speaker_engine = SpeakerEmbeddingEngine()
+        try:
+            speaker_engine.load()
+        except Exception as e:
+            logger.warning(f"说话人引擎加载失败，已降级关闭: {e}")
+            speaker_engine = None
+    speaker_enabled = speaker_engine is not None
+
     # 创建 Pipeline
     pipeline = ASRPipeline(
         asr_engine=asr_engine,
         vad_engine=vad_engine,
         punc_engine=punc_engine,
+        speaker_engine=speaker_engine,
     )
 
     # 任务持久化（可选）：建库失败只告警不中断启动（附属能力不拖垮主链路）
@@ -257,12 +279,14 @@ def _assemble_standard(app: FastAPI, args) -> None:
     capabilities = {
         "mode": "standard",
         "offline_api": True,
+        "speaker_labels": speaker_enabled,
         "stream": {
             "enabled": stream_enabled,
             "backend": "vad-offline" if stream_enabled else None,
             "path": "/v2/asr/stream" if stream_enabled else None,
             "partial_results": False,
             "word_timestamps": enable_align if stream_enabled else False,
+            "speaker_labels": speaker_enabled if stream_enabled else False,
         },
     }
     service_info = {
@@ -272,6 +296,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
         "model_size": model_size,
         "align_enabled": enable_align,
         "punc_enabled": enable_punc,
+        "speaker_enabled": speaker_enabled,
         "asr_backend": asr_backend,
         "vad_backend": VADEngine.BACKEND,
         "punc_backend": PuncEngine.BACKEND if enable_punc else "disabled",
@@ -296,6 +321,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
         from app.runtime.stream_session import VadOfflineBackend
         stream_backend = VadOfflineBackend(
             asr_engine, vad_engine, punc_engine,
+            speaker=speaker_engine,
             max_sessions=cfg.MAX_STREAM_SESSIONS,
             asr_concurrency=cfg.STREAM_ASR_CONCURRENCY,
             max_segment_sec=cfg.STREAM_MAX_SEGMENT_SEC,

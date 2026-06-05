@@ -229,3 +229,27 @@ def test_example_passes_schema_validation():
     assert parsed["web"] is True
     assert parsed["api_key"] == ""
     assert parsed["enable_task_store"] is True   # P 系列：example 默认开启（schema 默认关闭）
+    assert parsed["enable_speaker"] is False     # S 系列：example 默认关闭（与 schema 一致）
+
+
+# ─── float 类型（S 系列 speaker_threshold）───
+
+def test_float_accepts_float_value(service_root):
+    out = cf.validate_config({"speaker_threshold": 0.45})
+    assert out["speaker_threshold"] == 0.45
+
+
+def test_float_accepts_int_and_normalizes(service_root):
+    out = cf.validate_config({"speaker_threshold": 1})
+    assert out["speaker_threshold"] == 1.0
+    assert isinstance(out["speaker_threshold"], float)
+
+
+def test_float_rejects_bool(service_root):
+    with pytest.raises(SystemExit, match="speaker_threshold: 期望数值"):
+        cf.validate_config({"speaker_threshold": True})
+
+
+def test_float_rejects_str(service_root):
+    with pytest.raises(SystemExit, match="speaker_threshold: 期望数值"):
+        cf.validate_config({"speaker_threshold": "0.5"})

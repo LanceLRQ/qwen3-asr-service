@@ -45,11 +45,13 @@ class StreamCapabilities(BaseModel):
     path: str | None = None           # "/v2/asr/stream"（统一端点）
     partial_results: bool = False
     word_timestamps: bool = False
+    speaker_labels: bool = False      # 实时 final.speaker（匿名 A/B/C…）
 
 
 class CapabilitiesResponse(BaseModel):
     mode: str                          # "standard" | "vllm"
     offline_api: bool
+    speaker_labels: bool = False       # 说话人分离总开关（离线+实时同一开关）
     stream: StreamCapabilities
 
 
@@ -62,6 +64,7 @@ class HealthResponse(BaseModel):
     model_size: str | None = None      # "0.6b" | "1.7b"
     align_enabled: bool = False
     punc_enabled: bool = False
+    speaker_enabled: bool = False
     asr_backend: str | None = None     # "qwen_asr" | "openvino"
     vad_backend: str | None = None     # "pytorch" | "onnx"
     punc_backend: str | None = None    # "pytorch" | "onnx"

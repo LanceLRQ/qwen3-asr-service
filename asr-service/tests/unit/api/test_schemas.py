@@ -139,3 +139,29 @@ def test_health_response_with_capabilities():
         ),
     )
     assert r.capabilities.stream.path == "/v2/asr/stream"
+
+
+# ─── S 系列：说话人分离字段（全部可选，向后兼容）───
+
+def test_stream_capabilities_speaker_labels_default():
+    assert schemas.StreamCapabilities().speaker_labels is False
+
+
+def test_capabilities_response_speaker_labels_default():
+    cap = schemas.CapabilitiesResponse(
+        mode="standard", offline_api=True, stream=schemas.StreamCapabilities(),
+    )
+    assert cap.speaker_labels is False
+
+
+def test_health_response_speaker_enabled_default():
+    r = schemas.HealthResponse(status="ready", device="cpu")
+    assert r.speaker_enabled is False
+
+
+def test_final_msg_speaker_field():
+    from app.api.ws_schemas import FinalMsg
+    m = FinalMsg(seg_id=0, text="你好")
+    assert m.speaker is None
+    assert "speaker" in FinalMsg(seg_id=0, text="你好", speaker="A").model_dump()
+    assert FinalMsg(seg_id=0, text="你好", speaker="A").speaker == "A"

@@ -228,3 +228,26 @@ body.dark .markdown-body hr { border-top-color: rgba(255, 255, 255, .09); }
   .docs-sidebar { position: static; flex: none; width: 100%; flex-direction: row; flex-wrap: wrap; }
   .markdown-body { padding: 20px 16px; width: 100%; }
 }
+
+/* ── 说话人徽标（转写分段行首，匿名标签 A/B/C…，8 色板按标签字母取色） ── */
+.speaker-badge {
+  display: inline-block; min-width: 18px; padding: 0 5px; margin-right: 6px;
+  border-radius: 4px; font-size: .72em; font-weight: 700; line-height: 1.7;
+  text-align: center; vertical-align: 1px;
+}
+.spk-0 { background: rgba(20, 184, 166, .14); color: #0d9488; }
+.spk-1 { background: rgba(59, 130, 246, .14); color: #2563eb; }
+.spk-2 { background: rgba(139, 92, 246, .14); color: #7c3aed; }
+.spk-3 { background: rgba(245, 158, 11, .16); color: #b45309; }
+.spk-4 { background: rgba(244, 63, 94, .13); color: #e11d48; }
+.spk-5 { background: rgba(34, 197, 94, .14); color: #16a34a; }
+.spk-6 { background: rgba(6, 182, 212, .14); color: #0891b2; }
+.spk-7 { background: rgba(249, 115, 22, .15); color: #c2410c; }
+body.dark .spk-0 { color: #2dd4bf; }
+body.dark .spk-1 { color: #60a5fa; }
+body.dark .spk-2 { color: #a78bfa; }
+body.dark .spk-3 { color: #fbbf24; }
+body.dark .spk-4 { color: #fb7185; }
+body.dark .spk-5 { color: #4ade80; }
+body.dark .spk-6 { color: #22d3ee; }
+body.dark .spk-7 { color: #fb923c; }

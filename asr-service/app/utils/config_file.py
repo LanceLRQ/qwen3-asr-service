@@ -115,6 +115,12 @@ def validate_config(data: dict, source: str = "<config>") -> dict:
             if isinstance(value, bool) or not isinstance(value, int):
                 errors.append(f"{key}: 期望整数，实得 {value!r}{choices_hint}")
                 continue
+        elif spec.type is float:
+            # int 写法（如 speaker_threshold: 1）同样接受，统一归一化为 float
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                errors.append(f"{key}: 期望数值，实得 {value!r}{choices_hint}")
+                continue
+            value = float(value)
         else:
             if not isinstance(value, str):
                 errors.append(f"{key}: 期望字符串，实得 {value!r}{choices_hint}")

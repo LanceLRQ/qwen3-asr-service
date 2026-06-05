@@ -37,7 +37,8 @@ def isolated_create_app(tmp_path, monkeypatch):
     saved_level = root.level
     keys = ("MODEL_SOURCE", "MAX_SEGMENT_DURATION", "HOST", "PORT", "API_KEY", "MAX_QUEUE_SIZE",
             "SERVE_MODE", "ENABLE_STREAM", "MAX_STREAM_SESSIONS", "STREAM_ASR_CONCURRENCY",
-            "CONFIG_FILE")
+            "CONFIG_FILE", "ENABLE_SPEAKER", "SPEAKER_THRESHOLD", "SPEAKER_MAX",
+            "SPEAKER_MIN_SEG_MS", "SPEAKER_MAX_WINDOWS")
     snapshot = {k: getattr(cfg, k) for k in keys}
 
     yield
@@ -234,3 +235,138 @@ def test_log_effective_config_backfills_runtime_defaults(caplog):
     assert f"{cfg.PORT} (默认)" in text
     assert "(自动选择)" in text
     assert "[其他]" not in text                # 新参数必须在 ArgSpec 处声明 group
+
+
+# ─── S 系列：说话人分离装配与降级 ───
+
+def _mock_standard_engines(monkeypatch):
+    """standard 分支的重引擎全套 mock（体例同 test_standard_mode_with_stream_mounts_ws）。"""
+    import app.main as main
+
+    monkeypatch.setattr(main, "check_ffmpeg", lambda: None)
+    monkeypatch.setattr(main, "detect_device",
+                        lambda: {"type": "cuda", "vram_gb": 24.0, "name": "FakeGPU"})
+    monkeypatch.setattr(main, "resolve_device", lambda req, device_info=None: "cuda")
+
+    class FakeVAD:
+        BACKEND = "pytorch"
+        def __init__(self, *a, **k):
+            self._model = MagicMock()
+            self._infer_lock = threading.Lock()
+        def load(self): pass
+
+    class FakeASR:
+        def __init__(self, *a, **k): self._model = MagicMock()
+        def load(self): pass
+        @property
+        def align_enabled(self): return False
+
+    class FakeTM:
+        def __init__(self, *a, **k): pass
+        def set_processor(self, fn): pass
+        def start(self): pass
+        def shutdown(self): pass
+
+    monkeypatch.setattr(main, "VADEngine", FakeVAD)
+    monkeypatch.setattr(main, "QwenASREngine", FakeASR)
+    monkeypatch.setattr(main, "TaskManager", FakeTM)
+
+
+def test_standard_mode_speaker_enabled(isolated_create_app, monkeypatch):
+    """--enable-speaker 装配成功：capabilities/health 置位（离线+实时同一开关）。"""
+    import app.main as main
+    _mock_standard_engines(monkeypatch)
+
+    class FakeSpeaker:
+        def __init__(self, *a, **k): pass
+        def load(self): pass
+
+    monkeypatch.setattr(
+        "app.engines.speaker_embedding_engine.SpeakerEmbeddingEngine", FakeSpeaker)
+
+    app = main.create_app(_args(device="auto", enable_speaker=True, enable_stream=True))
+    client = TestClient(app)
+
+    caps = client.get("/v2/capabilities").json()
+    assert caps["speaker_labels"] is True
+    assert caps["stream"]["speaker_labels"] is True
+    assert client.get("/v2/health").json()["speaker_enabled"] is True
+
+    with client.websocket_connect("/v2/asr/stream") as ws:
+        created = ws.receive_json()
+        assert created["capabilities"]["speaker_labels"] is True
+
+
+def test_standard_mode_speaker_load_failure_degrades(isolated_create_app, monkeypatch):
+    """说话人引擎加载失败：降级关闭、不影响服务启动（容错对齐标点）。"""
+    import app.main as main
+    _mock_standard_engines(monkeypatch)
+
+    class BoomSpeaker:
+        def __init__(self, *a, **k): pass
+        def load(self): raise RuntimeError("weights missing")
+
+    monkeypatch.setattr(
+        "app.engines.speaker_embedding_engine.SpeakerEmbeddingEngine", BoomSpeaker)
+
+    app = main.create_app(_args(device="auto", enable_speaker=True))
+    client = TestClient(app)
+
+    health = client.get("/v2/health").json()
+    assert health["status"] == "ready"               # 服务正常
+    assert health["speaker_enabled"] is False        # 已降级
+    assert client.get("/v2/capabilities").json()["speaker_labels"] is False
+
+
+def test_standard_mode_speaker_disabled_by_default(isolated_create_app, monkeypatch):
+    """未开启：字段为 false（关闭态零变化）。"""
+    import app.main as main
+    _mock_standard_engines(monkeypatch)
+
+    app = main.create_app(_args(device="auto"))
+    client = TestClient(app)
+    assert client.get("/v2/health").json()["speaker_enabled"] is False
+    assert client.get("/v2/capabilities").json()["speaker_labels"] is False
+
+
+def test_config_speaker_defaults():
+    import app.config as cfg
+    assert cfg.ENABLE_SPEAKER is False
+    assert cfg.SPEAKER_THRESHOLD == 0.5      # S0 spike 定稿（区间 [0.35, 0.65]）
+    assert cfg.SPEAKER_MAX == 8
+    assert cfg.SPEAKER_MIN_SEG_MS == 1500    # S0 spike 定稿（原方案 800 作废）
+    assert cfg.SPEAKER_MAX_WINDOWS == 4000
+
+
+def test_parse_args_speaker_flags(monkeypatch):
+    from app.main import parse_args
+    monkeypatch.setattr("sys.argv", [
+        "prog", "--no-config", "--enable-speaker",
+        "--speaker-threshold", "0.45", "--speaker-max", "4",
+        "--speaker-min-seg-ms", "1000", "--speaker-max-windows", "2000",
+    ])
+    args = parse_args()
+    assert args.enable_speaker is True
+    assert args.speaker_threshold == 0.45
+    assert args.speaker_max == 4
+    assert args.speaker_min_seg_ms == 1000
+    assert args.speaker_max_windows == 2000
+
+
+def test_apply_cli_config_writes_speaker(monkeypatch):
+    import app.config as cfg
+    from app.main import _apply_cli_config, parse_args
+    monkeypatch.setattr("sys.argv", [
+        "prog", "--no-config", "--enable-speaker", "--speaker-threshold", "0.6",
+    ])
+    saved = {k: getattr(cfg, k) for k in (
+        "ENABLE_SPEAKER", "SPEAKER_THRESHOLD", "SPEAKER_MAX", "SPEAKER_MIN_SEG_MS",
+        "SPEAKER_MAX_WINDOWS", "MODEL_SOURCE", "MAX_SEGMENT_DURATION")}
+    try:
+        _apply_cli_config(parse_args())
+        assert cfg.ENABLE_SPEAKER is True
+        assert cfg.SPEAKER_THRESHOLD == 0.6
+        assert cfg.SPEAKER_MIN_SEG_MS == 1500   # 未传 → schema 默认
+    finally:
+        for k, v in saved.items():
+            setattr(cfg, k, v)
