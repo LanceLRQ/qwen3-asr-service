@@ -320,7 +320,7 @@ Client                                  Server
 
 | type | Fields | Description |
 |------|--------|-------------|
-| `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` | Sent on connect; `capabilities` contains `partial_results` / `word_timestamps` / `languages_auto` |
+| `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` / `limits` | Sent on connect; `capabilities` contains `partial_results` / `word_timestamps` / `languages_auto`; `limits` contains `max_frame_bytes` / `max_backlog_bytes` — clients pushing faster than real time should pace themselves accordingly (use `final.end` as processing-progress feedback and keep the unprocessed backlog below the limit) |
 | `partial` | `seg_id` / `text` | Intermediate result (only for backends with `partial_results=true`; vad-offline does not produce them) |
 | `final` | `seg_id` / `text` / `start` / `end` / `words` | Finalized sentence-level result; `start`/`end` in milliseconds; `words` only when `word_timestamps=true` |
 | `error` | `code` / `message` / `seg_id` / `fatal` | The session terminates when `fatal=true` |

@@ -243,8 +243,12 @@ Start with `--web` (enabled by default in configs generated from the example) an
 - Real-time recognition progress with one-click cancel
 - Segmented results with clickable segments for audio playback at corresponding positions
 - Full text display, raw JSON viewing and download
+- **Auto-refreshing task list**: updates every 3s while tasks are running, every 30s when idle (paused in background tabs); persisted historical tasks can be viewed and deleted
+- Dark theme: follows the OS, with a manual toggle
 
-When started with `--enable-stream`, `/web-ui/stream` provides a real-time transcription test page (microphone capture / simulated streaming from an audio file, with a protocol log view).
+The UI is built with Vue 3 + Naive UI (library files ship with the repository — **no node/npm, no build step**, works offline right after clone).
+
+When started with `--enable-stream`, `/web-ui/stream` provides a real-time transcription test page (microphone capture / simulated streaming from an audio file, with protocol log and diagnostics views). The ffmpeg-wasm transcoder used by simulated file streaming loads from the internet; on failure it automatically falls back to the browser's native decoder.
 
 `/web-ui/docs` is the built-in documentation center — it renders all of this repository's user docs offline (deployment / configuration / API / architecture, bilingual), browsable without internet access.
 

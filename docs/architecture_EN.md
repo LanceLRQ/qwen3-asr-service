@@ -30,10 +30,13 @@ asr-service/
 │   │   ├── task_store.py          # Offline task persistence (tasks.db)
 │   │   └── stream_session.py      # Real-time session (online VAD segmentation)
 │   ├── web/
-│   │   ├── views.py               # Web UI routes
+│   │   ├── views.py               # Web UI routes (pages + docs center)
 │   │   ├── page.py                # Page loading
-│   │   ├── index.html             # Offline transcription demo page
-│   │   └── stream.html            # Real-time transcription test page
+│   │   ├── docs_site.py           # Docs center (server-side Markdown rendering)
+│   │   ├── docs_template.html     # Docs center page template
+│   │   ├── index.html             # Offline transcription demo page (Vue 3 + Naive UI)
+│   │   ├── stream.html            # Real-time transcription test page (Vue 3 + Naive UI)
+│   │   └── assets/                # Frontend static assets (vendored Vue/Naive UI UMD + page JS + AudioWorklet)
 │   └── utils/
 │       ├── logger.py              # Logging configuration
 │       ├── arg_schema.py          # Single startup-parameter schema (argparse/config file)

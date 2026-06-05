@@ -1,8 +1,13 @@
+import os
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 
 from app.web import docs_site
 from app.web.page import HTML_PAGE, STREAM_PAGE
+
+# 前端静态资源目录（vendored Vue/Naive UI + 页面 JS），由 main 挂载到 /web-ui/assets
+ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 
 web_router = APIRouter()
 

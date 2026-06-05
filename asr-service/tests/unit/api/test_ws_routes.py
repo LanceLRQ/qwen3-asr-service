@@ -62,6 +62,9 @@ def test_session_created_and_full_flow():
         assert created["backend"] == "vad-offline"
         assert created["capabilities"]["word_timestamps"] is True
         assert created["protocol"] == "qwen3-asr-stream"
+        # limits 下发：客户端不限速模式据此自适应控速
+        assert created["limits"]["max_frame_bytes"] > 0
+        assert created["limits"]["max_backlog_bytes"] > 0
 
         ws.send_json({"type": "start", "audio_fs": 16000})
         ws.send_bytes(b"\x00\x00\x00\x00")

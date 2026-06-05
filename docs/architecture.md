@@ -30,10 +30,13 @@ asr-service/
 │   │   ├── task_store.py          # 离线任务持久化（tasks.db）
 │   │   └── stream_session.py      # 实时转写会话（在线 VAD 分段）
 │   ├── web/
-│   │   ├── views.py               # Web UI 路由
+│   │   ├── views.py               # Web UI 路由（页面 + 文档中心）
 │   │   ├── page.py                # 页面加载
-│   │   ├── index.html             # 离线转写演示页
-│   │   └── stream.html            # 实时转写测试页
+│   │   ├── docs_site.py           # 文档中心（服务端 Markdown 渲染）
+│   │   ├── docs_template.html     # 文档中心页面模板
+│   │   ├── index.html             # 离线转写演示页（Vue 3 + Naive UI）
+│   │   ├── stream.html            # 实时转写测试页（Vue 3 + Naive UI）
+│   │   └── assets/                # 前端静态资源（vendored Vue/Naive UI UMD + 页面 JS + AudioWorklet）
 │   └── utils/
 │       ├── logger.py              # 日志配置
 │       ├── arg_schema.py          # 启动参数单一 schema（argparse/配置文件共用）

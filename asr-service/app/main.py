@@ -3,9 +3,11 @@ import os
 import sys
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.utils.logger import setup_logger
-from app.utils.arg_schema import build_parser
+from app.utils.arg_schema import build_parser, ARG_SPECS
 from app.utils.config_file import merge_runtime_config
 import app.config as cfg
 from app.runtime.device import detect_device, resolve_device, auto_select_model_size, should_disable_align
@@ -29,6 +31,57 @@ def parse_args(argv=None):
     """
     cli_ns = build_parser().parse_args(argv)
     return merge_runtime_config(cli_ns)
+
+
+# 值为 None 时回填的 cfg 真实默认值（"生效配置"不应打"(未指定)"误导成未生效）
+_CFG_FALLBACK_ATTRS = {
+    "host": "HOST", "port": "PORT", "max_queue_size": "MAX_QUEUE_SIZE",
+    "max_stream_sessions": "MAX_STREAM_SESSIONS",
+    "stream_asr_concurrency": "STREAM_ASR_CONCURRENCY",
+}
+
+
+def _log_effective_config(args):
+    """启动时打印生效配置（四层合并结果），便于核对实际运行参数；api_key 脱敏。
+
+    分组随 ArgSpec.group 声明走（新参数在定义处即归组）；None 值回填 cfg
+    真实默认值并标注"(默认)"，model_size 标注"(自动选择)"（装配时按显存解析，
+    结果见后续"运行配置"日志行）。
+    输出只用 ASCII 字符（=/-/.）做边框与点线对齐——框线字符（─│┌）在部分
+    控制台字体/缩放下半宽全宽不一致会走样，这里刻意避开。
+    """
+    def fmt(spec):
+        val = getattr(args, spec.attr, None)
+        if spec.key == "api_key" and val:
+            val = (val[:4] + "****") if len(val) > 4 else "****"
+        if val is None:
+            if spec.key in _CFG_FALLBACK_ATTRS:
+                val = f"{getattr(cfg, _CFG_FALLBACK_ATTRS[spec.key])} (默认)"
+            elif spec.key == "model_size":
+                val = "(自动选择)"
+            else:
+                val = "(未指定)"
+        dots = "." * max(2, 25 - len(spec.key))
+        return f"    {spec.key} {dots} {val}"
+
+    groups = {}
+    order = []
+    for spec in ARG_SPECS:
+        if spec.group not in groups:
+            groups[spec.group] = []
+            order.append(spec.group)
+        groups[spec.group].append(spec)
+
+    bar = "=" * 62
+    lines = ["", bar,
+             "  Qwen3-ASR 生效配置（默认值 < 环境变量 < 配置文件 < CLI）",
+             f"  配置文件: {cfg.CONFIG_FILE or '未使用'}",
+             "-" * 62]
+    for title in order:
+        lines.append(f"  [{title}]")
+        lines.extend(fmt(s) for s in groups[title])
+    lines.append(bar)
+    logger.info("\n".join(lines))
 
 
 def _apply_cli_config(args):
@@ -61,12 +114,15 @@ def create_app(args=None) -> FastAPI:
     # 1. 配置日志
     setup_logger()
     logger.info("Qwen3-ASR Service 启动中...")
+    _log_effective_config(args)
 
     # 2. 写入全局配置（模式无关）
     _apply_cli_config(args)
 
     serve_mode = getattr(args, "serve_mode", "standard")
     app = FastAPI(title="Qwen3-ASR Service", version="2.0.0")
+    # 响应压缩（vendored 前端库 1.7MB → ~426KB；仅作用于 HTTP，WS 不受影响）
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     if serve_mode == "vllm":
         _assemble_vllm(app, args)
@@ -251,8 +307,9 @@ def _assemble_standard(app: FastAPI, args) -> None:
 
     # 条件挂载 Web UI
     if getattr(args, "web", False):
-        from app.web.views import web_router
+        from app.web.views import web_router, ASSETS_DIR
         app.include_router(web_router)
+        app.mount("/web-ui/assets", StaticFiles(directory=ASSETS_DIR), name="web-assets")
         logger.info(f"Web UI 已启用，访问 http://{cfg.HOST}:{cfg.PORT}/web-ui")
 
     @app.on_event("shutdown")

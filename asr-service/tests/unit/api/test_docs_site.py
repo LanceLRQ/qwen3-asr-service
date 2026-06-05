@@ -133,9 +133,26 @@ def test_docs_missing_root_404(tmp_path, monkeypatch):
 
 # ---------- 导航语言分组 ----------
 
+def _doc_nav(page: str) -> str:
+    """提取文档侧边导航（页面首个 nav 是应用栏，需定位 docs-sidebar）。"""
+    return page.split('class="docs-sidebar"')[1].split("</nav>")[0]
+
+
 def test_nav_groups_by_language(fake_repo):
     zh = docs_site.render_doc_page("readme")
-    assert "/web-ui/docs/readme_en" not in zh.split("</nav>")[0]   # 中文导航不混英文文档
+    assert "/web-ui/docs/readme_en" not in _doc_nav(zh)   # 中文导航不混英文文档
     en = docs_site.render_doc_page("readme_en")
-    nav_en = en.split("</nav>")[0]
-    assert "/web-ui/docs/readme_en" in nav_en
+    assert "/web-ui/docs/readme_en" in _doc_nav(en)
+
+
+# ---------- Studio Console 外壳 ----------
+
+def test_docs_page_uses_console_shell(fake_repo):
+    """文档页接入新版 UI 框架：vendor 脚本 + 共享样式 + v-pre 保护服务端 HTML。"""
+    page = docs_site.render_doc_page("readme")
+    assert "/web-ui/assets/vendor/vue-3.5.35.global.prod.js" in page
+    assert "/web-ui/assets/vendor/naive-ui-2.44.1.prod.js" in page
+    assert "/web-ui/assets/app.css" in page
+    assert "/web-ui/assets/common.js" in page
+    assert 'class="markdown-body" v-pre' in page   # 正文跳过 Vue 编译（防 {{ }} 示例被误解析）
+    assert 'class="appbar"' in page

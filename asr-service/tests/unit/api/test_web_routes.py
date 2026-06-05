@@ -1,6 +1,7 @@
-"""app/web/views.py 路由冒烟测试（离线页 + 实时测试页）。
+"""app/web/views.py 路由冒烟测试（离线页 + 实时测试页，Vue3 + Naive UI 无构建版）。
 
 web_router 仅在 --web 时挂载；此处直接挂到 TestClient 验证返回与关键标记。
+页面骨架在 HTML，业务模板/逻辑在 /web-ui/assets 下的 JS（见 test_web_assets.py）。
 """
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -19,19 +20,29 @@ def test_web_ui_offline_page():
     assert resp.status_code == 200
     html = resp.text
     assert "<!DOCTYPE html>" in html
-    assert "/web-ui/stream" in html          # 导航指向实时页
+    assert "/web-ui/stream" in html                       # 导航指向实时页
+    assert "/web-ui/docs" in html                         # 导航指向文档中心
+    assert 'id="app"' in html                             # Vue 挂载点
+    # vendor 与页面脚本引用
+    assert "vue-3.5.35.global.prod.js" in html
+    assert "naive-ui-2.44.1.prod.js" in html
+    assert "/web-ui/assets/app.css" in html
+    assert "/web-ui/assets/common.js" in html
+    assert "/web-ui/assets/offline.js" in html
 
 
 def test_web_ui_stream_page():
     resp = _client().get("/web-ui/stream")
     assert resp.status_code == 200
     html = resp.text
-    # 关键功能标记
-    assert "/v2/asr/stream" in html          # 连接实时端点
-    assert 'id="fileInput"' in html          # 文件模拟输入
-    assert 'id="micStart"' in html           # 麦克风按钮
-    assert 'id="transcript"' in html         # 结果区
-    assert 'href="/web-ui"' in html          # 导航返回离线页
+    assert "<!DOCTYPE html>" in html
+    assert 'href="/web-ui"' in html                       # 导航返回离线页
+    assert 'id="app"' in html
+    assert "vue-3.5.35.global.prod.js" in html
+    assert "naive-ui-2.44.1.prod.js" in html
+    assert "/web-ui/assets/app.css" in html
+    assert "/web-ui/assets/common.js" in html
+    assert "/web-ui/assets/stream.js" in html
 
 
 def test_stream_page_loaded_from_disk():

@@ -24,6 +24,7 @@ class ArgSpec:
     dest: str = None              # argparse dest，缺省 = key
     negative_flags: tuple = ()    # bool 开关对的"关闭" flag（如 --no-align）
     negative_help: str = ""
+    group: str = "其他"           # 生效配置打印的分组，随定义声明（勿留在"其他"）
 
     @property
     def attr(self) -> str:
@@ -33,85 +34,94 @@ class ArgSpec:
 ARG_SPECS = (
     ArgSpec(
         key="serve_mode", flags=("--serve-mode",), default="standard",
-        choices=("standard", "vllm"),
+        choices=("standard", "vllm"), group="服务",
         help="服务运行模式：standard=transformers/OpenVINO 离线+实时(路线B)；"
              "vllm=vLLM 原生流式(Phase 3) (default: standard)",
     ),
     ArgSpec(
         key="device", flags=("--device",), default="auto",
-        choices=("auto", "cuda", "cpu"),
+        choices=("auto", "cuda", "cpu"), group="模型",
         help="运行设备 (default: auto)",
     ),
     ArgSpec(
         key="model_size", flags=("--model-size",), default=None,
-        choices=("0.6b", "1.7b"),
+        choices=("0.6b", "1.7b"), group="模型",
         help="ASR 模型大小 (default: 根据显存自动选择)",
     ),
     ArgSpec(
         key="enable_align", flags=("--enable-align",), default=True, type=bool,
+        group="模型",
         help="加载对齐模型 (default)",
         negative_flags=("--no-align",), negative_help="不加载对齐模型",
     ),
     ArgSpec(
         key="use_punc", flags=("--use-punc",), default=False, type=bool,
-        dest="enable_punc",
+        dest="enable_punc", group="模型",
         help="启用标点恢复",
         negative_flags=("--no-punc",), negative_help="禁用标点恢复（覆盖配置文件）",
     ),
     ArgSpec(
         key="model_source", flags=("--model-source",), default="modelscope",
-        choices=("modelscope", "huggingface"),
+        choices=("modelscope", "huggingface"), group="模型",
         help="模型下载源 (default: modelscope)",
     ),
     ArgSpec(
-        key="host", flags=("--host",), default=None,
+        key="host", flags=("--host",), default=None, group="服务",
         help="监听地址 (default: 127.0.0.1)",
     ),
     ArgSpec(
-        key="port", flags=("--port",), default=None, type=int,
+        key="port", flags=("--port",), default=None, type=int, group="服务",
         help="监听端口 (default: 8765)",
     ),
     ArgSpec(
-        key="web", flags=("--web",), default=False, type=bool,
+        key="web", flags=("--web",), default=False, type=bool, group="服务",
         help="启用 Web UI (访问 /web-ui)",
         negative_flags=("--no-web",), negative_help="禁用 Web UI（覆盖配置文件）",
     ),
     ArgSpec(
         key="max_segment", flags=("--max-segment",), default=5, type=int,
+        group="离线任务",
         help="VAD 切片合并最大时长，单位秒 (default: 5)",
     ),
     ArgSpec(
-        key="api_key", flags=("--api-key",), default=None,
+        key="api_key", flags=("--api-key",), default=None, group="服务",
         help="API 密钥，设置后启用 Bearer token 认证（覆盖 ASR_API_KEY 环境变量）",
     ),
     ArgSpec(
         key="max_queue_size", flags=("--max-queue-size",), default=None, type=int,
+        group="离线任务",
         help=f"任务队列最大长度 (default: {cfg.MAX_QUEUE_SIZE})",
     ),
     ArgSpec(
         key="enable_stream", flags=("--enable-stream",), default=False, type=bool,
+        group="实时转写",
         help="挂载实时转写端点 WS /v2/asr/stream（路线B，standard 模式）",
         negative_flags=("--no-stream",), negative_help="不挂载实时转写端点（覆盖配置文件）",
     ),
     ArgSpec(
         key="max_stream_sessions", flags=("--max-stream-sessions",), default=None, type=int,
+        group="实时转写",
         help=f"实时最大并发会话数 (default: {cfg.MAX_STREAM_SESSIONS})",
     ),
     ArgSpec(
         key="stream_asr_concurrency", flags=("--stream-asr-concurrency",), default=None, type=int,
+        group="实时转写",
         help=f"实时 ASR 解码并发上限 (default: {cfg.STREAM_ASR_CONCURRENCY})",
     ),
     ArgSpec(
         key="enable_task_store", flags=("--enable-task-store",), default=False, type=bool,
+        group="离线任务",
         help="离线任务持久化（data/tasks.db）：结果跨重启可查",
         negative_flags=("--no-task-store",), negative_help="关闭任务持久化（覆盖配置文件）",
     ),
     ArgSpec(
         key="task_db_path", flags=("--task-db-path",), default="data/tasks.db",
+        group="离线任务",
         help="任务库路径，相对服务根目录 (default: data/tasks.db)",
     ),
     ArgSpec(
         key="task_retention_days", flags=("--task-retention-days",), default=7, type=int,
+        group="离线任务",
         help="过期任务清理窗口（天），启动时执行；0=永不清理 (default: 7)",
     ),
 )
