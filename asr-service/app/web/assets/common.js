@@ -28,6 +28,9 @@ window.AsrCommon = (function () {
     return (n / 1024 / 1024).toFixed(2) + ' MB';
   }
 
+  /* 说话人徽标取色：标签字母 → 固定 8 色板下标（app.css .spk-0 ~ .spk-7，同标签恒同色） */
+  function spkIdx(label) { return ((label.charCodeAt(0) - 65) % 8 + 8) % 8; }
+
   /* —— 共享 API Key（两页共用 localStorage 键 asr_api_key，应用栏 popover 中编辑）—— */
   const apiKey = ref(localStorage.getItem('asr_api_key') || '');
   watch(apiKey, v => localStorage.setItem('asr_api_key', v.trim()));
@@ -127,5 +130,5 @@ window.AsrCommon = (function () {
     app.mount('#app');
   }
 
-  return { fmtTime, fmtMs, fmtDate, fmtBytes, apiKey, authHeaders, mountApp };
+  return { fmtTime, fmtMs, fmtDate, fmtBytes, spkIdx, apiKey, authHeaders, mountApp };
 })();

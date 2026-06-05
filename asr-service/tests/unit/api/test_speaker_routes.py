@@ -1,8 +1,8 @@
 """app/api/speaker_routes.py 测试（mock Service，TestClient，不触模型/库）。
 
 覆盖：八条路由正反路径、401 鉴权、503（未启用 / model_tag 失配语义分裂）、
-consent 缺失 400、ValueError→400 / SpeakerStoreError→500 映射、multipart 多文件、
-剩 0 模板提示。
+consent 缺失 400、ValueError→400 / SpeakerNotFoundError→404 /
+SpeakerStoreError→500 映射、multipart 多文件、剩 0 模板提示。
 """
 from unittest.mock import MagicMock
 
@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 import app.config as cfg
 from app.api.speaker_routes import build_speakers_router, init_speaker_routes
-from app.runtime.speaker_store import SpeakerStoreError
+from app.runtime.speaker_store import SpeakerNotFoundError, SpeakerStoreError
 
 AUTH = {"Authorization": "Bearer test-key"}
 
@@ -159,12 +159,28 @@ def test_update_speaker_rename():
     service.store.update_speaker.assert_called_once_with("a" * 32, "李四", None)
 
 
+def test_update_speaker_missing_404():
+    """无前置存在性检查：store 层 NotFound 即 404（TOCTOU 间隙同样落此映射）。"""
+    service = make_service()
+    service.store.update_speaker.side_effect = SpeakerNotFoundError("说话人不存在: nope")
+    c = make_client(service)
+    assert c.patch("/v2/speakers/nope", headers=AUTH,
+                   json={"name": "李四"}).status_code == 404
+
+
 def test_delete_speaker_calls_service():
     service = make_service()
     c = make_client(service)
     r = c.delete(f"/v2/speakers/{'a'*32}", headers=AUTH)
     assert r.status_code == 200 and r.json()["deleted"] is True
     service.delete_speaker.assert_called_once_with("a" * 32)
+
+
+def test_delete_speaker_missing_404():
+    service = make_service()
+    service.delete_speaker.side_effect = SpeakerNotFoundError("说话人不存在: nope")
+    c = make_client(service)
+    assert c.delete("/v2/speakers/nope", headers=AUTH).status_code == 404
 
 
 # ─── 模板 ───
@@ -185,11 +201,20 @@ def test_delete_template_zero_remaining_hint():
 
 
 def test_delete_template_missing_404():
+    """404 走 NotFound 异常类型而非消息文本匹配（措辞改动不破坏路由语义）。"""
     service = make_service()
-    service.store.delete_template.side_effect = SpeakerStoreError("模板不存在: x/9")
+    service.store.delete_template.side_effect = SpeakerNotFoundError("模板不存在: x/9")
     c = make_client(service)
     assert c.delete(f"/v2/speakers/{'a'*32}/templates/9",
                     headers=AUTH).status_code == 404
+
+
+def test_delete_template_other_error_500():
+    service = make_service()
+    service.store.delete_template.side_effect = SpeakerStoreError("磁盘写入失败")
+    c = make_client(service)
+    assert c.delete(f"/v2/speakers/{'a'*32}/templates/9",
+                    headers=AUTH).status_code == 500
 
 
 # ─── identify ───

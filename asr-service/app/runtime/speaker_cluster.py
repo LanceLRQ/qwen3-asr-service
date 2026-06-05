@@ -136,17 +136,25 @@ def _spectral(embs: np.ndarray, max_spks: int,
     sim = embs @ embs.T
     n = sim.shape[0]
     # p-pruning：每行只保留最大的 max(n*pval, min_pnum) 个相似度，其余置 0
+    # （argpartition 向量化：每行最小的 n_prune 个位置，等价逐行 argsort 前缀）
     n_prune = min(int((1 - pval) * n), n - min_pnum)
     pruned = sim.copy()
-    for i in range(n):
-        pruned[i, np.argsort(pruned[i])[:n_prune]] = 0
+    if n_prune > 0:
+        idx = np.argpartition(pruned, n_prune - 1, axis=1)[:, :n_prune]
+        np.put_along_axis(pruned, idx, 0, axis=1)
     sym = 0.5 * (pruned + pruned.T)
     np.fill_diagonal(sym, 0)
     laplacian = -sym
     laplacian[np.diag_indices(n)] = np.abs(sym).sum(axis=1)
 
     k = min(max_spks + 1, n)
-    lambdas, vecs = sla.eigsh(laplacian, k=k, which="SM")
+    try:
+        lambdas, vecs = sla.eigsh(laplacian, k=k, which="SM")
+    except sla.ArpackError as e:
+        # 近 rank-1 拉普拉斯（如单人长音频的近同 embedding）ARPACK 可能不收敛：
+        # 降级单簇，不让单点异常吞掉整个文件的说话人标签
+        logger.warning(f"谱聚类特征分解未收敛，降级单说话人: {e}")
+        return np.zeros(n, dtype=int)
     gaps = np.diff(lambdas[:max_spks + 1])
     num_spks = int(np.argmax(gaps)) + 1 if len(gaps) else 1
 

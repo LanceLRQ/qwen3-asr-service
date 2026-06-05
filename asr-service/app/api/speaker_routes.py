@@ -3,9 +3,10 @@
 体例对齐 routes.py：模块级 DI（init_speaker_routes）+ 纯函数控制器 +
 build_speakers_router 工厂；上传保存复用 submit_asr 的流式写盘与校验常量。
 
-错误约定：401 鉴权 ｜ 400 质量门槛/consent（ValueError 透传）｜ 404 不存在 ｜
+错误约定：401 鉴权 ｜ 400 质量门槛/consent（ValueError 透传）｜ 404 不存在
+（SpeakerNotFoundError，store 层 rowcount==0 即抛——无 get-then-mutate 竞态窗口）｜
 503 speaker_db_disabled（模块未启用）/ model_tag_mismatch（仅禁登记/识别，
-管理端点保留——被遗忘权不受失配影响）｜ 500 SpeakerStoreError。
+管理端点保留——被遗忘权不受失配影响）｜ 500 其余 SpeakerStoreError。
 """
 import asyncio
 import logging
@@ -29,7 +30,7 @@ from app.api.schemas import (
     TemplateDeleteResponse,
 )
 from app.config import MAX_AUDIO_FILE_SIZE, UPLOADS_DIR
-from app.runtime.speaker_store import SpeakerStoreError
+from app.runtime.speaker_store import SpeakerNotFoundError, SpeakerStoreError
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,8 @@ async def _run(fn, *args):
         return await asyncio.to_thread(fn, *args)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except SpeakerNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except SpeakerStoreError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -149,19 +152,22 @@ async def get_speaker(speaker_id: str) -> SpeakerInfo:
 
 
 async def update_speaker(speaker_id: str, body: SpeakerUpdateRequest) -> SpeakerInfo:
-    """改名/备注（不影响 speaker_id 与模板；自动登记的占位名据此改真名）。"""
+    """改名/备注（不影响 speaker_id 与模板；自动登记的占位名据此改真名）。
+
+    不做前置存在性检查（get-then-mutate 有 TOCTOU 竞态）：store 层不存在即抛
+    SpeakerNotFoundError → 404；body 全空时 store 无操作，由回读兜 404。
+    """
     service = _require_service()
-    if await _run(service.store.get_speaker, speaker_id) is None:
-        raise HTTPException(status_code=404, detail="说话人不存在")
     await _run(service.store.update_speaker, speaker_id, body.name, body.note)
-    return SpeakerInfo(**await _run(service.store.get_speaker, speaker_id))
+    info = await _run(service.store.get_speaker, speaker_id)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"说话人不存在: {speaker_id}")
+    return SpeakerInfo(**info)
 
 
 async def delete_speaker(speaker_id: str) -> SpeakerDeleteResponse:
     """硬删除（级联模板 + 物理回收 + 留存音频清理，不可恢复——被遗忘权）。"""
     service = _require_service()
-    if await _run(service.store.get_speaker, speaker_id) is None:
-        raise HTTPException(status_code=404, detail="说话人不存在")
     await _run(service.delete_speaker, speaker_id)
     return SpeakerDeleteResponse(speaker_id=speaker_id)
 
@@ -179,16 +185,9 @@ async def add_template(speaker_id: str, file: UploadFile = File(...)) -> dict:
 
 
 async def delete_template(speaker_id: str, template_id: int) -> TemplateDeleteResponse:
+    """删除单条模板（不存在由 store 抛 NotFound → 404，覆盖人/模板两种缺失）。"""
     service = _require_service()
-    if await _run(service.store.get_speaker, speaker_id) is None:
-        raise HTTPException(status_code=404, detail="说话人不存在")
-    try:
-        remaining = await asyncio.to_thread(service.store.delete_template,
-                                            speaker_id, template_id)
-    except SpeakerStoreError as e:
-        if "不存在" in str(e):
-            raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+    remaining = await _run(service.store.delete_template, speaker_id, template_id)
     hint = None
     if remaining == 0:
         hint = "该说话人已无模板，识别仍使用最后一次质心；请追加样本或删除该说话人"

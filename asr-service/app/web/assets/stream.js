@@ -6,7 +6,7 @@
 (function () {
   'use strict';
   const { ref, reactive, computed, watch, onMounted, onBeforeUnmount } = Vue;
-  const { fmtMs, fmtBytes, apiKey, mountApp } = window.AsrCommon;
+  const { fmtMs, fmtBytes, spkIdx, apiKey, mountApp } = window.AsrCommon;
 
   const RT_SR = 16000;
   const FRAME = 3200;                 // 200ms @16k
@@ -61,8 +61,6 @@
         finals.push({ key: ++finalSeq, start: m.start, text: m.text || '', words: (m.words && m.words.length) || 0, speaker: m.speaker || null, speakerName: m.speaker_name || null });
         if (finals.length > MAX_TRANSCRIPT_LINES) finals.shift();
       }
-      // 说话人徽标取色：标签字母 → 固定 8 色板下标（同标签恒同色）
-      function spkIdx(label) { return ((label.charCodeAt(0) - 65) % 8 + 8) % 8; }
       function clearResults() { finals.length = 0; partial.value = ''; }
 
       // 满高布局下转写区内部滚动：新 final/partial 到达时跟随滚底

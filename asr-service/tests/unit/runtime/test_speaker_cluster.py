@@ -157,6 +157,19 @@ def test_offline_spectral_single_speaker():
     assert labels.tolist() == [0] * 45
 
 
+def test_offline_spectral_arpack_failure_degrades_single(monkeypatch):
+    """ARPACK 不收敛（病态拉普拉斯）→ 降级单说话人，不向上抛异常吞掉整文件标签。"""
+    import scipy.sparse.linalg as sla
+
+    def boom(*args, **kwargs):
+        raise sla.ArpackNoConvergence("ARPACK 未收敛", np.array([]), np.array([]))
+
+    monkeypatch.setattr(sla, "eigsh", boom)
+    embs = np.stack([around(unit(0)) for _ in range(45)])
+    labels = cluster_offline(embs)
+    assert labels.tolist() == [0] * 45
+
+
 # ─── 后处理 ───
 
 def test_merge_close_clusters_by_centroid_similarity():

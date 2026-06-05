@@ -422,12 +422,20 @@ def test_backend_speaker_capability_and_release():
 
 # ─── 声纹识别联动（fake SpeakerService）───
 
+class FakeSpeakerStore:
+    """仅提供缓存失效信号（真 store 的 cache_version 语义：写后自增）。"""
+
+    def __init__(self):
+        self.cache_version = 0
+
+
 class FakeSpeakerService:
     """按调用序号返回脚本化识别结果（None=unknown）。"""
 
     def __init__(self, names=("张三",)):
         self.names = list(names)
         self.calls = 0
+        self.store = FakeSpeakerStore()
 
     def map_clusters(self, clusters):
         name = self.names[self.calls] if self.calls < len(self.names) else self.names[-1]
@@ -487,6 +495,23 @@ async def test_unknown_then_hit_progression():
         ex.shutdown(wait=False)
 
 
+async def test_cache_busts_on_store_version_change():
+    """声纹库 cache_version 变化即时失效会话缓存——外部登记/改名无需等计数翻倍。"""
+    service = FakeSpeakerService(names=(None, None, "张三"))
+    s, asr, ex = _make_session(_three_finals_svad(), speaker=FakeSpeakerEngine(),
+                               speaker_service=service, identify=True)
+    try:
+        await _collect(s.feed_audio(_pcm_ms(3000)))      # count=1 查（unknown）
+        await _collect(s.feed_audio(_pcm_ms(3000)))      # count=2≥2×1 翻倍重查（unknown）
+        assert service.calls == 2
+        service.store.cache_version += 1                 # 模拟外部登记入库
+        m = await _collect(s.feed_audio(_pcm_ms(3000)))  # count=3<4，本应走缓存
+        assert service.calls == 3                        # ver 变化触发重查
+        assert m[0]["speaker_name"] == "张三"
+    finally:
+        ex.shutdown(wait=False)
+
+
 async def test_identify_off_no_name_no_query():
     service = FakeSpeakerService()
     s, asr, ex = _make_session(_three_finals_svad(), speaker=FakeSpeakerEngine(),
@@ -512,6 +537,8 @@ async def test_identify_without_service_no_name():
 
 async def test_identify_service_error_degrades():
     class BoomService:
+        store = FakeSpeakerStore()
+
         def map_clusters(self, clusters):
             raise RuntimeError("db boom")
 

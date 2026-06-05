@@ -101,7 +101,7 @@ class StreamSession:
         self._spk_cluster = None                 # configure() 时重建（会话域）
         self._speaker_service = speaker_service  # None = 声纹库未启用
         self._identify = False                   # start 消息 identify_speakers 开关
-        self._spk_name_cache = {}                # label -> {"name", "count"}（会话级簇缓存）
+        self._spk_name_cache = {}                # label -> {"name", "count", "ver"}（会话级簇缓存）
 
         self.audio_fs = _TARGET_SR
         self.language = language
@@ -275,20 +275,27 @@ class StreamSession:
     def _lookup_speaker_name(self, spk: str) -> str | None:
         """会话级簇缓存的声纹查询（同步，线程池内执行）。
 
-        缓存失效策略：簇质心累计段数达到上次查询时的 2 倍才重查——
-        早期 unknown 会随质心稳定而升级命中（不回改历史 final）。
+        缓存失效（满足任一即重查）：
+        ① 簇质心累计段数达上次查询的 2 倍——早期 unknown 随质心稳定升级命中；
+        ② 声纹库 cache_version 变化——外部登记/改名/删除即时可见。
+        均不回改历史 final。
         """
-        count = max(self._spk_cluster.count_of(spk), 1)
+        cluster = self._spk_cluster      # 本地引用：release() 并发置 None 防护
+        if cluster is None:
+            return None
+        ver = self._speaker_service.store.cache_version
+        count = max(cluster.count_of(spk), 1)
         cached = self._spk_name_cache.get(spk)
-        if cached is not None and count < cached["count"] * 2:
+        if (cached is not None and cached["ver"] == ver
+                and count < cached["count"] * 2):
             return cached["name"]
-        centroid = self._spk_cluster.centroid_of(spk)
+        centroid = cluster.centroid_of(spk)
         if centroid is None:
             return cached["name"] if cached else None
         mapping = self._speaker_service.map_clusters(
             [{"label": spk, "centroid": centroid}])
         name = mapping[0]["name"] if mapping else None
-        self._spk_name_cache[spk] = {"name": name, "count": count}
+        self._spk_name_cache[spk] = {"name": name, "count": count, "ver": ver}
         return name
 
 

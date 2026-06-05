@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const { ref, reactive, computed, watch, onMounted, onBeforeUnmount, h } = Vue;
-  const { fmtTime, fmtDate, fmtBytes, authHeaders, mountApp } = window.AsrCommon;
+  const { fmtTime, fmtDate, fmtBytes, spkIdx, authHeaders, mountApp } = window.AsrCommon;
 
   const STATUS_LABELS = { pending: '排队中', processing: '处理中', completed: '已完成', failed: '失败', cancelled: '已取消' };
   const STATUS_TAG_TYPES = { pending: 'warning', processing: 'info', completed: 'success', failed: 'error', cancelled: 'default' };
@@ -37,8 +37,6 @@
         URL.revokeObjectURL(a.href);
       }
       function seek(seg) { if (props.onSeek && seg.start != null) props.onSeek(seg); }
-      // 说话人徽标取色：标签字母 → 固定 8 色板下标（同标签恒同色）
-      function spkIdx(label) { return ((label.charCodeAt(0) - 65) % 8 + 8) % 8; }
       // 声纹识别开启时 result.speakers 为映射表（含 score）；纯标签列表时为空映射
       const spkMeta = computed(() => {
         const map = {};

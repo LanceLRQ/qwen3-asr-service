@@ -10,7 +10,11 @@ import sqlite3
 import numpy as np
 import pytest
 
-from app.runtime.speaker_store import SpeakerStore, SpeakerStoreError
+from app.runtime.speaker_store import (
+    SpeakerNotFoundError,
+    SpeakerStore,
+    SpeakerStoreError,
+)
 
 DIM = 192
 TAG = "campplus_cn_common@v1"
@@ -143,6 +147,43 @@ def test_identify_margin_rejects_close_competitors(store):
     assert store.identify(unit(0), threshold=0.45, margin=0.10) is None
     # margin 收紧到 0.01 时可命中
     assert store.identify(unit(0), threshold=0.45, margin=0.01)["name"] == "A"
+
+
+def test_identify_single_speaker_skips_margin(store):
+    """库内仅 1 人时无第二名可比，margin 无定义——单靠 threshold 门控（有意设计）。"""
+    sid = store.enroll_speaker("独苗", None, [unit(0)], [5.0], consent=True)
+    # 与质心余弦 0.8：双人场景下若有近邻会被 margin 拦截，单人场景直接命中
+    q = mix(unit(0), unit(1), 0.8, 0.6)
+    hit = store.identify(q, threshold=0.45, margin=0.99)   # margin 给到极端值也不参与
+    assert hit["speaker_id"] == sid
+
+
+def test_not_found_is_dedicated_subclass(store):
+    """不存在类错误抛 SpeakerNotFoundError（路由层 404 依赖异常类型而非消息文本）。"""
+    assert issubclass(SpeakerNotFoundError, SpeakerStoreError)
+    with pytest.raises(SpeakerNotFoundError):
+        store.update_speaker("nope", name="x")
+    with pytest.raises(SpeakerNotFoundError):
+        store.delete_speaker("nope")
+    with pytest.raises(SpeakerNotFoundError):
+        store.delete_template("nope", 1)
+    with pytest.raises(SpeakerNotFoundError):
+        store.add_template("nope", unit(0), 5.0)
+
+
+def test_delete_evicts_cache_when_reload_fails(store, monkeypatch):
+    """DELETE 落库后缓存重载失败：内存手术摘除，不留幻影命中（被遗忘权）。"""
+    sid_a = store.enroll_speaker("甲", None, [unit(0)], [5.0], consent=True)
+    sid_b = store.enroll_speaker("乙", None, [unit(1)], [5.0], consent=True)
+
+    def boom():
+        raise SpeakerStoreError("reload boom")
+
+    monkeypatch.setattr(store, "_reload_cache", boom)
+    store.delete_speaker(sid_a)                       # 重载失败但删除成功，不上抛
+    assert store.speaker_count == 1
+    assert store.identify(unit(0), threshold=0.45) is None        # 已删者不可再命中
+    assert store.identify(unit(1), threshold=0.45)["speaker_id"] == sid_b
 
 
 def test_identify_visible_immediately_after_write(store):

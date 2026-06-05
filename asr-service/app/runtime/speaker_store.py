@@ -61,6 +61,10 @@ class SpeakerStoreError(Exception):
     """声纹库操作失败——路由层据此转 HTTP 错误（与 TaskStore 容错自吞语义相反）。"""
 
 
+class SpeakerNotFoundError(SpeakerStoreError):
+    """目标说话人/模板不存在——路由层映射 404（其余 SpeakerStoreError 一律 500）。"""
+
+
 class SpeakerStore:
     SCHEMA_VERSION = 1
     DIM = 192
@@ -72,10 +76,10 @@ class SpeakerStore:
         self.model_tag = model_tag
         self._lock = threading.Lock()
         self._cache_version = 0
-        # identify 读侧无锁：以下三个引用始终被 _reload_cache 整体替换
-        self._matrix = np.zeros((0, self.DIM), dtype=np.float32)
-        self._ids: list[str] = []
-        self._names: list[str] = []
+        # identify 读侧无锁：(matrix, ids, names) 装入单引用整体交换——
+        # 三属性分写在字节码间隙可被读侧观察到撕裂（GIL 不保证多字节码序列原子）
+        self._cache: tuple[np.ndarray, list[str], list[str]] = (
+            np.zeros((0, self.DIM), dtype=np.float32), [], [])
 
         os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
         try:
@@ -104,7 +108,7 @@ class SpeakerStore:
         with self._lock:
             self._reload_cache()
         logger.info(f"声纹库已启用: {db_path}（model_tag={model_tag}，"
-                    f"{len(self._ids)} 人，永不自动清理）")
+                    f"{self.speaker_count} 人，永不自动清理）")
 
     # ─── 内部工具 ───
 
@@ -134,7 +138,16 @@ class SpeakerStore:
             vecs.append(np.frombuffer(r["centroid"], dtype=np.float32))
         matrix = (np.stack(vecs) if vecs
                   else np.zeros((0, self.DIM), dtype=np.float32))
-        self._matrix, self._ids, self._names = matrix, ids, names
+        self._cache = (matrix, ids, names)
+        self._cache_version += 1
+
+    def _evict_from_cache(self, speaker_id: str):
+        """按 id 摘除内存缓存单项（delete_speaker 重载失败时的兜底）。须持锁调用。"""
+        matrix, ids, names = self._cache
+        if speaker_id not in ids:
+            return
+        keep = [i for i, x in enumerate(ids) if x != speaker_id]
+        self._cache = (matrix[keep], [ids[i] for i in keep], [names[i] for i in keep])
         self._cache_version += 1
 
     def _recompute_centroid(self, speaker_id: str):
@@ -224,7 +237,7 @@ class SpeakerStore:
                 exists = self._conn.execute(
                     "SELECT 1 FROM speakers WHERE id=?", (speaker_id,)).fetchone()
                 if exists is None:
-                    raise SpeakerStoreError(f"说话人不存在: {speaker_id}")
+                    raise SpeakerNotFoundError(f"说话人不存在: {speaker_id}")
                 if row["n"] >= self.MAX_TEMPLATES:
                     raise SpeakerStoreError(f"模板数已达上限 {self.MAX_TEMPLATES}")
                 self._conn.execute(
@@ -249,7 +262,7 @@ class SpeakerStore:
                     (template_id, speaker_id),
                 )
                 if cur.rowcount == 0:
-                    raise SpeakerStoreError(f"模板不存在: {speaker_id}/{template_id}")
+                    raise SpeakerNotFoundError(f"模板不存在: {speaker_id}/{template_id}")
                 self._recompute_centroid(speaker_id)
                 remaining = self._conn.execute(
                     "SELECT COUNT(*) AS n FROM templates WHERE speaker_id=?",
@@ -285,7 +298,7 @@ class SpeakerStore:
             except sqlite3.Error as e:
                 raise SpeakerStoreError(f"说话人更新失败: {e}") from e
             if cur.rowcount == 0:
-                raise SpeakerStoreError(f"说话人不存在: {speaker_id}")
+                raise SpeakerNotFoundError(f"说话人不存在: {speaker_id}")
             if name is not None:
                 self._reload_cache()        # identify 返回 name，需要同步
         self.audit("update", speaker_id, {"renamed": name is not None})
@@ -298,12 +311,18 @@ class SpeakerStore:
                     "DELETE FROM speakers WHERE id=?", (speaker_id,))
                 self._conn.commit()
                 if cur.rowcount == 0:
-                    raise SpeakerStoreError(f"说话人不存在: {speaker_id}")
+                    raise SpeakerNotFoundError(f"说话人不存在: {speaker_id}")
                 self._conn.execute("PRAGMA incremental_vacuum")
             except sqlite3.Error as e:
                 self._conn.rollback()
                 raise SpeakerStoreError(f"说话人删除失败: {e}") from e
-            self._reload_cache()
+            try:
+                self._reload_cache()
+            except SpeakerStoreError as e:
+                # DELETE 已落库：重载失败不能留下幻影命中（被遗忘权），
+                # 降级为手术摘除内存项；后续任意写操作的全量重载会自然纠偏
+                self._evict_from_cache(speaker_id)
+                logger.warning(f"删除后质心缓存重载失败，已内存摘除 {speaker_id}: {e}")
         self.audit("delete", speaker_id)
 
     def audit(self, action: str, speaker_id: str | None = None,
@@ -363,7 +382,7 @@ class SpeakerStore:
 
         emb 须 L2 归一 [192]；threshold/margin 由调用方（Service）从 cfg 传入。
         """
-        matrix, ids, names = self._matrix, self._ids, self._names   # 取引用快照
+        matrix, ids, names = self._cache    # 单属性读：快照原子，无撕裂
         if matrix.shape[0] == 0:
             return None
         scores = matrix @ np.asarray(emb, dtype=np.float32).reshape(-1)
@@ -371,6 +390,7 @@ class SpeakerStore:
         top1 = float(scores[order[-1]])
         if top1 < threshold:
             return None
+        # 库内仅 1 人时无第二名可比，margin 无定义——单靠 threshold 门控（有意设计）
         if matrix.shape[0] > 1:
             top2 = float(scores[order[-2]])
             if top1 - top2 < margin:
@@ -396,7 +416,7 @@ class SpeakerStore:
 
     @property
     def speaker_count(self) -> int:
-        return len(self._ids)
+        return len(self._cache[1])
 
     def close(self) -> None:
         with self._lock:
