@@ -41,6 +41,9 @@
   const AppBody = {
     setup() {
       const lang = ref('');
+      // —— 声纹识别（随 start 消息发送；capabilities 探测到 speaker_identification 才显示开关）——
+      const canIdentify = ref(false);
+      const identifySpeakers = ref(false);
 
       // —— 会话状态机：idle | connecting | streaming | stopping ——
       const streamState = ref('idle');
@@ -142,6 +145,7 @@
         const l = lang.value.trim();
         const m = { type: 'start', audio_fs: RT_SR, wav_name: 'web-test' };
         if (l && l !== 'auto') m.language = l;
+        if (identifySpeakers.value) m.identify_speakers = true;
         return m;
       }
       function waitDrain() {
@@ -424,6 +428,7 @@
           const r = await fetch('/v2/capabilities');
           if (!r.ok) return;
           const c = await r.json();
+          canIdentify.value = !!c.speaker_identification;
           if (!c.stream || !c.stream.enabled) {
             capWarning.value = '当前服务未启用实时端点。请用 --serve-mode standard --enable-stream 启动后刷新本页。';
           } else {
@@ -435,7 +440,7 @@
       onBeforeUnmount(() => { cleanupMic(); closeWs(); stopDiag(); });
 
       return {
-        lang,
+        lang, canIdentify, identifySpeakers,
         streamState, statusText, busy, source,
         capWarning, hint, capInfo, diag, vuRef,
         finals, partial, fmtMs, transcriptRef, spkIdx,
@@ -468,6 +473,9 @@
             <n-card :bordered="false" class="panel" size="small">
               <template #header><span class="panel-title"><a-icon name="mic" size="15"></a-icon>输入源</span></template>
               <n-input v-model:value="lang" size="small" placeholder="语言（默认 auto，如 zh / en）" style="margin-bottom:12px;"></n-input>
+              <n-checkbox v-if="canIdentify" v-model:checked="identifySpeakers" size="small" :disabled="busy" style="margin-bottom:12px;">
+                声纹识别（真名标注）
+              </n-checkbox>
               <n-tabs v-model:value="source" type="segment" size="small">
                 <n-tab-pane name="mic" tab="麦克风" :disabled="busy && source !== 'mic'">
                   <n-space vertical size="large" style="margin-top:12px;">

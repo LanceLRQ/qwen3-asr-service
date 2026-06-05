@@ -108,6 +108,16 @@
       }
       const fileSize = computed(() => (selectedFile.value ? fmtBytes(selectedFile.value.size) : ''));
 
+      // —— 声纹识别（请求级 opt-in；capabilities 探测到 speaker_identification 才显示开关）——
+      const canIdentify = ref(false);
+      const identifySpeakers = ref(false);
+      onMounted(async () => {
+        try {
+          const r = await fetch('/v2/capabilities');
+          if (r.ok) canIdentify.value = !!(await r.json()).speaker_identification;
+        } catch (e) { /* 探测失败按不可用处理，开关保持隐藏 */ }
+      });
+
       // —— 当前任务 ——
       // phase: idle | submitting | running | done | error
       const current = reactive({ taskId: null, phase: 'idle', progress: 0, error: '', data: null, cancelling: false });
@@ -124,6 +134,7 @@
         current.phase = 'submitting';
         const form = new FormData();
         form.append('file', selectedFile.value);
+        if (identifySpeakers.value) form.append('identify_speakers', 'true');
         try {
           const res = await fetch('/v2/asr', { method: 'POST', body: form, headers: authHeaders() });
           if (!res.ok) {
@@ -341,6 +352,7 @@
 
       return {
         uploadFileList, onUploadChange, fileSize, audioSrc, audioRef, selectedFile,
+        canIdentify, identifySpeakers,
         current, progressPct, submit, cancelTask, seekAudio,
         taskList, toggleTaskList, manualRefresh, filterOptions, columns, rowProps,
         viewer,
@@ -369,6 +381,9 @@
                   <n-tag size="tiny" :bordered="false">{{ fileSize }}</n-tag>
                 </div>
                 <audio ref="audioRef" class="audio-box" controls :src="audioSrc"></audio>
+                <n-checkbox v-if="canIdentify" v-model:checked="identifySpeakers" size="small" style="margin-top:12px;">
+                  声纹识别（标注真名，未知说话人自动登记）
+                </n-checkbox>
                 <n-button type="primary" size="large" block strong style="margin-top:14px;"
                           :loading="current.phase === 'submitting'"
                           :disabled="current.phase === 'submitting' || current.phase === 'running'" @click="submit">
