@@ -354,7 +354,9 @@
           <div class="side-col">
             <n-card :bordered="false" class="panel" size="small">
               <template #header><span class="panel-title"><a-icon name="upload" size="15"></a-icon>上传音频</span></template>
-              <n-upload :file-list="uploadFileList" :default-upload="false" :max="1" :show-file-list="false"
+              <!-- 不设 :max="1"：达到 max 后 n-upload 会禁用触发器导致无法换文件；
+                   替换语义由 onUploadChange 取末项实现（列表恒 ≤1） -->
+              <n-upload :file-list="uploadFileList" :default-upload="false" :show-file-list="false"
                         accept=".wav,.mp3,.flac,.m4a,.aac,.ogg,.wma,.amr,.opus" @change="onUploadChange">
                 <n-upload-dragger>
                   <div style="color:#14b8a6;margin-bottom:8px;"><a-icon name="upload" size="30"></a-icon></div>

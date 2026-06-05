@@ -485,7 +485,9 @@
                 </n-tab-pane>
                 <n-tab-pane name="file" tab="文件模拟" :disabled="busy && source !== 'file'">
                   <n-space vertical size="medium" style="margin-top:12px;">
-                    <n-upload :file-list="streamFileList" :default-upload="false" :max="1" :show-file-list="false"
+                    <!-- 不设 :max="1"：达到 max 后 n-upload 会禁用触发器导致无法换文件；
+                         替换语义由 onStreamUploadChange 取末项实现（列表恒 ≤1） -->
+                    <n-upload :file-list="streamFileList" :default-upload="false" :show-file-list="false"
                               :disabled="busy || fileRunning" accept="audio/*" @change="onStreamUploadChange">
                       <n-upload-dragger>
                         <div style="color:#14b8a6;margin-bottom:6px;"><a-icon name="file" size="26"></a-icon></div>
