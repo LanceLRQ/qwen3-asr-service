@@ -8,6 +8,7 @@ import argparse
 import difflib
 import logging
 import os
+import re
 import shutil
 from collections.abc import Hashable
 
@@ -22,9 +23,75 @@ logger = logging.getLogger(__name__)
 SERVICE_ROOT = cfg.BASE_DIR
 EXAMPLE_NAME = "config.example.yaml"
 
+# 顶层键（无缩进；可前缀 # 表示注释项）。配置为扁平结构，按行提取即可
+_TOP_KEY_RE = re.compile(r"^(#\s*)?([A-Za-z_]\w*)\s*:")
+_SYNC_HEADER = "# ── 自动同步：以下为 config.example.yaml 的新增项，沿用其默认值（可直接编辑/注释）──"
 
-def resolve_config_path(cli_value: str | None, no_config: bool) -> str | None:
-    """--no-config 短路；--config 显式优先；否则自动发现，未命中时由 example 引导生成。"""
+
+def _mentioned_keys(text: str) -> set:
+    """文件中出现过的顶层键（含被注释的），用于判断"是否已存在"。"""
+    keys = set()
+    for line in text.splitlines():
+        if line[:1].isspace():            # 有缩进 → 非顶层，跳过
+            continue
+        m = _TOP_KEY_RE.match(line)
+        if m:
+            keys.add(m.group(2))
+    return keys
+
+
+def _example_active_entries(text: str) -> list:
+    """example 中"激活（未注释）"的顶层项 → [(key, 源行)]，作为待补全候选。"""
+    out = []
+    for line in text.splitlines():
+        if line[:1].isspace():
+            continue
+        m = _TOP_KEY_RE.match(line)
+        if m and m.group(1) is None:      # 未注释
+            out.append((m.group(2), line.rstrip()))
+    return out
+
+
+def sync_config_with_example(config_path: str, example_path: str) -> list:
+    """把 example 中存在、config 中缺失（且 schema 合法）的激活项追加进 config，
+    保留 config 既有内容与注释；返回新增的键列表。非破坏性、幂等、失败仅告警。"""
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            config_text = f.read()
+        with open(example_path, encoding="utf-8") as f:
+            example_text = f.read()
+    except OSError as e:
+        logger.warning(f"配置自动同步跳过（读取失败）: {e}")
+        return []
+
+    have = _mentioned_keys(config_text)
+    valid = {spec.key for spec in ARG_SPECS}    # 防 example/schema 漂移引入非法键
+    missing = [(k, line) for k, line in _example_active_entries(example_text)
+               if k not in have and k in valid]
+    if not missing:
+        return []
+
+    block = "\n".join([_SYNC_HEADER] + [line for _, line in missing])
+    new_text = config_text.rstrip("\n") + "\n\n" + block + "\n"
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.write(new_text)
+    except OSError as e:
+        logger.warning(f"配置自动同步写入失败: {e}")
+        return []
+
+    added = [k for k, _ in missing]
+    logger.info(f"配置自动同步：已向 {os.path.basename(config_path)} 追加 "
+                f"{len(added)} 个新增项: {', '.join(added)}")
+    return added
+
+
+def resolve_config_path(cli_value: str | None, no_config: bool,
+                        update_config: bool = False) -> str | None:
+    """--no-config 短路；--config 显式优先；否则自动发现，未命中时由 example 引导生成。
+
+    update_config=True（--update-config）时，对自动发现到的 config.yaml 追加 example 新增项。
+    """
     if no_config:
         return None
     if cli_value is not None:
@@ -34,16 +101,22 @@ def resolve_config_path(cli_value: str | None, no_config: bool) -> str | None:
 
     yaml_path = os.path.join(SERVICE_ROOT, "config.yaml")
     yml_path = os.path.join(SERVICE_ROOT, "config.yml")
+    example = os.path.join(SERVICE_ROOT, EXAMPLE_NAME)
+    # --update-config 时，把 example 的新增项补进自动发现到的本地配置（受管文件才同步，
+    # --config 外部文件与刚 bootstrap 的不触发）
     if os.path.isfile(yaml_path):
         if os.path.isfile(yml_path):
             logger.warning("config.yaml 与 config.yml 并存，已加载 config.yaml，忽略 config.yml")
         logger.info("自动加载本地配置: config.yaml")
+        if update_config and os.path.isfile(example):
+            sync_config_with_example(yaml_path, example)
         return yaml_path
     if os.path.isfile(yml_path):
         logger.info("自动加载本地配置: config.yml")
+        if update_config and os.path.isfile(example):
+            sync_config_with_example(yml_path, example)
         return yml_path
 
-    example = os.path.join(SERVICE_ROOT, EXAMPLE_NAME)
     if os.path.isfile(example):
         try:
             shutil.copyfile(example, yaml_path)   # 引导生成：首启即获得可编辑的真实配置
@@ -143,6 +216,7 @@ def merge_runtime_config(cli_ns: argparse.Namespace) -> argparse.Namespace:
     cli = dict(vars(cli_ns))
     no_config = cli.pop("no_config", False)
     config_arg = cli.pop("config", None)
+    update_config = cli.pop("update_config", False)
 
     merged = schema_defaults()
 
@@ -155,7 +229,7 @@ def merge_runtime_config(cli_ns: argparse.Namespace) -> argparse.Namespace:
         merged["api_key"] = env_api_key
 
     # ③ 配置文件
-    path = resolve_config_path(config_arg, no_config)
+    path = resolve_config_path(config_arg, no_config, update_config)
     if path is not None:
         merged.update(load_config_file(path))
     cfg.CONFIG_FILE = os.path.basename(path) if path else None

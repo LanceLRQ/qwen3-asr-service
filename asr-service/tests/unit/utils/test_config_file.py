@@ -254,3 +254,62 @@ def test_float_rejects_bool(service_root):
 def test_float_rejects_str(service_root):
     with pytest.raises(SystemExit, match="speaker_threshold: 期望数值"):
         cf.validate_config({"speaker_threshold": "0.5"})
+
+
+# ─── sync_config_with_example（自动补全 example 新增项）───
+
+def _ex(service_root, text):
+    p = service_root / cf.EXAMPLE_NAME
+    p.write_text(text, encoding="utf-8")
+    return str(p)
+
+
+def test_sync_appends_missing_active_keys(service_root):
+    c = _write(service_root, "device: cpu\n")
+    e = _ex(service_root, "device: cuda\nenable_stream: true\n# max_queue_size: 100\n")
+    added = cf.sync_config_with_example(c, e)
+    assert added == ["enable_stream"]                 # device 已存在；max_queue_size 在 example 注释→不取
+    text = (service_root / "config.yaml").read_text(encoding="utf-8")
+    assert "device: cpu" in text                      # 既有值保留
+    assert "enable_stream: true" in text              # 新增项以 example 值追加
+
+
+def test_sync_keeps_inline_comment(service_root):
+    c = _write(service_root, "device: cpu\n")
+    e = _ex(service_root, "use_punc: false  # 标点恢复\n")
+    cf.sync_config_with_example(c, e)
+    assert "use_punc: false  # 标点恢复" in (service_root / "config.yaml").read_text(encoding="utf-8")
+
+
+def test_sync_skips_key_commented_in_config(service_root):
+    c = _write(service_root, "# enable_stream: true\n")   # 用户主动注释=已声明
+    e = _ex(service_root, "enable_stream: true\n")
+    assert cf.sync_config_with_example(c, e) == []
+
+
+def test_sync_skips_unknown_key(service_root):
+    c = _write(service_root, "device: cpu\n")
+    e = _ex(service_root, "device: cuda\nbogus_key: 1\n")
+    assert cf.sync_config_with_example(c, e) == []    # bogus_key 不在 schema，不引入
+
+
+def test_sync_idempotent(service_root):
+    c = _write(service_root, "device: cpu\n")
+    e = _ex(service_root, "device: cuda\nenable_stream: true\n")
+    assert cf.sync_config_with_example(c, e) == ["enable_stream"]
+    assert cf.sync_config_with_example(c, e) == []    # 二次无新增（幂等）
+
+
+def test_update_config_flag_triggers_sync(service_root):
+    _write(service_root, "device: cpu\n")
+    _ex(service_root, "device: cuda\nuse_punc: true\n")
+    p = cf.resolve_config_path(None, no_config=False, update_config=True)
+    assert p == str(service_root / "config.yaml")
+    assert "use_punc: true" in (service_root / "config.yaml").read_text(encoding="utf-8")
+
+
+def test_autodiscover_no_sync_by_default(service_root):
+    _write(service_root, "device: cpu\n")
+    _ex(service_root, "device: cuda\nuse_punc: true\n")
+    cf.resolve_config_path(None, no_config=False)     # 不传 --update-config → 不改动 config.yaml
+    assert "use_punc: true" not in (service_root / "config.yaml").read_text(encoding="utf-8")

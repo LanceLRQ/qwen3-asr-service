@@ -103,6 +103,7 @@ Reduces false triggers from far-field sounds and ambient noise. `--vad-speech-no
 |-----------|-------------|
 | `--config <PATH>` | Explicitly specify a YAML config file (startup fails if missing) |
 | `--no-config` | Skip config-file loading and bootstrap generation (pure defaults + env vars + CLI; for troubleshooting) |
+| `--update-config` | Sync newly added keys from `config.example.yaml` into `config.yaml` (append missing keys, keep existing values; off by default) |
 
 ## Config File (config.yaml)
 
@@ -128,6 +129,7 @@ bash start.sh --no-config
 - The scan directory is the service root (`asr-service/`); `config.yaml` takes precedence over `config.yml` (a warning is logged when both exist).
 - **Deleting `config.yaml` and restarting = resetting the configuration** (regenerated from the example).
 - The bootstrap-generated `config.yaml` has permission `600` (it may contain `api_key`).
+- **Sync new keys (`--update-config`, off by default)**: when started with `--update-config`, newly **active** keys from `config.example.yaml` are appended to the auto-discovered `config.yaml` (using the example's default value, under an "auto-sync" comment header); existing values and comments are left untouched. Use it to fill in new config options after an upgrade; keys you have commented out are not re-added. Only the auto-discovered `config.yaml` is touched — an external file passed via `--config` is never modified.
 
 ### Format and Validation
 

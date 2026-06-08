@@ -103,6 +103,7 @@
 |------|------|
 | `--config <PATH>` | 显式指定 YAML 配置文件（文件不存在则启动报错） |
 | `--no-config` | 跳过配置文件加载与引导生成（纯默认值 + 环境变量 + 命令行，排障用） |
+| `--update-config` | 把 `config.example.yaml` 的新增项同步进 `config.yaml`（追加缺失项、保留既有值；默认关） |
 
 ## 配置文件（config.yaml）
 
@@ -128,6 +129,7 @@ bash start.sh --no-config
 - 扫描目录为服务根目录（`asr-service/`），`config.yaml` 优先于 `config.yml`（并存时告警并取 `.yaml`）。
 - **删除 `config.yaml` 后重启 = 重置配置**（重新由 example 生成默认配置）。
 - 引导生成的 `config.yaml` 权限为 `600`（该文件可能写入 `api_key`）。
+- **同步新增项（`--update-config`，默认关）**：加 `--update-config` 启动时，会把 `config.example.yaml` 里**新增的激活项**追加进自动发现到的 `config.yaml`（沿用 example 默认值，加「自动同步」注释头），既有值与注释保持不动。服务升级带来新配置项时用它一键补齐；已被你注释掉的键不会被重新加入。仅作用于自动发现的 `config.yaml`，`--config` 指定的外部文件不改动。
 
 ### 格式与校验
 

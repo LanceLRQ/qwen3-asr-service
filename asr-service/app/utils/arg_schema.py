@@ -254,6 +254,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-config", dest="no_config", action="store_true", default=False,
         help="跳过配置文件加载与引导生成（纯默认值+环境变量+CLI 启动）",
     )
+    group.add_argument(
+        "--update-config", dest="update_config", action="store_true", default=False,
+        help="启动时把 config.example.yaml 的新增项同步进 config.yaml"
+             "（追加缺失项、沿用 example 默认值，保留既有值与注释；默认关）",
+    )
     return parser
 
 
