@@ -8,6 +8,10 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.api.schemas import ASRResponse, TaskStatusResponse, TaskListResponse, CancelResponse
 from app.config import UPLOADS_DIR, MAX_AUDIO_FILE_SIZE
+from app.utils.validation import (
+    coerce_num_in_range, MAX_SEGMENT_RANGE,
+    SPK_ID_THRESHOLD_RANGE, SPK_ID_MARGIN_RANGE,
+)
 import app.config as cfg
 
 logger = logging.getLogger(__name__)
@@ -52,10 +56,42 @@ async def submit_asr(
     file: UploadFile = File(...),
     language: str | None = Form(None),
     identify_speakers: bool = Form(False),
+    with_punc: bool | None = Form(None),
+    with_words: bool | None = Form(None),
+    diarize: bool | None = Form(None),
+    max_segment: int | None = Form(None),
+    speaker_id_threshold: float | None = Form(None),
+    speaker_id_margin: float | None = Form(None),
 ) -> ASRResponse:
-    """提交 ASR 任务（identify_speakers=true 时对分离结果做声纹识别，需声纹库已启用）"""
+    """提交 ASR 任务。
+
+    可选按请求覆盖（缺省=服务端默认）：with_punc/with_words/diarize 降级开关、
+    max_segment 分段时长、speaker_id_threshold/margin 声纹识别严格度。功能未启用的
+    覆盖项不报错，转写结果的 result.warnings 列出被忽略项。
+    """
     if _task_manager is None:
         raise HTTPException(status_code=503, detail="服务尚未就绪，请稍后重试")
+
+    # 数值覆盖项范围校验（越界 → 400）；布尔与降级开关无需范围校验
+    try:
+        options = {}
+        if with_punc is not None:
+            options["with_punc"] = with_punc
+        if with_words is not None:
+            options["with_words"] = with_words
+        if diarize is not None:
+            options["diarize"] = diarize
+        if max_segment is not None:
+            options["max_segment"] = coerce_num_in_range(
+                max_segment, MAX_SEGMENT_RANGE, "max_segment", cast=int)
+        if speaker_id_threshold is not None:
+            options["speaker_id_threshold"] = coerce_num_in_range(
+                speaker_id_threshold, SPK_ID_THRESHOLD_RANGE, "speaker_id_threshold")
+        if speaker_id_margin is not None:
+            options["speaker_id_margin"] = coerce_num_in_range(
+                speaker_id_margin, SPK_ID_MARGIN_RANGE, "speaker_id_margin")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     # 1. 校验文件扩展名
     file_ext = os.path.splitext(file.filename or "audio.wav")[1].lower() or ".wav"
@@ -98,6 +134,7 @@ async def submit_asr(
             language=language,
             wav_name=file.filename,
             identify_speakers=identify_speakers,
+            options=options,
         )
     except queue.Full:
         os.remove(save_path)

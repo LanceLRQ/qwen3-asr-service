@@ -41,6 +41,7 @@ class ASRPipeline:
         progress_callback=None,
         cancelled=None,
         identify_speakers: bool = False,
+        options: dict | None = None,
     ) -> dict:
         """
         执行完整 ASR Pipeline。
@@ -57,6 +58,27 @@ class ASRPipeline:
         """
         wav_path = None
         chunk_dir = os.path.join(AUDIO_CHUNKS_DIR, task_id)
+
+        # 按请求覆盖（缺省=服务端默认）；降级开关只能关、不能开启未加载模型
+        opts = options or {}
+        with_punc = opts.get("with_punc", True)
+        with_words = opts.get("with_words", True)
+        diarize = opts.get("diarize", True)
+        max_segment = opts.get("max_segment")            # None → cfg
+        id_threshold = opts.get("speaker_id_threshold")
+        id_margin = opts.get("speaker_id_margin")
+        # 合法但功能未启用的参数 → 软提示（不报错），随 result 返回
+        warnings = []
+        if opts.get("with_punc") is True and self.punc is None:
+            warnings.append("with_punc")
+        if opts.get("with_words") is True and not self.asr.align_enabled:
+            warnings.append("with_words")
+        if opts.get("diarize") is True and self.speaker is None:
+            warnings.append("diarize")
+        if identify_speakers and self.speaker_service is None:
+            warnings.append("identify_speakers")
+        if (id_threshold is not None or id_margin is not None) and self.speaker_service is None:
+            warnings.append("speaker_id_threshold/margin")
 
         try:
             os.makedirs(chunk_dir, exist_ok=True)
@@ -95,10 +117,13 @@ class ASRPipeline:
                 }
                 if self.speaker is not None:
                     result["speakers"] = []
+                if warnings:
+                    result["warnings"] = warnings
                 return result
 
             # 2. 合并相邻 VAD 段 + 切分写入 chunk 文件
-            chunks = self._split_segments_to_chunks(wav_path, vad_segments, chunk_dir)
+            chunks = self._split_segments_to_chunks(
+                wav_path, vad_segments, chunk_dir, max_segment)
             total_chunks = len(chunks)
             logger.info(f"[Pipeline] 切片完成: {len(vad_segments)} 个 VAD 段 -> {total_chunks} 个 chunk")
 
@@ -115,8 +140,13 @@ class ASRPipeline:
                     chunks, total_chunks, language, cancelled, progress_callback,
                 )
 
+            # 词级时间戳降级：请求 with_words=false 时剥离 ASR 已产出的 words
+            if not with_words:
+                for seg in segments:
+                    seg.pop("words", None)
+
             # 4. 标点恢复（可选）
-            if self.punc:
+            if self.punc and with_punc:
                 punc_count = 0
                 for seg in segments:
                     if seg["text"] and seg["text"] != "[识别失败]":
@@ -131,7 +161,7 @@ class ASRPipeline:
 
             # 4.5 说话人分离（可选；容错对齐标点：失败只丢标签，不破坏转写）
             speakers_result = None
-            if self.speaker is not None and segments and not (cancelled and cancelled()):
+            if self.speaker is not None and diarize and segments and not (cancelled and cancelled()):
                 if progress_callback:
                     progress_callback(0.90)
                 diar = None
@@ -151,7 +181,8 @@ class ASRPipeline:
                 # 4.6 声纹识别 + 自动登记（可选）：speakers 升级为带 speaker_id/name 的
                 # 映射表；map_and_enroll_clusters 永不抛错（失败退回匿名）
                 if identify_speakers and self.speaker_service is not None and diar is not None:
-                    mapping = self.speaker_service.map_and_enroll_clusters(diar.clusters)
+                    mapping = self.speaker_service.map_and_enroll_clusters(
+                        diar.clusters, id_threshold=id_threshold, id_margin=id_margin)
                     name_of = {m["label"]: m for m in mapping}
                     for seg in segments:
                         m = name_of.get(seg.get("speaker"))
@@ -181,6 +212,8 @@ class ASRPipeline:
             }
             if speakers_result is not None:
                 result["speakers"] = speakers_result
+            if warnings:
+                result["warnings"] = warnings
             return result
 
         finally:
@@ -348,16 +381,17 @@ class ASRPipeline:
     def _merge_vad_segments(
         self,
         vad_segments: list[tuple[int, int]],
+        max_segment_sec: float | None = None,
     ) -> list[tuple[int, int]]:
         """
         贪心合并相邻 VAD 段：从第一段开始，持续追加后续段，
-        直到合并后总跨度（首段 start 到末段 end）超过 cfg.MAX_SEGMENT_DURATION，
+        直到合并后总跨度（首段 start 到末段 end）超过 max_segment_sec（缺省=cfg），
         则切出一组，开始新的一组。保留段间静音以维持时间戳准确性。
         """
         if not vad_segments:
             return []
 
-        max_span_ms = int(cfg.MAX_SEGMENT_DURATION * 1000)
+        max_span_ms = int((max_segment_sec or cfg.MAX_SEGMENT_DURATION) * 1000)
         merged = []
         group_start, group_end = vad_segments[0]
 
@@ -377,20 +411,21 @@ class ASRPipeline:
         wav_path: str,
         vad_segments: list[tuple[int, int]],
         chunk_dir: str,
+        max_segment_sec: float | None = None,
     ) -> list[dict]:
         """
-        合并相邻 VAD 段后切分音频，超长段二次切分。
+        合并相邻 VAD 段后切分音频，超长段二次切分。max_segment_sec 缺省=cfg。
 
         返回:
             [{"path": str, "offset_sec": float, "duration_sec": float}, ...]
         """
         data, sr = sf.read(wav_path)
+        eff_max = max_segment_sec or cfg.MAX_SEGMENT_DURATION
 
         # 先合并碎片段
-        merged = self._merge_vad_segments(vad_segments)
+        merged = self._merge_vad_segments(vad_segments, eff_max)
         logger.info(
-            f"VAD 段合并: {len(vad_segments)} -> {len(merged)} "
-            f"(阈值={cfg.MAX_SEGMENT_DURATION}s)"
+            f"VAD 段合并: {len(vad_segments)} -> {len(merged)} (阈值={eff_max}s)"
         )
 
         chunks = []
@@ -402,7 +437,7 @@ class ASRPipeline:
             segment_data = data[start_sample:end_sample]
             segment_duration = len(segment_data) / sr
 
-            if segment_duration <= cfg.MAX_SEGMENT_DURATION:
+            if segment_duration <= eff_max:
                 chunk_path = os.path.join(chunk_dir, f"chunk_{idx:04d}.wav")
                 sf.write(chunk_path, segment_data, sr)
                 chunks.append({
@@ -413,7 +448,7 @@ class ASRPipeline:
                 idx += 1
             else:
                 # 单段超长（理论上合并后不会出现，但作为兜底）
-                sub_samples = int(cfg.MAX_SEGMENT_DURATION * sr)
+                sub_samples = int(eff_max * sr)
                 offset = 0
                 while offset < len(segment_data):
                     end = min(offset + sub_samples, len(segment_data))

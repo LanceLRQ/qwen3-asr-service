@@ -21,6 +21,19 @@ class StartMsg(BaseModel):
     noise_filter: bool | None = None
     energy_floor_dbfs: float | None = None
     snr_min_db: float | None = None
+    # 说话人分辨（需 speaker_labels；缺省=服务端默认）
+    speaker_threshold: float | None = None
+    speaker_min_seg_ms: int | None = None
+    speaker_max: int | None = None
+    speaker_id_threshold: float | None = None    # 声纹识别严格度（需 speaker_identification）
+    speaker_id_margin: float | None = None
+    # 响应快慢 / 分段
+    max_end_silence_ms: int | None = None        # 断句尾静音
+    max_segment_sec: int | None = None           # 长句兜底切分
+    # 输出内容降级开关（只能关；开启需对应模型已加载，否则进 warnings 软提示）
+    with_punc: bool | None = None
+    with_words: bool | None = None
+    diarize: bool | None = None
 
 
 class StopMsg(BaseModel):

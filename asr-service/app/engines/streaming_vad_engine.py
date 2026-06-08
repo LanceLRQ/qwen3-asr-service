@@ -36,12 +36,20 @@ class StreamingVADEngine:
         """每会话独立 cache（FunASR 在线模式以空 dict 初始化）。"""
         return {}
 
-    def process_chunk(self, pcm16k: np.ndarray, cache: dict, is_final: bool) -> list[dict]:
+    def process_chunk(self, pcm16k: np.ndarray, cache: dict, is_final: bool,
+                      max_end_silence_ms: int | None = None) -> list[dict]:
         """喂入一块 16kHz 单声道音频，返回句边界事件列表。
 
         事件: {"type": "start"|"end"|"complete", "start": ms|None, "end": ms|None}
+
+        max_end_silence_ms：断句尾静音（FunASR 唯一支持运行时覆盖的 VAD 参数，
+        仅会话首帧空 cache 时由 init_cache 生效；后续帧忽略）。调用方应每会话固定传值
+        （含默认）——init_cache 写共享 vad_opts，_infer_lock 串行化保证 cache 快照不串。
         """
         with self._infer_lock:               # 串行化多会话/跨路径的并发推理
+            kwargs = {}
+            if max_end_silence_ms is not None:
+                kwargs["max_end_silence_time"] = int(max_end_silence_ms)
             res = self._model.generate(
                 input=pcm16k,
                 cache=cache,
@@ -49,6 +57,7 @@ class StreamingVADEngine:
                 chunk_size=self._chunk_ms,
                 fs=16000,
                 disable_pbar=True,
+                **kwargs,
             )
         return self._parse(res)
 

@@ -57,7 +57,15 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 |-----------|------|---------|-------------|
 | file | File | Required | Audio file: WAV/MP3/FLAC/M4A/AAC/OGG/WMA/AMR/OPUS |
 | language | string | null | Language code, null for auto-detection |
-| identify_speakers | bool | false | Run voiceprint identification on the diarized speakers (requires both speaker diarization and the [voiceprint database](#speaker-diarization--voiceprint-identification) to be enabled, otherwise silently ignored) |
+| identify_speakers | bool | false | Run voiceprint identification on the diarized speakers (requires both speaker diarization and the [voiceprint database](#speaker-diarization--voiceprint-identification) to be enabled) |
+| with_punc | bool | server default | Whether to restore punctuation (downgrade-only toggle; no punctuation if the model isn't loaded server-side) |
+| with_words | bool | server default | Whether to emit word-level timestamps (requires the alignment model loaded) |
+| diarize | bool | server default | Whether to run speaker diarization (turn off to save compute; requires the speaker engine loaded) |
+| max_segment | int | server default | Max VAD-merge segment length (seconds), range `[1, 30]` |
+| speaker_id_threshold | float | server default | Voiceprint 1:N identification threshold, range `[0, 1]` (requires the voiceprint DB enabled) |
+| speaker_id_margin | float | server default | Voiceprint top1-top2 margin, range `[0, 1]` (requires the voiceprint DB enabled) |
+
+> Out-of-range values → 400; overrides for features that aren't enabled don't error — the transcription `result.warnings` (string array) lists the ignored params.
 
 Response:
 
@@ -336,8 +344,19 @@ Client                                  Server
 | noise_filter | server default | Override far-field segment gating for this session (defaults to the server config; requires `capabilities.noise_filter_tunable=true`) |
 | energy_floor_dbfs | server default | Override the absolute energy gate (dBFS) for this session, range `[-90, 0]`; out-of-range returns `invalid_config` |
 | snr_min_db | server default | Override the adaptive SNR gate (dB) for this session, range `[0, 40]`; `0` disables this gate |
+| speaker_threshold | server default | Online clustering cosine threshold, range `[0.2, 0.9]` (requires `capabilities.speaker_labels=true`) |
+| speaker_min_seg_ms | server default | Short-segment gate (ms), range `[0, 10000]` |
+| speaker_max | server default | Max speakers, range `[1, 50]` |
+| speaker_id_threshold | server default | Voiceprint identification threshold, range `[0, 1]` (requires `capabilities.speaker_identification=true`) |
+| speaker_id_margin | server default | Voiceprint top1-top2 margin, range `[0, 1]` |
+| max_end_silence_ms | server default | Endpoint trailing silence (ms), range `[200, 2000]`: smaller = faster output but choppier; larger = won't interrupt but slower |
+| max_segment_sec | server default | Long-sentence fallback split (seconds), range `[1, 60]` |
+| with_punc / with_words / diarize | server default | Downgrade toggles: disable punctuation / word timestamps / diarization (off only; can't enable a model that isn't loaded) |
 
-> Far-field overrides affect only the current session and are range-clamped server-side. The VAD sensitivity `vad_speech_noise_thres` is a server-global setting (FunASR constraint) and cannot be adjusted per session.
+> **Clamping & soft notices**: these overrides affect only the current session; out-of-range / wrong-type → `invalid_config` (fatal).
+> A well-formed param whose feature isn't enabled (e.g. `diarize:true` with no speaker engine loaded) does NOT error —
+> the server sends a non-fatal `error` after `start` (`code="params_ignored"`, `fatal=false`) whose `message` lists the ignored params.
+> The VAD sensitivity `vad_speech_noise_thres` is a server-global setting (FunASR constraint) and cannot be adjusted per session.
 
 **Audio frames (binary frames)**: PCM16 little-endian, mono, at the declared `audio_fs`. Max 2MB per frame (oversized frames are rejected without disconnecting).
 

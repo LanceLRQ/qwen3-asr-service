@@ -159,19 +159,22 @@ class SpeakerService:
     def _anon(label: str) -> dict:
         return {"label": label, "speaker_id": None, "name": None, "score": None}
 
-    def map_clusters(self, clusters: list[dict]) -> list[dict]:
+    def map_clusters(self, clusters: list[dict], *,
+                     id_threshold: float | None = None,
+                     id_margin: float | None = None) -> list[dict]:
         """实时联动入口（仅识别，不自动登记）。
 
         clusters = [{"label", "centroid"}]；返回每簇 {"label","speaker_id","name","score"}，
         未命中/任何异常 → 该簇 speaker_id/name=None（识别失败永远优雅退回匿名）。
+        id_threshold/id_margin 缺省=服务端 cfg（支持按会话覆盖）。
         """
+        thr = cfg.SPEAKER_ID_THRESHOLD if id_threshold is None else id_threshold
+        mgn = cfg.SPEAKER_ID_MARGIN if id_margin is None else id_margin
         out = []
         for c in clusters:
             label = c.get("label", "?")
             try:
-                hit = self.store.identify(c["centroid"],
-                                          threshold=cfg.SPEAKER_ID_THRESHOLD,
-                                          margin=cfg.SPEAKER_ID_MARGIN)
+                hit = self.store.identify(c["centroid"], threshold=thr, margin=mgn)
                 self.store.audit("identify", hit["speaker_id"] if hit else None,
                                  {"matched": hit is not None,
                                   "score": hit["score"] if hit else None,
@@ -182,21 +185,24 @@ class SpeakerService:
                 out.append(self._anon(label))
         return out
 
-    def map_and_enroll_clusters(self, clusters: list[dict]) -> list[dict]:
+    def map_and_enroll_clusters(self, clusters: list[dict], *,
+                                id_threshold: float | None = None,
+                                id_margin: float | None = None) -> list[dict]:
         """离线联动入口（识别 + 自动登记）。
 
         clusters = [{"label","centroid","dur_sec"}]（S3 衔接面）。未命中且开启
         speaker_auto_enroll 且簇语音总时长过门槛 → 以「说话人_NN」占位名登记
         （source='auto'；开启自动登记 = 部署方声明已获数据主体同意，consent 同责）。
         已命中的说话人不自动追加模板（防投毒）。登记失败退回匿名，不影响转写。
+        id_threshold/id_margin 缺省=服务端 cfg（支持按请求覆盖）。
         """
+        thr = cfg.SPEAKER_ID_THRESHOLD if id_threshold is None else id_threshold
+        mgn = cfg.SPEAKER_ID_MARGIN if id_margin is None else id_margin
         out = []
         for c in clusters:
             label = c.get("label", "?")
             try:
-                hit = self.store.identify(c["centroid"],
-                                          threshold=cfg.SPEAKER_ID_THRESHOLD,
-                                          margin=cfg.SPEAKER_ID_MARGIN)
+                hit = self.store.identify(c["centroid"], threshold=thr, margin=mgn)
                 self.store.audit("identify", hit["speaker_id"] if hit else None,
                                  {"matched": hit is not None,
                                   "score": hit["score"] if hit else None,

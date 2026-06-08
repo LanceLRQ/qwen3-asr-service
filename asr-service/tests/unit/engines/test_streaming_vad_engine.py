@@ -78,3 +78,15 @@ def test_process_chunk_forwards_online_kwargs():
     assert kwargs["chunk_size"] == 200
     assert kwargs["fs"] == 16000
     assert kwargs["cache"] == {"c": 1}
+
+
+def test_max_end_silence_forwarded_when_given():
+    sve, vad = _sve([{"value": []}])
+    sve.process_chunk(np.zeros(10, dtype=np.float32), {}, False, max_end_silence_ms=500)
+    assert vad._model.generate.call_args.kwargs["max_end_silence_time"] == 500
+
+
+def test_max_end_silence_absent_when_none():
+    sve, vad = _sve([{"value": []}])
+    sve.process_chunk(np.zeros(10, dtype=np.float32), {}, False)
+    assert "max_end_silence_time" not in vad._model.generate.call_args.kwargs

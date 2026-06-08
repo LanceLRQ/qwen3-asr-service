@@ -26,7 +26,7 @@ class FakeSVAD:
     def new_cache(self):
         return {}
 
-    def process_chunk(self, arr, cache, is_final):
+    def process_chunk(self, arr, cache, is_final, max_end_silence_ms=None):
         if is_final:
             return list(self.final_events)
         ev = self.events_by_call.get(self.calls, [])
@@ -239,10 +239,10 @@ async def test_idle_buffer_trimmed_during_silence():
 async def test_flush_survives_vad_final_failure():
     # VAD final 冲刷抛异常时，仍应冲刷未闭合句的剩余缓冲
     class RaisingFinalSVAD(FakeSVAD):
-        def process_chunk(self, arr, cache, is_final):
+        def process_chunk(self, arr, cache, is_final, max_end_silence_ms=None):
             if is_final:
                 raise RuntimeError("vad boom")
-            return super().process_chunk(arr, cache, is_final)
+            return super().process_chunk(arr, cache, is_final, max_end_silence_ms)
 
     svad = RaisingFinalSVAD(events_by_call={0: [{"type": "start", "start": 0, "end": None}]})
     s, asr, ex = _make_session(svad)
@@ -437,7 +437,7 @@ class FakeSpeakerService:
         self.calls = 0
         self.store = FakeSpeakerStore()
 
-    def map_clusters(self, clusters):
+    def map_clusters(self, clusters, *, id_threshold=None, id_margin=None):
         name = self.names[self.calls] if self.calls < len(self.names) else self.names[-1]
         self.calls += 1
         if name is None:
@@ -539,7 +539,7 @@ async def test_identify_service_error_degrades():
     class BoomService:
         store = FakeSpeakerStore()
 
-        def map_clusters(self, clusters):
+        def map_clusters(self, clusters, *, id_threshold=None, id_margin=None):
             raise RuntimeError("db boom")
 
     s, asr, ex = _make_session(_three_finals_svad(), speaker=FakeSpeakerEngine(),

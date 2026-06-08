@@ -22,6 +22,13 @@ from app.utils.result_parser import extract_text, extract_words
 from app.engines.streaming_vad_engine import StreamingVADEngine
 from app.runtime.speaker_cluster import OnlineSpeakerClusterer
 from app.runtime.noise_gate import NoiseFloorTracker, rms_dbfs, should_gate
+from app.utils.validation import (
+    coerce_num_in_range, parse_bool,
+    SPK_THRESHOLD_RANGE, SPK_MIN_SEG_RANGE, SPK_MAX_RANGE,
+    MAX_SEGMENT_SEC_RANGE, MAX_END_SILENCE_RANGE,
+    SPK_ID_THRESHOLD_RANGE, SPK_ID_MARGIN_RANGE,
+    ENERGY_FLOOR_RANGE, SNR_MIN_RANGE,
+)
 import app.config as cfg
 
 logger = logging.getLogger(__name__)
@@ -30,22 +37,6 @@ _TARGET_SR = 16000
 _MIN_AUDIO_FS = 8000          # 客户端 audio_fs 允许下限
 _MAX_AUDIO_FS = 96000         # 客户端 audio_fs 允许上限
 _IDLE_KEEP_MS = 5000          # 无活动语音段时缓冲保留余量（覆盖 VAD 事件回溯）
-
-# 远场过滤客户端覆盖的钳制范围（服务端硬边界，防滥用）
-_ENERGY_FLOOR_RANGE = (-90.0, 0.0)    # dBFS（满量程参考，≤0）
-_SNR_MIN_RANGE = (0.0, 40.0)          # dB；0=关闭 SNR 门
-
-
-def _coerce_float_in_range(value, rng, name):
-    """客户端浮点参数：类型转换 + 范围校验，越界抛 ValueError（体例同 audio_fs）。"""
-    lo, hi = rng
-    try:
-        v = float(value)
-    except (TypeError, ValueError):
-        raise ValueError(f"{name} 非法: {value!r}")
-    if not (lo <= v <= hi):
-        raise ValueError(f"{name} 必须在 [{lo}, {hi}] 范围内，收到 {v}")
-    return v
 
 
 class AudioBuffer:
@@ -125,6 +116,18 @@ class StreamSession:
         self._snr_min_db = snr_min_db
         self._noise_tracker = None               # configure() 时重建（会话域噪声底）
 
+        # 会话级可覆盖参数（默认=服务端 cfg；configure() 经 _apply_session_override 覆盖）
+        self._spk_threshold = cfg.SPEAKER_THRESHOLD
+        self._spk_min_seg_ms = cfg.SPEAKER_MIN_SEG_MS
+        self._spk_max = cfg.SPEAKER_MAX
+        self._spk_id_threshold = cfg.SPEAKER_ID_THRESHOLD
+        self._spk_id_margin = cfg.SPEAKER_ID_MARGIN
+        self._max_end_silence_ms = cfg.VAD_MAX_SILENCE   # 始终显式传 VAD，避免跨会话继承
+        self._with_punc = True                   # 降级开关：仅能关（不能开启未加载模型）
+        self._with_words = True
+        self._with_diarize = True
+        self._warnings = []                      # 因功能未启用被忽略的参数（软提示）
+
         self.audio_fs = _TARGET_SR
         self.language = language
         self.wav_name = sid
@@ -153,18 +156,24 @@ class StreamSession:
         self.seg_start_ms = None
         self.buffer = AudioBuffer(sr=_TARGET_SR)
         self._frame_count = 0
-        if self._speaker is not None:
+        self._apply_session_override(cfg_msg)
+        self._apply_noise_override(cfg_msg)
+        if self._speaker is not None and self._with_diarize:
             self._spk_cluster = OnlineSpeakerClusterer(
-                threshold=cfg.SPEAKER_THRESHOLD,
-                max_speakers=cfg.SPEAKER_MAX,
-                min_seg_ms=cfg.SPEAKER_MIN_SEG_MS,
+                threshold=self._spk_threshold,
+                max_speakers=self._spk_max,
+                min_seg_ms=self._spk_min_seg_ms,
             )
+        else:
+            self._spk_cluster = None
         self._identify = bool(cfg_msg.get("identify_speakers", False))
         self._spk_name_cache = {}
-        self._apply_noise_override(cfg_msg)
         self._noise_tracker = NoiseFloorTracker() if self._noise_filter else None
+        self._warnings = self._collect_ignored_params(cfg_msg)
         logger.info(f"[stream] 会话配置 sid={self.sid[:8]} audio_fs={self.audio_fs} "
-                    f"language={self.language} wav={self.wav_name}")
+                    f"language={self.language} wav={self.wav_name} "
+                    f"覆盖={'有' if self._warnings else '无'}忽略项")
+        return self._warnings
 
     def _apply_noise_override(self, cfg_msg: dict):
         """客户端 start 消息可选覆盖方案1 阈值（缺省=服务端默认），服务端范围钳制。
@@ -172,18 +181,72 @@ class StreamSession:
         越界/类型错误抛 ValueError → ws_routes 回 invalid_config（体例同 audio_fs）。
         仅影响本会话；vad_speech_noise_thres 受 FunASR 构造期限制不可按会话调，仍为全局。
         """
-        nf = cfg_msg.get("noise_filter")
-        if nf is not None:
-            if not isinstance(nf, bool):
-                raise ValueError(f"noise_filter 必须为布尔值，收到 {nf!r}")
-            self._noise_filter = nf
+        self._noise_filter = parse_bool(
+            cfg_msg.get("noise_filter"), self._noise_filter, "noise_filter")
         ef = cfg_msg.get("energy_floor_dbfs")
         if ef is not None:
-            self._energy_floor_dbfs = _coerce_float_in_range(
-                ef, _ENERGY_FLOOR_RANGE, "energy_floor_dbfs")
+            self._energy_floor_dbfs = coerce_num_in_range(
+                ef, ENERGY_FLOOR_RANGE, "energy_floor_dbfs")
         sn = cfg_msg.get("snr_min_db")
         if sn is not None:
-            self._snr_min_db = _coerce_float_in_range(sn, _SNR_MIN_RANGE, "snr_min_db")
+            self._snr_min_db = coerce_num_in_range(sn, SNR_MIN_RANGE, "snr_min_db")
+
+    def _apply_session_override(self, cfg_msg: dict):
+        """客户端 start 可选覆盖会话级参数（缺省=服务端默认），服务端范围钳制。
+
+        越界/类型错误抛 ValueError → ws_routes 回 invalid_config（体例同 audio_fs）；
+        参数合法但功能未启用的情形不在此报错，由 _collect_ignored_params 收集为软提示。
+        说话人三参（threshold/min_seg/max）仅作用于在线归簇——离线用谱聚类，不在此列。
+        """
+        st = cfg_msg.get("speaker_threshold")
+        if st is not None:
+            self._spk_threshold = coerce_num_in_range(st, SPK_THRESHOLD_RANGE, "speaker_threshold")
+        ms = cfg_msg.get("speaker_min_seg_ms")
+        if ms is not None:
+            self._spk_min_seg_ms = coerce_num_in_range(
+                ms, SPK_MIN_SEG_RANGE, "speaker_min_seg_ms", cast=int)
+        sx = cfg_msg.get("speaker_max")
+        if sx is not None:
+            self._spk_max = coerce_num_in_range(sx, SPK_MAX_RANGE, "speaker_max", cast=int)
+        it = cfg_msg.get("speaker_id_threshold")
+        if it is not None:
+            self._spk_id_threshold = coerce_num_in_range(
+                it, SPK_ID_THRESHOLD_RANGE, "speaker_id_threshold")
+        im = cfg_msg.get("speaker_id_margin")
+        if im is not None:
+            self._spk_id_margin = coerce_num_in_range(im, SPK_ID_MARGIN_RANGE, "speaker_id_margin")
+        es = cfg_msg.get("max_end_silence_ms")
+        if es is not None:
+            self._max_end_silence_ms = coerce_num_in_range(
+                es, MAX_END_SILENCE_RANGE, "max_end_silence_ms", cast=int)
+        sg = cfg_msg.get("max_segment_sec")
+        if sg is not None:
+            self._max_segment_sec = coerce_num_in_range(
+                sg, MAX_SEGMENT_SEC_RANGE, "max_segment_sec", cast=int)
+        self._with_punc = parse_bool(cfg_msg.get("with_punc"), self._with_punc, "with_punc")
+        self._with_words = parse_bool(cfg_msg.get("with_words"), self._with_words, "with_words")
+        self._with_diarize = parse_bool(cfg_msg.get("diarize"), self._with_diarize, "diarize")
+
+    def _collect_ignored_params(self, cfg_msg: dict) -> list[str]:
+        """合法但因服务端未启用对应功能而无法生效的参数（软提示，不报错）。"""
+        ignored = []
+        spk_ok = self._speaker is not None
+        svc_ok = self._speaker_service is not None
+        for k in ("speaker_threshold", "speaker_min_seg_ms", "speaker_max"):
+            if cfg_msg.get(k) is not None and not spk_ok:
+                ignored.append(k)
+        if cfg_msg.get("diarize") is True and not spk_ok:
+            ignored.append("diarize")
+        for k in ("speaker_id_threshold", "speaker_id_margin"):
+            if cfg_msg.get(k) is not None and not svc_ok:
+                ignored.append(k)
+        if cfg_msg.get("identify_speakers") is True and not svc_ok:
+            ignored.append("identify_speakers")
+        if cfg_msg.get("with_words") is True and not self._enable_words:
+            ignored.append("with_words")
+        if cfg_msg.get("with_punc") is True and self._punc is None:
+            ignored.append("with_punc")
+        return ignored
 
     async def _in_thread(self, fn, *args):
         loop = asyncio.get_running_loop()
@@ -201,7 +264,8 @@ class StreamSession:
         self.buffer.append(arr)
 
         self._frame_count += 1
-        events = await self._in_thread(self._svad.process_chunk, arr, self.vad_cache, False)
+        events = await self._in_thread(
+            self._svad.process_chunk, arr, self.vad_cache, False, self._max_end_silence_ms)
         if events:
             logger.debug(f"[stream] frame#{self._frame_count} 收到{arr.size}样本 VAD事件={events}")
         elif self._frame_count % 16 == 0:      # 约每 2s 一次心跳，监控缓冲是否无界增长
@@ -239,7 +303,8 @@ class StreamSession:
                      f"seg_start={self.seg_start_ms}")
         try:
             events = await self._in_thread(
-                self._svad.process_chunk, np.zeros(0, dtype=np.float32), self.vad_cache, True
+                self._svad.process_chunk, np.zeros(0, dtype=np.float32), self.vad_cache, True,
+                self._max_end_silence_ms,
             )
         except Exception as e:
             # FunASR 对空输入 + is_final 的行为无保证；失败不阻断末句缓冲冲刷
@@ -290,7 +355,7 @@ class StreamSession:
             res = await self._in_thread(self._asr.transcribe_array, seg, _TARGET_SR, self.language)
         decode_ms = (time.monotonic() - t0) * 1000
         text = extract_text(res)
-        if self._punc is not None and text.strip():
+        if self._punc is not None and self._with_punc and text.strip():
             try:
                 text = await self._in_thread(self._punc.restore, text)
             except Exception as e:
@@ -319,7 +384,7 @@ class StreamSession:
             "start": int(start_ms),
             "end": int(end_ms),
         }
-        if self._enable_words:
+        if self._enable_words and self._with_words:
             words = extract_words(res, int(start_ms) / 1000.0)
             if words:
                 msg["words"] = words
@@ -351,7 +416,8 @@ class StreamSession:
         if centroid is None:
             return cached["name"] if cached else None
         mapping = self._speaker_service.map_clusters(
-            [{"label": spk, "centroid": centroid}])
+            [{"label": spk, "centroid": centroid}],
+            id_threshold=self._spk_id_threshold, id_margin=self._spk_id_margin)
         name = mapping[0]["name"] if mapping else None
         self._spk_name_cache[spk] = {"name": name, "count": count, "ver": ver}
         return name
@@ -394,6 +460,9 @@ class VadOfflineBackend:
             "speaker_labels": speaker is not None,
             "speaker_identification": speaker is not None and speaker_service is not None,
             "noise_filter_tunable": True,   # 客户端可在 start 覆盖 noise_filter/energy_floor_dbfs/snr_min_db
+            "speaker_tunable": speaker is not None,   # speaker_threshold/min_seg/max + id_threshold/margin
+            "endpoint_tunable": True,                 # max_end_silence_ms（断句尾静音）/ max_segment_sec
+            "output_toggles": True,                   # with_punc / with_words / diarize 可按会话关闭
         }
 
     async def acquire(self) -> bool:

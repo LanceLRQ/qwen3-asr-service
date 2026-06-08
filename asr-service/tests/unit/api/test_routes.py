@@ -37,6 +37,34 @@ def test_submit_ok(make_client):
     assert tm.submit.call_args.kwargs["language"] == "zh"
 
 
+def test_submit_with_options_passthrough(make_client):
+    tm = MagicMock()
+    tm.submit.return_value = "tid-1"
+    client = make_client(task_manager=tm)
+    resp = client.post(
+        "/v1/asr",
+        files={"file": ("a.wav", b"abcdef", "audio/wav")},
+        data={"with_punc": "false", "diarize": "true", "max_segment": "8",
+              "speaker_id_threshold": "0.5"},
+    )
+    assert resp.status_code == 200
+    opts = tm.submit.call_args.kwargs["options"]
+    assert opts["with_punc"] is False and opts["diarize"] is True
+    assert opts["max_segment"] == 8 and opts["speaker_id_threshold"] == 0.5
+
+
+def test_submit_bad_option_range_returns_400(make_client):
+    tm = MagicMock()
+    client = make_client(task_manager=tm)
+    resp = client.post(
+        "/v1/asr",
+        files={"file": ("a.wav", b"abcdef", "audio/wav")},
+        data={"max_segment": "999"},          # >30 越界
+    )
+    assert resp.status_code == 400
+    tm.submit.assert_not_called()
+
+
 def test_submit_bad_extension(make_client):
     tm = MagicMock()
     client = make_client(task_manager=tm)

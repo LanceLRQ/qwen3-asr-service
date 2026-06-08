@@ -86,12 +86,18 @@ async def stream(ws: WebSocket):
             ws.receive_json(), timeout=deadline - loop.time())
         logger.info(f"[stream] 收到 start: {start_msg}")
         try:
-            session.configure(start_msg)
+            warnings = session.configure(start_msg)
         except ValueError as e:
             # 配置校验失败属客户端错误，消息为服务端自产文案，可直接回传
             await ws.send_json(ErrorMsg(
                 code="invalid_config", message=str(e), fatal=True).model_dump())
             return
+        # 参数合法但对应功能未启用：非致命软提示（fatal=False 不断连），改进既往静默忽略
+        if warnings:
+            await ws.send_json(ErrorMsg(
+                code="params_ignored",
+                message="以下参数因对应功能未启用被忽略: " + ", ".join(warnings),
+                fatal=False).model_dump())
 
         # ── 收发解耦：接收循环只入队，独立任务消费（VAD/ASR/发送）──
         # 推理慢于实时时积压留在应用层队列，接收不阻塞，pong 可被及时读取，

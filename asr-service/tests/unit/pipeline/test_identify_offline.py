@@ -38,7 +38,7 @@ class FakeSpeakerService:
     def __init__(self):
         self.calls: list[list[dict]] = []
 
-    def map_and_enroll_clusters(self, clusters):
+    def map_and_enroll_clusters(self, clusters, *, id_threshold=None, id_margin=None):
         self.calls.append(clusters)
         out = []
         for c in clusters:
@@ -105,7 +105,7 @@ def test_identify_clusters_interface_fields(run_env, tmp_path):
 
 def test_identify_miss_keeps_anonymous(run_env, tmp_path):
     class AllMissService:
-        def map_and_enroll_clusters(self, clusters):
+        def map_and_enroll_clusters(self, clusters, *, id_threshold=None, id_margin=None):
             return [{"label": c["label"], "speaker_id": None, "name": None,
                      "score": None} for c in clusters]
 

@@ -326,6 +326,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
             progress_callback=on_progress,
             cancelled=lambda: task_manager.is_stopping or task_manager.is_cancelled(task["task_id"]),
             identify_speakers=task.get("identify_speakers", False),
+            options=task.get("options"),
         )
 
     task_manager.set_processor(process_task)
