@@ -102,6 +102,13 @@ def _apply_cli_config(args):
         cfg.MAX_STREAM_SESSIONS = args.max_stream_sessions
     if getattr(args, "stream_asr_concurrency", None) is not None:
         cfg.STREAM_ASR_CONCURRENCY = args.stream_asr_concurrency
+    if getattr(args, "vad_speech_noise_thres", None) is not None:
+        cfg.VAD_SPEECH_NOISE_THRES = args.vad_speech_noise_thres
+    cfg.STREAM_NOISE_FILTER = getattr(args, "stream_noise_filter", False)
+    if getattr(args, "stream_energy_floor_dbfs", None) is not None:
+        cfg.STREAM_ENERGY_FLOOR_DBFS = args.stream_energy_floor_dbfs
+    if getattr(args, "stream_snr_min_db", None) is not None:
+        cfg.STREAM_SNR_MIN_DB = args.stream_snr_min_db
     cfg.ENABLE_SPEAKER = getattr(args, "enable_speaker", False)
     if getattr(args, "speaker_threshold", None) is not None:
         cfg.SPEAKER_THRESHOLD = args.speaker_threshold
@@ -387,6 +394,9 @@ def _assemble_standard(app: FastAPI, args) -> None:
             asr_concurrency=cfg.STREAM_ASR_CONCURRENCY,
             max_segment_sec=cfg.STREAM_MAX_SEGMENT_SEC,
             vad_chunk_ms=cfg.STREAM_VAD_CHUNK_MS,
+            noise_filter=cfg.STREAM_NOISE_FILTER,
+            energy_floor_dbfs=cfg.STREAM_ENERGY_FLOOR_DBFS,
+            snr_min_db=cfg.STREAM_SNR_MIN_DB,
         )
         init_ws_stream(stream_backend)
         app.include_router(ws_router_stream)

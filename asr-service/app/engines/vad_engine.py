@@ -3,6 +3,7 @@ import threading
 from funasr import AutoModel
 from app.utils.model_manager import ensure_model_modelscope
 from app.config import MODEL_LOCAL_MAP, MODELSCOPE_ONLY_REPO_MAP
+import app.config as cfg
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +25,17 @@ class VADEngine:
         repo_id = MODELSCOPE_ONLY_REPO_MAP[self._model_key]
         ensure_model_modelscope(repo_id, local_dir)
 
+        # speech_noise_thres 仅在构造时读入 vad_opts（funasr==1.3.1，generate 运行时
+        # 不支持按调用覆盖该参数），故离线 detect 与在线 StreamingVADEngine 统一此全局阈值
         self._model = AutoModel(
             model=local_dir,
             model_revision="v2.0.4",
             device="cpu",
             disable_update=True,
+            speech_noise_thres=cfg.VAD_SPEECH_NOISE_THRES,
         )
-        logger.info(f"VAD 模型已加载 (PyTorch): {local_dir}")
+        logger.info(f"VAD 模型已加载 (PyTorch): {local_dir} "
+                    f"speech_noise_thres={cfg.VAD_SPEECH_NOISE_THRES}")
 
     def detect(self, audio_path: str) -> list[tuple[int, int]]:
         """

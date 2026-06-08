@@ -25,6 +25,11 @@ LEGACY_DEFAULTS = {
     "enable_stream": False,
     "max_stream_sessions": None,
     "stream_asr_concurrency": None,
+    # ── 远场过滤新增，非重构前遗留 ──
+    "vad_speech_noise_thres": 0.6,
+    "stream_noise_filter": False,
+    "stream_energy_floor_dbfs": -50.0,
+    "stream_snr_min_db": 6.0,
     # ── P 系列（任务持久化）新增，非重构前遗留 ──
     "enable_task_store": False,
     "task_db_path": "data/tasks.db",

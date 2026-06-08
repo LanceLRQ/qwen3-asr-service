@@ -17,6 +17,10 @@ class StartMsg(BaseModel):
     language: str | None = None
     wav_name: str = "stream"
     identify_speakers: bool = False    # 声纹识别（需 speaker_identification 能力）
+    # 远场过滤可选覆盖（缺省=服务端默认）；服务端范围钳制，仅影响本会话
+    noise_filter: bool | None = None
+    energy_floor_dbfs: float | None = None
+    snr_min_db: float | None = None
 
 
 class StopMsg(BaseModel):

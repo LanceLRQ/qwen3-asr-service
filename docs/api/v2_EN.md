@@ -333,6 +333,11 @@ Client                                  Server
 | language | null | Language code, null for auto-detection |
 | wav_name | "stream" | Session name (for display) |
 | identify_speakers | false | Run voiceprint identification on speaker labels (requires `session.created.capabilities.speaker_identification=true`) |
+| noise_filter | server default | Override far-field segment gating for this session (defaults to the server config; requires `capabilities.noise_filter_tunable=true`) |
+| energy_floor_dbfs | server default | Override the absolute energy gate (dBFS) for this session, range `[-90, 0]`; out-of-range returns `invalid_config` |
+| snr_min_db | server default | Override the adaptive SNR gate (dB) for this session, range `[0, 40]`; `0` disables this gate |
+
+> Far-field overrides affect only the current session and are range-clamped server-side. The VAD sensitivity `vad_speech_noise_thres` is a server-global setting (FunASR constraint) and cannot be adjusted per session.
 
 **Audio frames (binary frames)**: PCM16 little-endian, mono, at the declared `audio_fs`. Max 2MB per frame (oversized frames are rejected without disconnecting).
 

@@ -55,6 +55,17 @@ All parameters are passed through `bash start.sh <args>`. Config-file key = long
 | `--max-stream-sessions` | Number | `16` | Max concurrent real-time sessions (excess connections closed with 1013) |
 | `--stream-asr-concurrency` | Number | `1` | Real-time ASR decoding concurrency cap (the model layer holds an inference lock; >1 brings no gain) |
 
+### Far-field Noise Filtering
+
+Reduces false triggers from far-field sounds and ambient noise. `--vad-speech-noise-thres` tunes VAD sensitivity (offline + real-time unified); `--stream-noise-filter` enables real-time segment-level energy/SNR gating (real-time only, off by default).
+
+| Parameter | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `--vad-speech-noise-thres` | Float | `0.6` | FSMN-VAD speech/noise decision threshold (offline + real-time unified); higher = more aggressive filtering of far-field/weak frames, recommended `0.6`–`0.8` |
+| `--stream-noise-filter` / `--no-stream-noise-filter` | - | Disabled | Master switch for real-time segment-level energy/SNR gating (opt-in) |
+| `--stream-energy-floor-dbfs` | Float | `-50.0` | Absolute energy gate (dBFS, full-scale referenced): segments quieter than this are dropped |
+| `--stream-snr-min-db` | Float | `6.0` | Adaptive SNR gate (dB): segments not exceeding the session noise floor by this margin are dropped; `<=0` disables this gate |
+
 ### Task Persistence
 
 | Parameter | Values | Default | Description |

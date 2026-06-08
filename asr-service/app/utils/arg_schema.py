@@ -109,6 +109,28 @@ ARG_SPECS = (
         help=f"实时 ASR 解码并发上限 (default: {cfg.STREAM_ASR_CONCURRENCY})",
     ),
     ArgSpec(
+        key="vad_speech_noise_thres", flags=("--vad-speech-noise-thres",),
+        default=0.6, type=float, group="远场过滤",
+        help="FSMN-VAD 语音/噪声判决阈值（离线+实时统一）：调高更激进过滤远场/弱帧 (default: 0.6)",
+    ),
+    ArgSpec(
+        key="stream_noise_filter", flags=("--stream-noise-filter",),
+        default=False, type=bool, group="远场过滤",
+        help="实时段级能量/SNR 门控：减少远场/环境音误触发（默认关）",
+        negative_flags=("--no-stream-noise-filter",),
+        negative_help="关闭实时段级远场过滤（覆盖配置文件）",
+    ),
+    ArgSpec(
+        key="stream_energy_floor_dbfs", flags=("--stream-energy-floor-dbfs",),
+        default=-50.0, type=float, group="远场过滤",
+        help="绝对能量门（dBFS，满量程参考）：段响度低于此丢弃 (default: -50.0)",
+    ),
+    ArgSpec(
+        key="stream_snr_min_db", flags=("--stream-snr-min-db",),
+        default=6.0, type=float, group="远场过滤",
+        help="自适应信噪比门（dB）：段相对会话噪声底不足此值丢弃；<=0 关闭该门 (default: 6.0)",
+    ),
+    ArgSpec(
         key="enable_task_store", flags=("--enable-task-store",), default=False, type=bool,
         group="离线任务",
         help="离线任务持久化（data/tasks.db）：结果跨重启可查",

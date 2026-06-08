@@ -55,6 +55,17 @@
 | `--max-stream-sessions` | 数字 | `16` | 实时最大并发会话数（超额连接以 1013 关闭） |
 | `--stream-asr-concurrency` | 数字 | `1` | 实时 ASR 解码并发上限（模型层有推理锁，>1 无收益） |
 
+### 智能远场过滤
+
+减少远场声音与环境音造成的误触发。`--vad-speech-noise-thres` 调高 VAD 灵敏度（离线+实时统一）；`--stream-noise-filter` 开启实时段级能量/SNR 门控（仅实时，默认关）。
+
+| 参数 | 取值 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--vad-speech-noise-thres` | 浮点 | `0.6` | FSMN-VAD 语音/噪声判决阈值（离线+实时统一）；调高更激进过滤远场/弱帧，建议 `0.6`–`0.8` |
+| `--stream-noise-filter` / `--no-stream-noise-filter` | - | 关闭 | 实时段级能量/SNR 门控总开关（opt-in） |
+| `--stream-energy-floor-dbfs` | 浮点 | `-50.0` | 绝对能量门（dBFS，满量程参考）：段响度低于此丢弃 |
+| `--stream-snr-min-db` | 浮点 | `6.0` | 自适应信噪比门（dB）：段相对会话噪声底不足此值丢弃；`<=0` 关闭该门 |
+
 ### 任务持久化
 
 | 参数 | 取值 | 默认值 | 说明 |

@@ -24,6 +24,13 @@ enable_stream: true         # WS /v2/asr/stream（standard 模式）
 # max_stream_sessions: 16   # 实时最大并发会话数
 # stream_asr_concurrency: 1 # 实时 ASR 解码并发上限（模型层有推理锁，>1 无收益）
 
+# ── 智能远场过滤（减少远场/环境音误触发，默认关）──
+# vad_speech_noise_thres: 0.6     # FSMN-VAD 语音/噪声阈值（离线+实时统一）；0.6=默认，调高更激进，建议 0.6–0.8
+# 取消下面三行注释即开启「实时段级」过滤（推荐起步值；仅作用于实时，不影响离线）：
+# stream_noise_filter: true       # 段级能量/SNR 门控总开关
+# stream_energy_floor_dbfs: -50.0 # 绝对能量门（dBFS，满量程参考）：段响度低于此丢弃
+# stream_snr_min_db: 6.0          # 自适应信噪比门（dB）：段相对环境底噪不足此值丢弃；<=0 关闭该门
+
 # ── 离线任务持久化 ──
 enable_task_store: true     # 任务结果跨重启可查（data/tasks.db）；重启时未完成任务标记为失败
 # task_db_path: data/tasks.db
