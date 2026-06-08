@@ -66,3 +66,40 @@ def test_speakers_nav_present_on_all_pages():
     c = _client()
     for path in ("/web-ui", "/web-ui/stream", "/web-ui/speakers"):
         assert "/web-ui/speakers" in c.get(path).text
+
+
+# ─── 根路径跳转 / 索引（_mount_root）───
+
+def _root_client():
+    import app.main as main
+    app = FastAPI(version="2.0.0")
+    main._mount_root(app)
+    return TestClient(app)
+
+
+def test_root_redirects_to_webui_when_enabled():
+    import app.config as cfg
+    prev = cfg.ENABLE_WEB
+    cfg.ENABLE_WEB = True
+    try:
+        r = _root_client().get("/", follow_redirects=False)
+        assert r.status_code in (302, 307)
+        assert r.headers["location"] == "/web-ui"
+    finally:
+        cfg.ENABLE_WEB = prev
+
+
+def test_root_returns_index_when_web_disabled():
+    import app.config as cfg
+    prev = cfg.ENABLE_WEB
+    cfg.ENABLE_WEB = False
+    try:
+        r = _root_client().get("/")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["service"] == "Qwen3-ASR Service"
+        assert body["health"] == "/v2/health"
+        assert body["capabilities"] == "/v2/capabilities"
+        assert "web_ui" in body                 # 不空白/404，给出启用提示
+    finally:
+        cfg.ENABLE_WEB = prev

@@ -6,6 +6,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 服务配置
 HOST = "127.0.0.1"
 PORT = 8765
+ENABLE_WEB = False              # Web UI 是否挂载（--web 实际挂载时置位；根路径据此跳转）
 
 # ─── 启动参数默认值（由 main.py argparse 覆盖） ───
 

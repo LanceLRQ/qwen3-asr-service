@@ -5,6 +5,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 
 from app.utils.logger import setup_logger
 from app.utils.arg_schema import build_parser, ARG_SPECS
@@ -158,8 +159,26 @@ def create_app(args=None) -> FastAPI:
     else:
         _assemble_standard(app, args)
 
+    _mount_root(app)
     logger.info(f"Qwen3-ASR Service 就绪（serve-mode={serve_mode}），监听 {cfg.HOST}:{cfg.PORT}")
     return app
+
+
+def _mount_root(app: FastAPI) -> None:
+    """根路径：已启用 Web UI 则跳转，否则回服务索引（避免空白/404）。"""
+
+    @app.get("/", include_in_schema=False)
+    async def root():
+        if cfg.ENABLE_WEB:
+            return RedirectResponse(url="/web-ui")
+        return {
+            "service": "Qwen3-ASR Service",
+            "version": app.version,
+            "mode": cfg.SERVE_MODE,
+            "health": "/v2/health",
+            "capabilities": "/v2/capabilities",
+            "web_ui": "未启用，启动加 --web 开启 / disabled, start with --web",
+        }
 
 
 def _assemble_standard(app: FastAPI, args) -> None:
@@ -421,6 +440,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
         from app.web.views import web_router, ASSETS_DIR
         app.include_router(web_router)
         app.mount("/web-ui/assets", StaticFiles(directory=ASSETS_DIR), name="web-assets")
+        cfg.ENABLE_WEB = True       # 根路径据此跳转 /web-ui（仅实际挂载时置位）
         logger.info(f"Web UI 已启用，访问 http://{cfg.HOST}:{cfg.PORT}/web-ui")
 
     @app.on_event("shutdown")
