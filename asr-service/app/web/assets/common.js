@@ -162,6 +162,8 @@ window.AsrCommon = (function () {
           if (svc.key === 'notReady') return ct('svc.notReady') + svc.detail;
           return ct('svc.' + svc.key);
         });
+        // 状态短文案（不含设备/模型明细——明细已在下方模型行）：合入模型卡顶部状态行
+        const svcState = computed(() => (svc.key === 'ready' ? ct('svc.ready') : svcTitle.value));
 
         // 模型信息卡片：/v2/health 全量字段（应用栏 chip 图标悬停展示，随语言重渲染）
         const health = reactive({ loaded: false });
@@ -204,7 +206,7 @@ window.AsrCommon = (function () {
           }
         });
 
-        return { theme, themeOverrides, themeMode, themeIcon, themeLabel, cycleTheme, hasKey, svc, svcTitle, apiKey,
+        return { theme, themeOverrides, themeMode, themeIcon, themeLabel, cycleTheme, hasKey, svc, svcTitle, svcState, apiKey,
                  modelRows, t: ct, locale, toggleLang, docsHref, naiveLocale, naiveDateLocale };
       },
     };

@@ -24,16 +24,15 @@
           <a :href="docsHref" class="active">{{ t('nav.docs') }}</a>
         </nav>
         <div class="appbar-right">
-          <n-tooltip trigger="hover">
-            <template #trigger><span class="svc-dot" :class="svc.cls"></span></template>
-            {{ svcTitle }}
-          </n-tooltip>
           <n-popover trigger="hover" placement="bottom-end">
             <template #trigger>
-              <button class="iconbtn" :title="t('model.title')"><a-icon name="chip"></a-icon></button>
+              <button class="iconbtn svc-host" :class="svc.cls" :title="t('model.title')">
+                <a-icon name="chip"></a-icon><span class="svc-badge"></span>
+              </button>
             </template>
             <div class="model-card">
               <div class="model-card-title">{{ t('model.title') }}</div>
+              <div class="svc-line" :class="svc.cls"><span class="svc-badge"></span><span>{{ svcState }}</span></div>
               <template v-if="modelRows.length">
                 <div v-for="r in modelRows" :key="r.label" class="model-row">
                   <span class="k">{{ r.label }}</span><span class="v" :class="r.cls">{{ r.value }}</span>
@@ -42,6 +41,7 @@
               <n-text v-else depth="3" style="font-size:.82em;">{{ t('model.unavailable') }}</n-text>
             </div>
           </n-popover>
+          <span class="appbar-sep"></span>
           <n-popover trigger="click" placement="bottom-end">
             <template #trigger>
               <button class="iconbtn" :class="{ 'has-key': hasKey }" title="API Key"><a-icon name="key"></a-icon></button>

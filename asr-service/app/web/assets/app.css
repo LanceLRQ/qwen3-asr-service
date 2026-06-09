@@ -47,21 +47,35 @@ body.dark .brand { color: #e2e8f0; }
 .appnav a.active { color: var(--accent-deep); border-bottom-color: var(--accent); }
 body.dark .appnav a { color: #94a3b8; }
 body.dark .appnav a:hover, body.dark .appnav a.active { color: #2dd4bf; }
-.appbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.appbar-right { margin-left: auto; display: flex; align-items: center; gap: 4px; }
 .iconbtn {
-  position: relative; width: 32px; height: 32px; border: none; background: transparent;
-  border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
-  color: #64748b; transition: background .15s ease, color .15s ease;
+  position: relative; width: 32px; height: 32px; background: transparent;
+  border: 1px solid rgba(15, 23, 42, .1); border-radius: 8px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #64748b; transition: background .15s ease, color .15s ease, border-color .15s ease;
 }
-.iconbtn:hover { background: rgba(20, 184, 166, .1); color: var(--accent-deep); }
-body.dark .iconbtn { color: #94a3b8; }
-body.dark .iconbtn:hover { background: rgba(45, 212, 191, .12); color: #2dd4bf; }
-.iconbtn.has-key::after { content: ''; position: absolute; right: 5px; bottom: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-.iconbtn.lang-btn { width: auto; min-width: 32px; padding: 0 8px; font-size: .74em; font-weight: 700; }
-.svc-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #94a3b8; margin-right: 2px; cursor: default; }
-.svc-dot.ok { background: #10b981; box-shadow: 0 0 6px rgba(16, 185, 129, .65); }
-.svc-dot.warn { background: #f59e0b; }
-.svc-dot.off { background: #64748b; opacity: .55; }
+.iconbtn:hover { background: rgba(20, 184, 166, .1); border-color: rgba(20, 184, 166, .4); color: var(--accent-deep); }
+body.dark .iconbtn { color: #94a3b8; border-color: rgba(255, 255, 255, .13); }
+body.dark .iconbtn:hover { background: rgba(45, 212, 191, .12); border-color: rgba(45, 212, 191, .42); color: #2dd4bf; }
+/* 统一光学视重：稍放大 + 收细描边，让密集图标(chip)与稀疏图标(key)观感拉平 */
+.appbar-right .iconbtn svg { width: 17px; height: 17px; stroke-width: 1.7; }
+/* API Key 已配置点：小巧 + 同背景描边环，从应用栏干净浮起 */
+.iconbtn.has-key::after { content: ''; position: absolute; right: 4px; bottom: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .92); }
+body.dark .iconbtn.has-key::after { box-shadow: 0 0 0 1.5px rgba(16, 17, 21, .95); }
+.iconbtn.lang-btn { width: auto; min-width: 32px; padding: 0 9px; font-size: .8em; font-weight: 600; letter-spacing: .03em; }
+/* 服务状态点：独立「状态区」，柔光环替代强发光，用细分隔线与右侧操作图标分组 */
+/* 服务就绪灯：并入模型信息(chip)按钮的角标，状态色随 svc.cls */
+.svc-badge { width: 6px; height: 6px; border-radius: 50%; background: #94a3b8; flex-shrink: 0; }
+.svc-host .svc-badge { position: absolute; right: 4px; bottom: 4px; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .92); }
+body.dark .svc-host .svc-badge { box-shadow: 0 0 0 1.5px rgba(16, 17, 21, .95); }
+.svc-host.ok .svc-badge, .svc-line.ok .svc-badge { background: #10b981; }
+.svc-host.warn .svc-badge, .svc-line.warn .svc-badge { background: #f59e0b; }
+.svc-host.off .svc-badge, .svc-line.off .svc-badge { background: #94a3b8; }
+/* 模型信息卡顶部服务状态行 */
+.svc-line { display: flex; align-items: center; gap: 7px; font-size: .82em; font-weight: 600; color: var(--kv-val); padding-bottom: 9px; margin-bottom: 7px; border-bottom: 1px solid rgba(148, 163, 184, .16); }
+.svc-line .svc-badge { width: 7px; height: 7px; }
+/* 应用栏分组分隔线（模型信息 ↔ 操作图标） */
+.appbar-sep { width: 1px; height: 18px; background: rgba(148, 163, 184, .28); margin: 0 6px; flex-shrink: 0; }
 
 /* —— 内容区 / 工作区栅格 —— */
 .container { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 24px clamp(16px, 4vw, 32px) 56px; }
