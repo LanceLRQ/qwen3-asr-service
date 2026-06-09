@@ -49,13 +49,17 @@ asr-service/
 ├── logs/                          # 日志文件
 ├── setup.sh / setup.bat           # 环境初始化
 ├── start.sh / start.bat           # 服务启动
-├── cli.sh / cli.bat               # 交互式 CLI 管理脚本
+├── config.example.yaml            # 配置模板（首启自动拷贝为 config.yaml）
 └── requirements.txt               # 依赖清单
 
 # 项目根目录
-├── Dockerfile                     # Docker 镜像构建
-├── docker-compose.yml             # Docker Compose 编排
-└── build.sh                       # 镜像构建脚本
+├── cli.sh / cli.bat                # 交互式管理脚本（Compose / venv / 启动服务统一入口）
+├── docker/                         # Docker 资产目录（集中存放，保持根目录整洁）
+│   ├── Dockerfile / Dockerfile.cpu     # GPU / CPU 镜像构建
+│   ├── docker-compose.yml / *.cpu.yml  # Docker Compose 编排
+│   ├── build.sh                        # 镜像构建脚本
+│   └── DOCKERHUB.md                    # Docker Hub 页面文案
+└── .dockerignore                   # 构建上下文过滤（须随上下文置于根）
 ```
 
 ## 处理流程

@@ -4,6 +4,10 @@ asr-service/cache/
 asr-service/logs/
 asr-service/bin/
 asr-service/__pycache__/
+# 真实配置（可能含 api_key）：不打进镜像，运行时由 compose 挂载或容器内从 example 生成
+asr-service/config.yaml
+asr-service/config.yml
+asr-service/.cli_launch_config
 *.pyc
 *.pyo
 .git

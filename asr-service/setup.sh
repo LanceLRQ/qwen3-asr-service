@@ -75,8 +75,8 @@ if [ "$(uname -s)" = "Linux" ]; then
     echo ""
     echo "  Option 2: docker-compose"
     echo ""
-    echo "    A docker-compose.yml is provided in the project, just run:"
-    echo "    docker compose up -d"
+    echo "    A docker/docker-compose.yml is provided in the project, just run:"
+    echo "    docker compose -f docker/docker-compose.yml up -d"
     echo ""
     read -p "Continue with local installation? [y/N]: " CONTINUE_LOCAL
     CONTINUE_LOCAL=${CONTINUE_LOCAL:-N}

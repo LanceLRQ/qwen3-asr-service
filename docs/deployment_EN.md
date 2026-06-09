@@ -148,36 +148,37 @@ CPU / ARM64 images (`latest-cpu` / `latest-arm64`) and volume details: see the [
 ### Using docker-compose
 
 ```bash
-# Start directly (using default configuration in docker-compose.yml)
-docker compose up -d
+# Start directly (using default configuration in docker/docker-compose.yml)
+docker compose -f docker/docker-compose.yml up -d
 
 # Stop
-docker compose down
+docker compose -f docker/docker-compose.yml down
 ```
 
-Startup parameters, API keys, port mappings, etc. can be configured in `docker-compose.yml`. See comments in the file.
+Startup parameters, API keys, port mappings, etc. can be configured in `docker/docker-compose.yml`. See comments in the file. The CPU variant lives in `docker/docker-compose.cpu.yml`.
 
 ### Build Image Locally
 
 ```bash
-bash build.sh
+bash docker/build.sh
 ```
 
 ## Interactive CLI Management
 
-The project provides interactive management scripts for unified management of both Docker and local venv environments:
+The project provides interactive management scripts in the repository root for unified management of both Docker and local venv environments:
 
 ```bash
 # Linux / macOS
-bash asr-service/cli.sh
+bash cli.sh
 
 # Windows
-asr-service\cli.bat
+cli.bat
 ```
 
 CLI management script features:
 
-- Docker management (pull/build images, start/stop containers, view logs)
+- **Docker Compose start (config.yaml-driven, recommended)**: on first use, auto-generates `config.yaml` from `config.example.yaml`; edit the config then start/stop/restart the container, view logs, switch GPU/CPU compose
+- Docker management (pull/build images, parameter-wizard start/stop containers, view logs)
 - Virtual environment management (install/uninstall/view info)
 - Start service (interactive parameter configuration with config saving)
 

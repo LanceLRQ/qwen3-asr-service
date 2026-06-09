@@ -49,13 +49,17 @@ asr-service/
 ├── logs/                          # Log files
 ├── setup.sh / setup.bat           # Environment initialization
 ├── start.sh / start.bat           # Service startup
-├── cli.sh / cli.bat               # Interactive CLI management script
+├── config.example.yaml            # Config template (auto-copied to config.yaml on first run)
 └── requirements.txt               # Dependencies
 
 # Project root
-├── Dockerfile                     # Docker image build
-├── docker-compose.yml             # Docker Compose orchestration
-└── build.sh                       # Image build script
+├── cli.sh / cli.bat                # Interactive management script (Compose / venv / start service)
+├── docker/                         # Docker assets directory (centralized, keeps root clean)
+│   ├── Dockerfile / Dockerfile.cpu     # GPU / CPU image build
+│   ├── docker-compose.yml / *.cpu.yml  # Docker Compose orchestration
+│   ├── build.sh                        # Image build script
+│   └── DOCKERHUB.md                    # Docker Hub page copy
+└── .dockerignore                   # Build-context filter (must sit at root with the context)
 ```
 
 ## Processing Pipeline

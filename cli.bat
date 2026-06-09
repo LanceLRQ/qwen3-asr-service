@@ -5,9 +5,12 @@ setlocal enabledelayedexpansion
 :: Qwen3-ASR Service Windows 交互式管理脚本
 :: 支持便携版 / venv 两种运行方式
 
-cd /d "%~dp0"
+:: 脚本已置于仓库根；应用目录为 asr-service（venv / 便携版 / 启动脚本 / 配置 / 模型）。
+:: 切到 asr-service 作为工作目录，便携版/venv 的相对路径（bin\ venv\ setup.bat ...）保持不变。
 set "SCRIPT_DIR=%~dp0"
-set "CONFIG_FILE=%SCRIPT_DIR%.cli_launch_config"
+set "SERVICE_DIR=%~dp0asr-service\"
+cd /d "%SERVICE_DIR%"
+set "CONFIG_FILE=%SERVICE_DIR%.cli_launch_config"
 
 :: ANSI 颜色（Windows 10+ 支持）
 set "RED=[91m"
@@ -230,13 +233,13 @@ cls
 echo.
 echo %BOLD%便携版环境信息：%NC%
 echo -----------------------------------------
-echo   路径:         %SCRIPT_DIR%bin\python
+echo   路径:         %SERVICE_DIR%bin\python
 echo   Python 版本:  !PORTABLE_PYTHON_VER!
 
 :: 检测 PyTorch
 set "TORCH_VER=未安装"
-set "PYTHONPATH=%SCRIPT_DIR%"
-set "PATH=%SCRIPT_DIR%bin;%SCRIPT_DIR%bin\python;%PATH%"
+set "PYTHONPATH=%SERVICE_DIR%"
+set "PATH=%SERVICE_DIR%bin;%SERVICE_DIR%bin\python;%PATH%"
 for /f "tokens=*" %%v in ('bin\python\python.exe -c "import torch; print(torch.__version__)" 2^>nul') do set "TORCH_VER=%%v"
 echo   PyTorch:      !TORCH_VER!
 
@@ -307,7 +310,7 @@ cls
 echo.
 echo %BOLD%虚拟环境信息：%NC%
 echo -----------------------------------------
-echo   路径:         %SCRIPT_DIR%venv
+echo   路径:         %SERVICE_DIR%venv
 for /f "tokens=*" %%v in ('venv\Scripts\python.exe --version 2^>nul') do echo   Python 版本:  %%v
 for /f "tokens=2" %%v in ('venv\Scripts\pip.exe --version 2^>nul') do echo   Pip 版本:     %%v
 
@@ -568,8 +571,8 @@ if not exist "bin\python\python.exe" (
     goto :main
 )
 
-set "PYTHONPATH=%SCRIPT_DIR%"
-set "PATH=%SCRIPT_DIR%bin;%SCRIPT_DIR%bin\python;%PATH%"
+set "PYTHONPATH=%SERVICE_DIR%"
+set "PATH=%SERVICE_DIR%bin;%SERVICE_DIR%bin\python;%PATH%"
 
 echo %BOLD%启动命令：%NC%
 echo   bin\python\python.exe -m app.main!ARGS!

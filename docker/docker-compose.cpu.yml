@@ -1,0 +1,28 @@
+services:
+  asr:
+    image: lancelrq/qwen3-asr-service:latest-cpu
+    # build:                                  # 本文件在 docker/ 下，上下文需指向仓库根
+    #   context: ..
+    #   dockerfile: docker/Dockerfile.cpu
+    #   tags:
+    #     - lancelrq/qwen3-asr-service:latest-cpu
+    ports:
+      - "8765:8765"
+    # environment:                       # 需要时取消下面两行注释
+    #   - ASR_API_KEY=sk-your-key-here   # 设置后启用 Bearer token 认证
+    volumes:
+      # config.yaml 须先存在（用根目录 cli.sh 引导，或从 config.example.yaml 拷贝）；
+      # 缺失时 bind 挂载会创建空目录。容器内服务配置以此文件为准，可在宿主编辑、持久。
+      - ../asr-service/config.yaml:/app/config.yaml
+      - ../asr-service/models:/app/models
+      - ../asr-service/logs:/app/logs
+    # 已挂载 config.yaml，服务配置以其为准；如需用 CLI 覆盖（优先级高于配置文件）可取消注释
+    # （CPU 镜像 ENTRYPOINT 已强制 --device cpu）：
+    # command:
+    #   - --model-size=0.6b         # 模型大小：0.6b / 1.7b
+    #   - --model-source=modelscope # 下载源：modelscope / huggingface
+    #   - --use-punc                # 启用标点恢复（按需开启）
+    #   - --api-key=sk-xxx          # API 密钥（覆盖 ASR_API_KEY 环境变量）
+    #   - --web                     # 启用 Web UI（访问 /web-ui）
+    #   - --max-segment=5           # VAD 切片合并最大时长（秒）
+    restart: unless-stopped

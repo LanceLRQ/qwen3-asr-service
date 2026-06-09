@@ -8,9 +8,13 @@ set -euo pipefail
 # 常量定义
 # ============================================================
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-COMPOSE_FILE="$PROJECT_ROOT/docker-compose.yml"
-CONFIG_FILE="$SCRIPT_DIR/.cli_launch_config"
+PROJECT_ROOT="$SCRIPT_DIR"                          # 脚本已置于仓库根
+SERVICE_DIR="$SCRIPT_DIR/asr-service"               # 应用目录（venv / 启动脚本 / 配置 / 模型 / 日志）
+COMPOSE_FILE="$PROJECT_ROOT/docker/docker-compose.yml"
+COMPOSE_FILE_CPU="$PROJECT_ROOT/docker/docker-compose.cpu.yml"
+SERVICE_CONFIG="$SERVICE_DIR/config.yaml"
+SERVICE_CONFIG_EXAMPLE="$SERVICE_DIR/config.example.yaml"
+CONFIG_FILE="$SERVICE_DIR/.cli_launch_config"
 IMAGE_NAME="lancelrq/qwen3-asr-service"
 IMAGE_TAG="latest"
 CONTAINER_NAME="qwen3-asr-service"
@@ -34,6 +38,7 @@ HAS_GPU=0
 VENV_PYTHON_VERSION=""
 MENU_RESULT=0
 INPUT_RESULT=""
+ACTIVE_COMPOSE_VARIANT="gpu"   # Compose 编排：gpu / cpu（菜单内可切换）
 
 # ============================================================
 # 信号处理：确保退出时恢复光标
@@ -189,9 +194,9 @@ check_prerequisites() {
     fi
 
     # venv
-    if [ -d "$SCRIPT_DIR/venv" ] && [ -f "$SCRIPT_DIR/venv/bin/python3" ]; then
+    if [ -d "$SERVICE_DIR/venv" ] && [ -f "$SERVICE_DIR/venv/bin/python3" ]; then
         HAS_VENV=1
-        VENV_PYTHON_VERSION=$("$SCRIPT_DIR/venv/bin/python3" --version 2>/dev/null | awk '{print $2}' || echo "未知")
+        VENV_PYTHON_VERSION=$("$SERVICE_DIR/venv/bin/python3" --version 2>/dev/null | awk '{print $2}' || echo "未知")
     fi
 }
 
@@ -265,14 +270,14 @@ docker_build() {
         error_msg "Docker 未安装"
         return
     fi
-    if [ ! -f "$PROJECT_ROOT/build.sh" ]; then
-        error_msg "未找到 build.sh"
+    if [ ! -f "$PROJECT_ROOT/docker/build.sh" ]; then
+        error_msg "未找到 docker/build.sh"
         press_any_key
         return
     fi
     info_msg "构建镜像（从 Dockerfile）..."
     echo
-    if (cd "$PROJECT_ROOT" && bash build.sh); then
+    if (cd "$PROJECT_ROOT" && bash docker/build.sh); then
         echo
         success_msg "镜像构建完成"
     else
@@ -296,24 +301,8 @@ docker_up() {
         return
     fi
 
-    # 检查是否有已保存的启动配置
-    if [ ! -f "$CONFIG_FILE" ]; then
-        warn_msg "尚未配置启动参数"
-        info_msg "请先通过主菜单「启动服务」配置参数后再启动容器"
-        press_any_key
-        return
-    fi
-
-    # 加载配置并以 docker 方式启动
-    default_config
-    load_launch_config
-    LAUNCH_METHOD="docker"
-
-    echo
-    print_config_summary
-    echo
-
-    launch_via_docker
+    # 参数向导（首次自动进入配置）→ docker run 启动
+    launch_wizard docker
 }
 
 docker_down() {
@@ -400,25 +389,181 @@ menu_docker() {
             echo
         fi
 
-        show_menu "Docker 管理" \
-            "1. 拉取镜像" \
-            "2. 构建镜像" \
-            "3. 启动容器" \
-            "4. 停止容器" \
-            "5. 查看容器状态" \
-            "6. 查看镜像状态" \
-            "7. 查看日志" \
+        show_menu "Docker 容器方式（docker run，参数向导）" \
+            "1. 启动容器（参数向导）" \
+            "2. 停止容器" \
+            "3. 查看容器状态" \
+            "4. 查看日志" \
+            "5. 拉取镜像" \
+            "6. 构建镜像" \
+            "7. 查看镜像状态" \
             "0. 返回主菜单"
 
         case $MENU_RESULT in
-            0) docker_pull ;;
-            1) docker_build ;;
-            2) docker_up ;;
-            3) docker_down ;;
-            4) docker_status ;;
-            5) docker_images ;;
-            6) docker_logs ;;
+            0) docker_up ;;
+            1) docker_down ;;
+            2) docker_status ;;
+            3) docker_logs ;;
+            4) docker_pull ;;
+            5) docker_build ;;
+            6) docker_images ;;
             7) return ;;
+        esac
+    done
+}
+
+# ============================================================
+# Docker Compose 管理（config.yaml 驱动，推荐）
+# ============================================================
+# 当前选中的编排文件（GPU / CPU，可在菜单切换）
+active_compose_file() {
+    if [ "$ACTIVE_COMPOSE_VARIANT" = "cpu" ]; then
+        echo "$COMPOSE_FILE_CPU"
+    else
+        echo "$COMPOSE_FILE"
+    fi
+}
+
+# 首次使用引导：无 config.yaml 时从 config.example.yaml 拷贝生成。
+# compose 已把 config.yaml 挂载进容器，必须先存在，否则 bind 挂载会创建空目录。
+ensure_service_config() {
+    if [ -f "$SERVICE_CONFIG" ]; then
+        return 0
+    fi
+    if [ ! -f "$SERVICE_CONFIG_EXAMPLE" ]; then
+        error_msg "未找到 config.example.yaml，无法生成 config.yaml"
+        return 1
+    fi
+    info_msg "首次使用：从 config.example.yaml 生成 config.yaml ..."
+    if cp "$SERVICE_CONFIG_EXAMPLE" "$SERVICE_CONFIG"; then
+        chmod 600 "$SERVICE_CONFIG" 2>/dev/null || true
+        success_msg "已生成 asr-service/config.yaml（chmod 600；可能写入 api_key，勿提交）"
+        return 0
+    fi
+    error_msg "生成 config.yaml 失败"
+    return 1
+}
+
+# 前置检查：Docker 与 Compose 均就绪
+compose_prereq() {
+    if [ "$HAS_DOCKER" -eq 0 ]; then
+        error_msg "Docker 未安装"
+        return 1
+    fi
+    if [ "$HAS_COMPOSE" -eq 0 ]; then
+        error_msg "Docker Compose 未安装"
+        return 1
+    fi
+    return 0
+}
+
+compose_up() {
+    compose_prereq || { press_any_key; return; }
+    ensure_service_config || { press_any_key; return; }
+    local file; file="$(active_compose_file)"
+    info_msg "启动容器（$ACTIVE_COMPOSE_VARIANT · $(basename "$file") · 配置以 config.yaml 为准）..."
+    echo
+    if $COMPOSE_CMD -f "$file" up -d; then
+        echo
+        success_msg "容器已启动"
+        info_msg "Web UI 默认 http://<host>:<port>/web-ui（host/port 以 config.yaml 为准）"
+    else
+        echo
+        error_msg "启动失败"
+    fi
+    press_any_key
+}
+
+compose_down() {
+    compose_prereq || { press_any_key; return; }
+    local file; file="$(active_compose_file)"
+    info_msg "停止并移除容器（$(basename "$file")）..."
+    echo
+    if $COMPOSE_CMD -f "$file" down; then
+        echo
+        success_msg "容器已停止并移除"
+    else
+        echo
+        error_msg "停止失败"
+    fi
+    press_any_key
+}
+
+compose_restart() {
+    compose_prereq || { press_any_key; return; }
+    ensure_service_config || { press_any_key; return; }
+    local file; file="$(active_compose_file)"
+    info_msg "重启容器（$(basename "$file")）..."
+    echo
+    $COMPOSE_CMD -f "$file" down || true
+    if $COMPOSE_CMD -f "$file" up -d; then
+        echo
+        success_msg "容器已重启"
+    else
+        echo
+        error_msg "重启失败"
+    fi
+    press_any_key
+}
+
+compose_logs() {
+    compose_prereq || { press_any_key; return; }
+    local file; file="$(active_compose_file)"
+    info_msg "实时日志（Ctrl+C 返回菜单）..."
+    echo
+    $COMPOSE_CMD -f "$file" logs --tail=50 -f || true
+    press_any_key
+}
+
+# 打开 config.yaml 编辑（保存后下次 compose 启动生效）
+edit_service_config() {
+    ensure_service_config || { press_any_key; return; }
+    local editor="${EDITOR:-}"
+    if [ -z "$editor" ]; then
+        if command -v nano &>/dev/null; then editor="nano"
+        elif command -v vim &>/dev/null; then editor="vim"
+        else editor="vi"; fi
+    fi
+    info_msg "使用 $editor 打开 asr-service/config.yaml ..."
+    "$editor" "$SERVICE_CONFIG" || true
+    press_any_key
+}
+
+toggle_compose_variant() {
+    show_menu "选择 Compose 编排" \
+        "GPU（docker-compose.yml）" \
+        "CPU（docker-compose.cpu.yml）"
+    case $MENU_RESULT in
+        0) ACTIVE_COMPOSE_VARIANT="gpu" ;;
+        1) ACTIVE_COMPOSE_VARIANT="cpu" ;;
+    esac
+    success_msg "已切换为 $ACTIVE_COMPOSE_VARIANT 编排"
+    press_any_key
+}
+
+menu_compose() {
+    while true; do
+        clear
+        if [ "$HAS_COMPOSE" -eq 0 ]; then
+            warn_msg "Docker Compose 未安装，部分功能不可用"
+            echo
+        fi
+        show_menu "Docker Compose 管理（当前：$ACTIVE_COMPOSE_VARIANT · config.yaml 驱动）" \
+            "1. 启动容器（up -d）" \
+            "2. 停止容器（down）" \
+            "3. 重启容器" \
+            "4. 查看日志" \
+            "5. 编辑 config.yaml 配置" \
+            "6. 切换 GPU / CPU 编排" \
+            "0. 返回主菜单"
+        case $MENU_RESULT in
+            0) compose_up ;;
+            1) compose_down ;;
+            2) compose_restart ;;
+            3) compose_logs ;;
+            4) edit_service_config ;;
+            5) toggle_compose_variant ;;
+            6) return ;;
         esac
     done
 }
@@ -427,7 +572,7 @@ menu_docker() {
 # 虚拟环境管理
 # ============================================================
 venv_install_or_reinstall() {
-    if [ ! -f "$SCRIPT_DIR/setup.sh" ]; then
+    if [ ! -f "$SERVICE_DIR/setup.sh" ]; then
         error_msg "未找到 setup.sh"
         press_any_key
         return
@@ -441,18 +586,18 @@ venv_install_or_reinstall() {
             return
         fi
         info_msg "删除现有虚拟环境..."
-        rm -rf "$SCRIPT_DIR/venv"
+        rm -rf "$SERVICE_DIR/venv"
         HAS_VENV=0
         VENV_PYTHON_VERSION=""
     fi
 
     info_msg "运行安装脚本..."
     echo
-    (cd "$SCRIPT_DIR" && bash setup.sh) || true
+    (cd "$SERVICE_DIR" && bash setup.sh) || true
     # 刷新检测
-    if [ -d "$SCRIPT_DIR/venv" ] && [ -f "$SCRIPT_DIR/venv/bin/python3" ]; then
+    if [ -d "$SERVICE_DIR/venv" ] && [ -f "$SERVICE_DIR/venv/bin/python3" ]; then
         HAS_VENV=1
-        VENV_PYTHON_VERSION=$("$SCRIPT_DIR/venv/bin/python3" --version 2>/dev/null | awk '{print $2}' || echo "未知")
+        VENV_PYTHON_VERSION=$("$SERVICE_DIR/venv/bin/python3" --version 2>/dev/null | awk '{print $2}' || echo "未知")
     fi
     press_any_key
 }
@@ -468,7 +613,7 @@ venv_remove() {
         return
     fi
     info_msg "删除虚拟环境..."
-    rm -rf "$SCRIPT_DIR/venv"
+    rm -rf "$SERVICE_DIR/venv"
     HAS_VENV=0
     VENV_PYTHON_VERSION=""
     success_msg "虚拟环境已删除"
@@ -483,27 +628,29 @@ venv_info() {
         return
     fi
 
-    local python_bin="$SCRIPT_DIR/venv/bin/python3"
-    local pip_bin="$SCRIPT_DIR/venv/bin/pip"
+    local python_bin="$SERVICE_DIR/venv/bin/python3"
+    # 统一用 python -m pip：venv 跨路径迁移后，venv/bin/pip 等控制台脚本的 shebang
+    # 仍指向旧的创建路径会报 bad interpreter；-m pip 由解释器定位，不受影响。
+    local pip_run=("$python_bin" -m pip)
 
     printf "${BOLD}虚拟环境信息：${NC}\n"
     echo "─────────────────────────────────────"
-    printf "  路径:         %s/venv\n" "$SCRIPT_DIR"
-    printf "  Python 版本:  %s\n" "$($python_bin --version 2>/dev/null || echo '未知')"
-    printf "  Pip 版本:     %s\n" "$($pip_bin --version 2>/dev/null | awk '{print $2}' || echo '未知')"
+    printf "  路径:         %s/venv\n" "$SERVICE_DIR"
+    printf "  Python 版本:  %s\n" "$("$python_bin" --version 2>/dev/null || echo '未知')"
+    printf "  Pip 版本:     %s\n" "$("${pip_run[@]}" --version 2>/dev/null | awk '{print $2}' || echo '未知')"
 
     # 关键包版本
     local torch_ver
-    torch_ver=$($pip_bin show torch 2>/dev/null | grep "^Version:" | awk '{print $2}' || echo "未安装")
+    torch_ver=$("${pip_run[@]}" show torch 2>/dev/null | grep "^Version:" | awk '{print $2}' || echo "未安装")
     printf "  PyTorch:      %s\n" "$torch_ver"
 
     local qwen_ver
-    qwen_ver=$($pip_bin show qwen-asr 2>/dev/null | grep "^Version:" | awk '{print $2}' || echo "未安装")
+    qwen_ver=$("${pip_run[@]}" show qwen-asr 2>/dev/null | grep "^Version:" | awk '{print $2}' || echo "未安装")
     printf "  qwen-asr:     %s\n" "$qwen_ver"
 
-    # 包数量
+    # 包数量：pip 段加 || true，避免 pipefail 下 wc 仍输出而被 "|| echo" 叠加成 "0\n0"
     local pkg_count
-    pkg_count=$($pip_bin list 2>/dev/null | tail -n +3 | wc -l || echo "0")
+    pkg_count=$( { "${pip_run[@]}" list 2>/dev/null || true; } | tail -n +3 | wc -l | tr -d ' ')
     printf "  已安装包:     %s 个\n" "$pkg_count"
     echo "─────────────────────────────────────"
 
@@ -514,22 +661,24 @@ menu_venv() {
     while true; do
         clear
         if [ "$HAS_VENV" -eq 1 ]; then
-            # 有 venv：重新安装、卸载、检测版本
-            show_menu "虚拟环境管理" \
-                "1. 重新安装虚拟环境" \
-                "2. 卸载删除" \
-                "3. 检测版本信息" \
+            # 有 venv：启动服务、重新安装、卸载、检测版本
+            show_menu "Venv 虚拟环境方式（本地 start.sh，参数向导）" \
+                "1. 启动服务（参数向导）" \
+                "2. 重新安装虚拟环境" \
+                "3. 卸载删除" \
+                "4. 检测版本信息" \
                 "0. 返回主菜单"
 
             case $MENU_RESULT in
-                0) venv_install_or_reinstall ;;
-                1) venv_remove ;;
-                2) venv_info ;;
-                3) return ;;
+                0) venv_start ;;
+                1) venv_install_or_reinstall ;;
+                2) venv_remove ;;
+                3) venv_info ;;
+                4) return ;;
             esac
         else
             # 无 venv：仅安装
-            show_menu "虚拟环境管理" \
+            show_menu "Venv 虚拟环境方式" \
                 "1. 安装虚拟环境" \
                 "0. 返回主菜单"
 
@@ -745,7 +894,7 @@ launch_via_venv() {
     printf "  bash start.sh%s\n" "$args"
     echo
 
-    (cd "$SCRIPT_DIR" && bash start.sh $args)
+    (cd "$SERVICE_DIR" && bash start.sh $args)
 }
 
 launch_via_docker() {
@@ -790,8 +939,8 @@ launch_via_docker() {
 
     local cmd="docker run -d ${gpu_flag} \\
     -p ${LAUNCH_PORT}:${LAUNCH_PORT} \\
-    -v \"${SCRIPT_DIR}/models:/app/models\" \\
-    -v \"${SCRIPT_DIR}/logs:/app/logs\" \\
+    -v \"${SERVICE_DIR}/models:/app/models\" \\
+    -v \"${SERVICE_DIR}/logs:/app/logs\" \\
     --name ${CONTAINER_NAME} \\
     ${IMAGE_NAME}:${IMAGE_TAG} \\
     ${docker_args}"
@@ -807,8 +956,8 @@ launch_via_docker() {
         run_args+=("--gpus" "all")
     fi
     run_args+=("-p" "${LAUNCH_PORT}:${LAUNCH_PORT}")
-    run_args+=("-v" "${SCRIPT_DIR}/models:/app/models")
-    run_args+=("-v" "${SCRIPT_DIR}/logs:/app/logs")
+    run_args+=("-v" "${SERVICE_DIR}/models:/app/models")
+    run_args+=("-v" "${SERVICE_DIR}/logs:/app/logs")
     if [ -n "$LAUNCH_API_KEY" ]; then
         run_args+=("-e" "ASR_API_KEY=${LAUNCH_API_KEY}")
     fi
@@ -828,50 +977,15 @@ launch_via_docker() {
     press_any_key
 }
 
-choose_launch_method() {
-    local has_docker_available=0
-    local has_venv_available=0
-
-    [ "$HAS_DOCKER" -eq 1 ] && has_docker_available=1
-    [ "$HAS_VENV" -eq 1 ] && has_venv_available=1
-
-    # 都没有
-    if [ "$has_docker_available" -eq 0 ] && [ "$has_venv_available" -eq 0 ]; then
-        error_msg "未检测到可用的运行环境（Docker / venv），请先安装"
-        press_any_key
-        return 1
-    fi
-
-    # 只有一种
-    if [ "$has_docker_available" -eq 1 ] && [ "$has_venv_available" -eq 0 ]; then
-        info_msg "仅检测到 Docker 环境，将使用 Docker 启动"
-        LAUNCH_METHOD="docker"
-        return 0
-    fi
-
-    if [ "$has_docker_available" -eq 0 ] && [ "$has_venv_available" -eq 1 ]; then
-        info_msg "仅检测到 venv 环境，将使用本地虚拟环境启动"
-        LAUNCH_METHOD="venv"
-        return 0
-    fi
-
-    # 两种都有，让用户选
-    show_menu "选择启动方式" \
-        "Docker 容器 (推荐)" \
-        "本地虚拟环境"
-    case $MENU_RESULT in
-        0) LAUNCH_METHOD="docker" ;;
-        1) LAUNCH_METHOD="venv" ;;
-    esac
-    return 0
-}
-
-menu_start_service() {
+# 参数向导启动：method = docker | venv。启动方式由调用的子菜单决定，不再单独询问。
+# 首次（无已保存配置）自动进入配置流程；已有配置则可沿用 / 重新配置。
+launch_wizard() {
+    local method="$1"
     echo
     default_config
 
-    # 尝试加载已保存的配置
     if load_launch_config; then
+        LAUNCH_METHOD="$method"      # 方式以当前菜单为准（覆盖已保存值）
         printf "${GREEN}检测到已保存的启动配置：${NC}\n"
         echo
         print_config_summary
@@ -880,20 +994,13 @@ menu_start_service() {
         show_menu "选择操作" \
             "使用已保存配置启动" \
             "重新配置" \
-            "返回主菜单"
+            "返回"
 
         case $MENU_RESULT in
-            0)
-                # 使用已保存配置，但重新选择启动方式
-                if ! choose_launch_method; then
-                    return
-                fi
-                ;;
+            0) : ;;                  # 沿用已保存配置
             1)
                 configure_launch
-                if ! choose_launch_method; then
-                    return
-                fi
+                LAUNCH_METHOD="$method"
                 save_launch_config
                 ;;
             2)
@@ -903,9 +1010,7 @@ menu_start_service() {
     else
         # 无配置，进入配置流程
         configure_launch
-        if ! choose_launch_method; then
-            return
-        fi
+        LAUNCH_METHOD="$method"
         save_launch_config
     fi
 
@@ -914,17 +1019,27 @@ menu_start_service() {
     print_config_summary
     echo
 
-    case "$LAUNCH_METHOD" in
+    case "$method" in
         docker) launch_via_docker ;;
         venv)   launch_via_venv ;;
     esac
+}
+
+# venv 方式启动入口（供「Venv 虚拟环境方式」子菜单调用）
+venv_start() {
+    if [ "$HAS_VENV" -eq 0 ]; then
+        error_msg "虚拟环境未创建，请先安装"
+        press_any_key
+        return
+    fi
+    launch_wizard venv
 }
 
 # ============================================================
 # .gitignore 维护
 # ============================================================
 ensure_gitignore() {
-    local gitignore="$SCRIPT_DIR/.gitignore"
+    local gitignore="$SERVICE_DIR/.gitignore"
     if [ -f "$gitignore" ]; then
         if ! grep -qxF '.cli_launch_config' "$gitignore" 2>/dev/null; then
             echo '.cli_launch_config' >> "$gitignore"
@@ -961,16 +1076,16 @@ redraw_header() {
 menu_main() {
     while true; do
         redraw_header
-        show_menu "主菜单" \
-            "1. Docker 管理" \
-            "2. 虚拟环境管理" \
-            "3. 启动服务" \
+        show_menu "请选择启动方式" \
+            "1. Docker Compose 方式（推荐）" \
+            "2. Docker 容器方式" \
+            "3. Venv 虚拟环境方式" \
             "0. 退出"
 
         case $MENU_RESULT in
-            0) menu_docker ;;
-            1) menu_venv ;;
-            2) menu_start_service ;;
+            0) menu_compose ;;
+            1) menu_docker ;;
+            2) menu_venv ;;
             3)
                 clear
                 info_msg "再见！"

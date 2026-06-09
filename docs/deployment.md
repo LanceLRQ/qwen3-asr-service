@@ -148,36 +148,37 @@ CPU / ARM64 镜像（`latest-cpu` / `latest-arm64`）与数据卷说明见 [Dock
 ### 使用 docker-compose
 
 ```bash
-# 直接启动（使用 docker-compose.yml 中的默认配置）
-docker compose up -d
+# 直接启动（使用 docker/docker-compose.yml 中的默认配置）
+docker compose -f docker/docker-compose.yml up -d
 
 # 停止
-docker compose down
+docker compose -f docker/docker-compose.yml down
 ```
 
-`docker-compose.yml` 中可配置启动参数、API 密钥、端口映射等，详见文件内注释。
+`docker/docker-compose.yml` 中可配置启动参数、API 密钥、端口映射等，详见文件内注释。CPU 版编排见 `docker/docker-compose.cpu.yml`。
 
 ### 本地构建镜像
 
 ```bash
-bash build.sh
+bash docker/build.sh
 ```
 
 ## 交互式 CLI 管理
 
-项目提供交互式管理脚本，统一管理 Docker 和本地 venv 两种运行方式：
+项目在仓库根目录提供交互式管理脚本，统一管理 Docker 和本地 venv 两种运行方式：
 
 ```bash
 # Linux / macOS
-bash asr-service/cli.sh
+bash cli.sh
 
 # Windows
-asr-service\cli.bat
+cli.bat
 ```
 
 CLI 管理脚本支持：
 
-- Docker 管理（拉取/构建镜像、启动/停止容器、查看日志）
+- **Docker Compose 启动（config.yaml 驱动，推荐）**：首次使用自动从 `config.example.yaml` 生成 `config.yaml`，可直接编辑配置后启动/停止/重启容器、查看日志、切换 GPU/CPU 编排
+- Docker 管理（拉取/构建镜像、参数向导启动/停止容器、查看日志）
 - 虚拟环境管理（安装/卸载/查看信息）
 - 启动服务（交互式配置参数，支持保存配置）
 

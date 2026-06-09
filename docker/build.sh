@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -e
 
+# 切到仓库根：构建上下文必须是根目录（Dockerfile 内的 COPY 路径相对此处），
+# 脚本已移入 docker/，故从自身位置回退一级定位根，支持任意目录调用。
+cd "$(dirname "$0")/.."
+
 IMAGE_NAME="lancelrq/qwen3-asr-service"
 
 # 选择构建版本：GPU / CPU / ARM64
@@ -30,16 +34,16 @@ echo ""
 case "$VARIANT" in
     cpu)
         echo "Building ${IMAGE_NAME}:${TAG} (CPU, amd64) ..."
-        docker build -f Dockerfile.cpu -t "${IMAGE_NAME}:${TAG}" .
+        docker build -f docker/Dockerfile.cpu -t "${IMAGE_NAME}:${TAG}" .
         ;;
     arm64)
         echo "Building ${IMAGE_NAME}:${TAG} (CPU, arm64) ..."
         docker buildx build --platform linux/arm64 \
-            -f Dockerfile.cpu -t "${IMAGE_NAME}:${TAG}" --load .
+            -f docker/Dockerfile.cpu -t "${IMAGE_NAME}:${TAG}" --load .
         ;;
     *)
         echo "Building ${IMAGE_NAME}:${TAG} (GPU) ..."
-        docker build -t "${IMAGE_NAME}:${TAG}" .
+        docker build -f docker/Dockerfile -t "${IMAGE_NAME}:${TAG}" .
         ;;
 esac
 

@@ -7,13 +7,13 @@
 ### Supported tags and respective Dockerfile links
 
 **GPU 版本**（CUDA 12.1，需要 NVIDIA GPU 和 nvidia-docker）
-- [`latest`, `1.2.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/Dockerfile)
+- [`latest`, `1.2.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile)
 
 **CPU 版本**（x86_64，无需 GPU，适用于普通 Linux/Windows 服务器）
-- [`latest-cpu`, `1.2.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/Dockerfile.cpu)
+- [`latest-cpu`, `1.2.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu)
 
 **ARM64 版本**（arm64/aarch64，无需 GPU，适用于 Apple Silicon、ARM64 Linux 服务器）
-- [`latest-arm64`, `1.2.0-arm64`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/Dockerfile.cpu)
+- [`latest-arm64`, `1.2.0-arm64`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu)
 
 ### 镜像版本对比
 
@@ -181,13 +181,13 @@ A ready-to-use long-form speech recognition API service based on Qwen3-ASR, supp
 ### Supported tags and respective Dockerfile links
 
 **GPU** (CUDA 12.1, requires NVIDIA GPU and nvidia-docker)
-- [`latest`, `1.2.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/Dockerfile)
+- [`latest`, `1.2.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile)
 
 **CPU** (x86_64, no GPU required, for standard Linux/Windows servers)
-- [`latest-cpu`, `1.2.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/Dockerfile.cpu)
+- [`latest-cpu`, `1.2.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu)
 
 **ARM64** (arm64/aarch64, no GPU required, for Apple Silicon and ARM64 Linux servers)
-- [`latest-arm64`, `1.2.0-arm64`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/Dockerfile.cpu)
+- [`latest-arm64`, `1.2.0-arm64`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu)
 
 ### Image tag comparison
 
