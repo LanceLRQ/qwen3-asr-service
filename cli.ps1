@@ -562,7 +562,7 @@ function Venv-InstallOrReinstall {
 
     Write-Info '运行安装脚本...'
     Write-Host
-    & $setupPs1
+    try { Push-Location $ServiceDir; & $setupPs1 } finally { Pop-Location }
 
     # Refresh detection
     $venvPython = Join-Path $ServiceDir 'venv\Scripts\python.exe'
@@ -723,7 +723,7 @@ function Portable-Setup {
 
     Write-Info '运行安装脚本...'
     Write-Host
-    & $setupPs1
+    try { Push-Location $ServiceDir; & $setupPs1 } finally { Pop-Location }
 
     # Refresh detection
     $portableBin = Join-Path $ServiceDir 'bin\python\python.exe'
@@ -1211,7 +1211,7 @@ function Launch-ViaVenv {
     Write-Host "  powershell -File $startPs1 $($launchArgs -join ' ')"
     Write-Host
 
-    & $startPs1 @launchArgs
+    try { Push-Location $ServiceDir; & $startPs1 @launchArgs } finally { Pop-Location }
 }
 
 function Launch-ViaPortable {
@@ -1229,7 +1229,7 @@ function Launch-ViaPortable {
     Write-Host "  powershell -File $startPs1 $($launchArgs -join ' ')"
     Write-Host
 
-    & $startPs1 @launchArgs
+    try { Push-Location $ServiceDir; & $startPs1 @launchArgs } finally { Pop-Location }
 }
 
 function Launch-ViaDocker {
