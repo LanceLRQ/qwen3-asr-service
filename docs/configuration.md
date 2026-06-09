@@ -166,7 +166,7 @@ enable_task_store: true
 
 - **结果可查，不做断点续跑**：重启时上次未完成（`pending` / `processing`）的任务标记为 `failed`（`error: "service restarted"`），不会自动重跑。
 - **过期清理仅在服务启动时执行**：终态超过 `task_retention_days` 天的记录被删除并回收空间。
-- 历史任务的查询与删除接口见 [API 文档 · 任务持久化对 API 的影响](api/v2.md#任务持久化对-api-的影响)。
+- 历史任务的查询与删除接口见 [API 文档 · 任务持久化对 API 的影响](api/v2/tasks.md#任务持久化对-api-的影响)。
 - 只保存文本结果与元数据，**不留存音频原件**；持久化写入失败只告警，不影响任务执行。
 - 删除 `data/tasks.db` = 清空历史记录，不影响服务功能。对内容留存有更严格要求时，调小 `task_retention_days` 或关闭开关。
 

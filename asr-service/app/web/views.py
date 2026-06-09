@@ -9,6 +9,10 @@ from app.web.page import HTML_PAGE, SPEAKERS_PAGE, STREAM_PAGE
 # 前端静态资源目录（vendored Vue/Naive UI + 页面 JS），由 main 挂载到 /web-ui/assets
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 
+# 文档中心图片资源目录（docs/images），由 main 挂载到 /web-ui/docs-media；
+# 用相对路径替代 GitHub raw 链接，离线环境也能在文档中心显示预览图（目录存在才挂载）
+DOCS_MEDIA_DIR = os.path.join(docs_site.REPO_ROOT, "docs", "images")
+
 web_router = APIRouter()
 
 

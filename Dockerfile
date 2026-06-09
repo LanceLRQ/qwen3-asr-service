@@ -35,7 +35,7 @@ COPY asr-service/ /app
 
 # 复制文档（/web-ui/docs 文档中心；/app 的父目录即 /，与源码仓库布局一致）
 COPY docs/ /docs/
-COPY README.md README_EN.md /
+COPY README.md README_zh.md /
 
 # 创建模型挂载目录
 RUN mkdir -p /app/models /app/logs

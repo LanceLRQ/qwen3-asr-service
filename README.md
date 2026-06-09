@@ -52,7 +52,7 @@ docker run -d --gpus all -p 8765:8765 \
 
 | Offline Transcription | Real-time Transcription |
 | :---: | :---: |
-| ![Offline Transcription](https://raw.githubusercontent.com/LanceLRQ/qwen3-asr-service/main/images/offline.webp) | ![Real-time Transcription](https://raw.githubusercontent.com/LanceLRQ/qwen3-asr-service/main/images/online.webp) |
+| ![Offline Transcription](docs/images/offline.webp) | ![Real-time Transcription](docs/images/online.webp) |
 
 ## Documentation
 

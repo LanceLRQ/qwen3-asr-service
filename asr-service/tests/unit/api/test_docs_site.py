@@ -14,12 +14,19 @@ from app.web.views import web_router
 @pytest.fixture
 def fake_repo(tmp_path, monkeypatch):
     """构造最小仓库布局并指向它（自动清理渲染缓存）。"""
-    (tmp_path / "docs" / "api").mkdir(parents=True)
+    (tmp_path / "docs" / "api" / "v2").mkdir(parents=True)
     (tmp_path / "docs" / "plan").mkdir()
     (tmp_path / "README.md").write_text(
-        "# Home\n\n[Deployment](docs/deployment.md)\n", encoding="utf-8"
+        "# Home\n\n![Preview](docs/images/offline.webp)\n\n[Deployment](docs/deployment.md)\n",
+        encoding="utf-8",
     )
     (tmp_path / "README_zh.md").write_text("# 项目主页\n", encoding="utf-8")
+    (tmp_path / "docs" / "api" / "v2" / "basics.md").write_text(
+        "# 基础接口\n\n[概览](../v2.md)\n", encoding="utf-8"
+    )
+    (tmp_path / "docs" / "api" / "v2" / "basics_EN.md").write_text(
+        "# Basics\n\n[overview](../v2_EN.md)\n", encoding="utf-8"
+    )
     (tmp_path / "docs" / "deployment.md").write_text(
         "# 部署指南\n\n## 启动参数（完整表）\n\n"
         "[API v2](api/v2.md#响应格式) | [回主页](../README.md)\n"
@@ -47,7 +54,16 @@ def _client():
 
 def test_registry_scans_whitelist_only(fake_repo):
     reg = docs_site.get_registry()
-    assert set(reg) == {"readme", "readme_zh", "deployment", "api/v2"}
+    assert set(reg) == {
+        "readme", "readme_zh", "deployment",
+        "api/v2", "api/v2/basics", "api/v2/basics_en",
+    }
+
+
+def test_registry_scans_v2_subfolder(fake_repo):
+    # docs/api/v2/** 子文档纳入注册表，slug 保留多级路径
+    reg = docs_site.get_registry()
+    assert reg["api/v2/basics"]["relpath"] == "docs/api/v2/basics.md"
 
 
 def test_registry_excludes_plan(fake_repo):
@@ -86,6 +102,26 @@ def test_render_subdir_doc_resolves_parent_links(fake_repo):
     page = docs_site.render_doc_page("api/v2")
     # docs/api/v2.md 里的 ../configuration.md 不在注册表 → GitHub 兜底
     assert "blob/main/docs/configuration.md" in page
+
+
+def test_render_rewrites_img_to_local_media(fake_repo):
+    # docs/images/* 图片重写为本地静态路由（不再依赖 GitHub raw 链接）
+    page = docs_site.render_doc_page("readme")
+    assert 'src="/web-ui/docs-media/offline.webp"' in page
+    assert "raw.githubusercontent.com" not in page
+
+
+def test_render_v2_subdoc_rewrites_overview_link(fake_repo):
+    # docs/api/v2/basics.md 里的 ../v2.md 命中注册表 → 文档路由
+    page = docs_site.render_doc_page("api/v2/basics")
+    assert 'href="/web-ui/docs/api/v2"' in page
+
+
+def test_nav_marks_v2_subdoc_with_sub_class(fake_repo):
+    page = docs_site.render_doc_page("api/v2/basics")
+    nav = _doc_nav(page)
+    assert 'href="/web-ui/docs/api/v2/basics" class="sub active"' in nav   # 子文档缩进 + 高亮
+    assert '<a href="/web-ui/docs/api/v2">' in nav                         # 概览页同组、无 sub/active 类
 
 
 def test_render_caches_page(fake_repo):

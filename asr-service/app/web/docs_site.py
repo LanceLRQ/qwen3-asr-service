@@ -23,7 +23,11 @@ from app.config import BASE_DIR
 logger = logging.getLogger(__name__)
 
 GITHUB_BLOB_BASE = "https://github.com/LanceLRQ/qwen3-asr-service/blob/main"
+GITHUB_RAW_BASE = "https://raw.githubusercontent.com/LanceLRQ/qwen3-asr-service/main"
 DOCS_ROUTE_PREFIX = "/web-ui/docs"
+# 文档内图片 docs/images/* 重写到此前缀（由 main 静态挂载 docs/images），离线可用
+DOCS_MEDIA_PREFIX = "/web-ui/docs-media"
+DOCS_MEDIA_RELROOT = "docs/images/"
 
 # 仓库根：源码部署 = asr-service 的父目录；Docker 镜像 COPY docs/ → /docs、
 # README*.md → / 保持同布局（WORKDIR /app 的父目录即 /）
@@ -46,12 +50,21 @@ def _get_template() -> str | None:
     return _template
 
 # 侧边导航顺序与短标题（slug 去 _en 后缀为键；不在表中的文档排在末尾、用文档 h1 兜底）
-_NAV_ORDER = ["readme", "deployment", "configuration", "api/v2", "api/v1", "architecture"]
+# api/v2/* 为 API v2 概览下的子文档，导航中缩进显示（见 _build_nav 的 sub 类）
+_NAV_ORDER = [
+    "readme", "deployment", "configuration",
+    "api/v2", "api/v2/basics", "api/v2/transcription", "api/v2/tasks", "api/v2/speakers",
+    "api/v1", "architecture",
+]
 _NAV_TITLES = {
     "readme": ("项目主页", "Home"),
     "deployment": ("部署指南", "Deployment"),
     "configuration": ("配置文档", "Configuration"),
     "api/v2": ("API v2（默认）", "API v2 (default)"),
+    "api/v2/basics": ("基础接口", "Basics"),
+    "api/v2/transcription": ("转写", "Transcription"),
+    "api/v2/tasks": ("任务管理", "Task Management"),
+    "api/v2/speakers": ("说话人管理", "Speaker Management"),
     "api/v1": ("API v1（兼容）", "API v1 (legacy)"),
     "architecture": ("架构说明", "Architecture"),
 }
@@ -102,7 +115,7 @@ def _read_title(path: str) -> str | None:
 def _scan_registry() -> dict:
     """扫描白名单目录构建 slug → {relpath, title} 注册表。"""
     candidates = ["README.md", "README_zh.md"]
-    for sub in ("docs", "docs/api"):
+    for sub in ("docs", "docs/api", "docs/api/v2"):
         d = os.path.join(REPO_ROOT, sub)
         if os.path.isdir(d):
             candidates += [
@@ -157,6 +170,23 @@ class _LinkRewriter(Treeprocessor):
             href = a.get("href")
             if href:
                 a.set("href", self._rewrite(href))
+        for img in root.iter("img"):
+            src = img.get("src")
+            if src:
+                img.set("src", self._rewrite_img(src))
+
+    def _rewrite_img(self, src: str) -> str:
+        """重写 <img src>：仓库内 docs/images/* → 本地静态路由（离线可用）；其它仓库内
+        相对图片回退 GitHub raw（blob 不内联图片）；外链 / data: 原样保留。"""
+        if src.startswith(("http://", "https://", "data:", "#")):
+            return src
+        path = src.partition("#")[0].partition("?")[0]
+        norm = posixpath.normpath(posixpath.join(self._cur_dir, path))
+        if norm.startswith(DOCS_MEDIA_RELROOT):
+            return f"{DOCS_MEDIA_PREFIX}/{norm[len(DOCS_MEDIA_RELROOT):]}"
+        if norm.startswith(".."):  # 越出仓库根，无法定位，原样保留
+            return src
+        return f"{GITHUB_RAW_BASE}/{norm}"
 
     def _rewrite(self, href: str) -> str:
         if href.startswith(("http://", "https://", "#", "mailto:")):
@@ -203,7 +233,12 @@ def _build_nav(active_slug: str, registry: dict) -> str:
             continue
         titles = _NAV_TITLES.get(base)
         label = titles[1 if is_en else 0] if titles else registry[slug]["title"]
-        cls = ' class="active"' if slug == active_slug else ""
+        classes = []
+        if base.startswith("api/v2/"):   # API v2 子文档：导航缩进
+            classes.append("sub")
+        if slug == active_slug:
+            classes.append("active")
+        cls = f' class="{" ".join(classes)}"' if classes else ""
         items.append(
             f'<a href="{DOCS_ROUTE_PREFIX}/{slug}"{cls}>{html.escape(label)}</a>'
         )

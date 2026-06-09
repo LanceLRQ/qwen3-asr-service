@@ -52,7 +52,7 @@ docker run -d --gpus all -p 8765:8765 \
 
 | 离线转写 | 实时转写 |
 | :---: | :---: |
-| ![离线转写](https://raw.githubusercontent.com/LanceLRQ/qwen3-asr-service/main/images/offline.webp) | ![实时转写](https://raw.githubusercontent.com/LanceLRQ/qwen3-asr-service/main/images/online.webp) |
+| ![离线转写](docs/images/offline.webp) | ![实时转写](docs/images/online.webp) |
 
 ## 文档导航
 

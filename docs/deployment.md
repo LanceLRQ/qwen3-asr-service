@@ -123,7 +123,7 @@ bash start.sh
 # 或写入 config.yaml 的 api_key 键（注意该文件勿提交版本库）
 ```
 
-调用方式见 [API 文档 · 认证](api/v2.md#认证)。
+调用方式见 [API 文档 · 认证](api/v2/basics.md#认证)。
 
 ## Docker 部署
 
@@ -202,7 +202,7 @@ curl http://127.0.0.1:8765/v2/health
 }
 ```
 
-CPU 模式下 `asr_backend` 为 `openvino`、`vad_backend`/`punc_backend` 为 `onnx`。完整字段说明见 [API 文档 · 健康检查](api/v2.md#健康检查)。
+CPU 模式下 `asr_backend` 为 `openvino`、`vad_backend`/`punc_backend` 为 `onnx`。完整字段说明见 [API 文档 · 健康检查](api/v2/basics.md#健康检查)。
 
 ## 三种运行模式
 

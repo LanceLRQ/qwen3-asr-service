@@ -123,7 +123,7 @@ bash start.sh
 # Or set the api_key key in config.yaml (never commit that file)
 ```
 
-Client usage: see [API reference · Authentication](api/v2_EN.md#authentication).
+Client usage: see [API reference · Authentication](api/v2/basics_EN.md#authentication).
 
 ## Docker Deployment
 
@@ -202,7 +202,7 @@ Response example (GPU mode):
 }
 ```
 
-In CPU mode, `asr_backend` is `openvino` and `vad_backend`/`punc_backend` are `onnx`. Full field reference: [API reference · Health Check](api/v2_EN.md#health-check).
+In CPU mode, `asr_backend` is `openvino` and `vad_backend`/`punc_backend` are `onnx`. Full field reference: [API reference · Health Check](api/v2/basics_EN.md#health-check).
 
 ## Three Operation Modes
 

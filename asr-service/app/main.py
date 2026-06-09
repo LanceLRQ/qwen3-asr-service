@@ -437,9 +437,11 @@ def _assemble_standard(app: FastAPI, args) -> None:
 
     # 条件挂载 Web UI
     if getattr(args, "web", False):
-        from app.web.views import web_router, ASSETS_DIR
+        from app.web.views import web_router, ASSETS_DIR, DOCS_MEDIA_DIR
         app.include_router(web_router)
         app.mount("/web-ui/assets", StaticFiles(directory=ASSETS_DIR), name="web-assets")
+        if os.path.isdir(DOCS_MEDIA_DIR):
+            app.mount("/web-ui/docs-media", StaticFiles(directory=DOCS_MEDIA_DIR), name="docs-media")
         cfg.ENABLE_WEB = True       # 根路径据此跳转 /web-ui（仅实际挂载时置位）
         logger.info(f"Web UI 已启用，访问 http://{cfg.HOST}:{cfg.PORT}/web-ui")
 

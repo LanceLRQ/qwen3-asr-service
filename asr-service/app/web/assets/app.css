@@ -278,6 +278,9 @@ body.dark .docs-sidebar { background: #16171c; box-shadow: none; border: 1px sol
 .docs-sidebar a { text-decoration: none; padding: 8px 12px; border-radius: 8px; color: #475569; font-size: .88em; }
 .docs-sidebar a:hover { background: rgba(20, 184, 166, .08); color: var(--accent-deep); }
 .docs-sidebar a.active { background: rgba(20, 184, 166, .12); color: var(--accent-deep); font-weight: 600; }
+/* API v2 子文档：缩进 + 略小字号，体现层级 */
+.docs-sidebar a.sub { padding-left: 26px; font-size: .84em; color: #64748b; }
+body.dark .docs-sidebar a.sub { color: #8a99ad; }
 body.dark .docs-sidebar a { color: #94a3b8; }
 body.dark .docs-sidebar a:hover, body.dark .docs-sidebar a.active { color: #2dd4bf; }
 

@@ -166,7 +166,7 @@ enable_task_store: true
 
 - **Queryable results, no resume**: tasks left unfinished (`pending` / `processing`) at the previous shutdown are marked `failed` (`error: "service restarted"`) on restart; they are not re-run automatically.
 - **Retention cleanup runs at startup only**: terminal records older than `task_retention_days` are deleted and space is reclaimed.
-- Query and deletion endpoints for historical tasks: see [API reference · How Task Persistence Affects the API](api/v2_EN.md#how-task-persistence-affects-the-api).
+- Query and deletion endpoints for historical tasks: see [API reference · How Task Persistence Affects the API](api/v2/tasks_EN.md#how-task-persistence-affects-the-api).
 - Only text results and metadata are stored — **no original audio is retained**; persistence write failures are logged as warnings and never affect task execution.
 - Deleting `data/tasks.db` = clearing history without affecting functionality. For stricter content-retention requirements, lower `task_retention_days` or turn the switch off.
 
