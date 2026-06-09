@@ -1,6 +1,6 @@
 """离线任务持久化存储（data/tasks.db，SQLite stdlib）。
 
-设计文档：docs/plan/features/task_persistence/task-persistence-design.md
+设计文档：docs/plan/features/20260604_task_persistence/task-persistence-design.md
 - 只做"结果可查"，不做"断点续跑"：重启时悬挂任务收口为 failed（close_dangling）；
 - 过期清理仅在服务启动时执行（cleanup_expired），retention_days=0 表示永不清理；
 - 容错契约：所有方法内部捕获 sqlite3.Error → WARN 日志 + 返回空值，

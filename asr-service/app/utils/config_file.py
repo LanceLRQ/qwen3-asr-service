@@ -2,7 +2,7 @@
 
 优先级链（低→高）：schema 默认值 < 环境变量(ASR_API_KEY/MODEL_SOURCE) < 配置文件 < CLI 显式参数。
 仅支持 YAML（config.yaml / config.yml）；键名 = CLI 长参数横线转下划线，扁平结构。
-设计文档：docs/plan/features/config_file/config-file-design.md §3
+设计文档：docs/plan/features/20260604_config_file/config-file-design.md §3
 """
 import argparse
 import difflib

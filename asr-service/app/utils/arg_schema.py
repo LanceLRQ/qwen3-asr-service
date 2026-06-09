@@ -1,6 +1,6 @@
 """启动参数单一 schema：同一份定义驱动 argparse、配置文件校验与 config.example.yaml。
 
-设计要点（docs/plan/features/config_file/config-file-design.md §3.2）：
+设计要点（docs/plan/features/20260604_config_file/config-file-design.md §3.2）：
 - argparse 的 default 一律 SUPPRESS——否则无法区分"显式传了默认值"与"没传"，
   配置文件的覆盖语义（默认值 < 环境变量 < 配置文件 < CLI 显式参数）会错；
 - 实义默认值收敛到本表（schema_defaults），消除 CLI 定义 / 文件校验 / 示例文件三处漂移；
