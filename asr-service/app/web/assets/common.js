@@ -151,8 +151,8 @@ window.AsrCommon = (function () {
         // Naive UI 组件内置文案（空表/分页/确认按钮等）跟随语言
         const naiveLocale = computed(() => (locale.value === 'zh' ? naive.zhCN : naive.enUS));
         const naiveDateLocale = computed(() => (locale.value === 'zh' ? naive.dateZhCN : naive.dateEnUS));
-        // 文档导航入口随语言指向对应版本（英文镜像 slug = readme_en）
-        const docsHref = computed(() => (locale.value === 'en' ? '/web-ui/docs/readme_en' : '/web-ui/docs'));
+        // 文档导航入口随当前语言直达对应 README（英文 readme / 中文 readme_zh）
+        const docsHref = computed(() => (locale.value === 'en' ? '/web-ui/docs/readme' : '/web-ui/docs/readme_zh'));
 
         // 服务状态点：加载时查一次 /v2/health（无鉴权端点），不做持续轮询；
         // 状态存 key+detail，title 经 computed 翻译（语言切换即时生效）

@@ -17,9 +17,9 @@ def fake_repo(tmp_path, monkeypatch):
     (tmp_path / "docs" / "api").mkdir(parents=True)
     (tmp_path / "docs" / "plan").mkdir()
     (tmp_path / "README.md").write_text(
-        "# 项目主页\n\n[部署指南](docs/deployment.md)\n", encoding="utf-8"
+        "# Home\n\n[Deployment](docs/deployment.md)\n", encoding="utf-8"
     )
-    (tmp_path / "README_EN.md").write_text("# Home\n", encoding="utf-8")
+    (tmp_path / "README_zh.md").write_text("# 项目主页\n", encoding="utf-8")
     (tmp_path / "docs" / "deployment.md").write_text(
         "# 部署指南\n\n## 启动参数（完整表）\n\n"
         "[API v2](api/v2.md#响应格式) | [回主页](../README.md)\n"
@@ -47,7 +47,7 @@ def _client():
 
 def test_registry_scans_whitelist_only(fake_repo):
     reg = docs_site.get_registry()
-    assert set(reg) == {"readme", "readme_en", "deployment", "api/v2"}
+    assert set(reg) == {"readme", "readme_zh", "deployment", "api/v2"}
 
 
 def test_registry_excludes_plan(fake_repo):
@@ -99,9 +99,9 @@ def test_render_caches_page(fake_repo):
 def test_render_injects_lang_and_alt_slug(fake_repo):
     """i18n 联动注入：__DOC_LANG__/__DOC_ALT_SLUG__ 按 slug 与对侧版本存在性替换。"""
     page = docs_site.render_doc_page("readme")
-    assert "DOC_LANG = 'zh'" in page and "ALT = 'readme_en'" in page
-    page_en = docs_site.render_doc_page("readme_en")
-    assert "DOC_LANG = 'en'" in page_en and "ALT = 'readme'" in page_en
+    assert "DOC_LANG = 'en'" in page and "ALT = 'readme_zh'" in page
+    page_zh = docs_site.render_doc_page("readme_zh")
+    assert "DOC_LANG = 'zh'" in page_zh and "ALT = 'readme'" in page_zh
     # 无英文镜像的文档：ALT 注入空串（前端仅切界面文案，不跳转）
     page_dep = docs_site.render_doc_page("deployment")
     assert "DOC_LANG = 'zh'" in page_dep and "ALT = ''" in page_dep
@@ -112,7 +112,7 @@ def test_render_injects_lang_and_alt_slug(fake_repo):
 def test_docs_index_renders_readme(fake_repo):
     resp = _client().get("/web-ui/docs")
     assert resp.status_code == 200
-    assert "项目主页" in resp.text
+    assert "Home" in resp.text
     assert 'href="/web-ui/docs/deployment"' in resp.text
 
 
@@ -152,10 +152,10 @@ def _doc_nav(page: str) -> str:
 
 
 def test_nav_groups_by_language(fake_repo):
-    zh = docs_site.render_doc_page("readme")
-    assert "/web-ui/docs/readme_en" not in _doc_nav(zh)   # 中文导航不混英文文档
-    en = docs_site.render_doc_page("readme_en")
-    assert "/web-ui/docs/readme_en" in _doc_nav(en)
+    en = docs_site.render_doc_page("readme")
+    assert "/web-ui/docs/readme_zh" not in _doc_nav(en)   # 英文导航不混中文文档
+    zh = docs_site.render_doc_page("readme_zh")
+    assert "/web-ui/docs/readme_zh" in _doc_nav(zh)
 
 
 # ---------- Studio Console 外壳 ----------

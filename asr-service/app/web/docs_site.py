@@ -74,6 +74,19 @@ def _slug_for(relpath: str) -> str:
     return relpath[len("docs/"): -len(".md")].lower()
 
 
+def _slug_lang(slug: str) -> tuple[bool, str, str]:
+    """返回 (is_en, base, alt_slug)。
+    README 语言极性与其余文档相反：英文为 README.md(readme)、中文为 README_zh.md(readme_zh)；
+    其余文档：中文为基名、英文为 *_en。"""
+    if slug == "readme":
+        return True, "readme", "readme_zh"
+    if slug == "readme_zh":
+        return False, "readme", "readme"
+    is_en = slug.endswith("_en")
+    base = slug[: -len("_en")] if is_en else slug
+    return is_en, base, (base if is_en else f"{slug}_en")
+
+
 def _read_title(path: str) -> str | None:
     """取文档首个一级标题作为页面标题。"""
     try:
@@ -88,7 +101,7 @@ def _read_title(path: str) -> str | None:
 
 def _scan_registry() -> dict:
     """扫描白名单目录构建 slug → {relpath, title} 注册表。"""
-    candidates = ["README.md", "README_EN.md"]
+    candidates = ["README.md", "README_zh.md"]
     for sub in ("docs", "docs/api"):
         d = os.path.join(REPO_ROOT, sub)
         if os.path.isdir(d):
@@ -174,10 +187,10 @@ class _LinkRewriteExtension(Extension):
 
 def _build_nav(active_slug: str, registry: dict) -> str:
     """生成与当前文档同语言的侧边导航（文档头部自带中英切换链接）。"""
-    is_en = active_slug.endswith("_en")
+    is_en = _slug_lang(active_slug)[0]
 
     def sort_key(slug: str):
-        base = slug[: -len("_en")] if slug.endswith("_en") else slug
+        base = _slug_lang(slug)[1]
         try:
             return (_NAV_ORDER.index(base), slug)
         except ValueError:
@@ -185,9 +198,9 @@ def _build_nav(active_slug: str, registry: dict) -> str:
 
     items = []
     for slug in sorted(registry, key=sort_key):
-        if slug.endswith("_en") != is_en:
+        s_en, base, _ = _slug_lang(slug)
+        if s_en != is_en:
             continue
-        base = slug[: -len("_en")] if is_en else slug
         titles = _NAV_TITLES.get(base)
         label = titles[1 if is_en else 0] if titles else registry[slug]["title"]
         cls = ' class="active"' if slug == active_slug else ""
@@ -229,9 +242,8 @@ def render_doc_page(slug: str) -> str | None:
         ],
         extension_configs={"toc": {"slugify": _github_slugify}},
     )
-    # 中英对侧 slug（xxx ↔ xxx_en，仅当对侧存在时注入）：供前端语言切换/首访自动跳版本
-    is_en = slug.endswith("_en")
-    alt = slug[: -len("_en")] if is_en else f"{slug}_en"
+    # 中英对侧 slug（仅当对侧存在时注入）：供前端语言切换/首访自动跳版本
+    is_en, _, alt = _slug_lang(slug)
     page = (
         template
         .replace("__DOC_TITLE__", html.escape(info["title"]))
