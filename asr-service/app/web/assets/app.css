@@ -5,7 +5,11 @@
   --accent: #14b8a6;
   --accent-deep: #0d9488;
   --rec: #ef4444;
+  /* 键值行配色（模型信息卡 / 会话协议卡共用，随主题切换） */
+  --kv-key: #64748b;
+  --kv-val: #334155;
 }
+body.dark { --kv-key: #94a3b8; --kv-val: #e2e8f0; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 /* 背景：网点纹理 + 顶部主色光晕（颜色本体由 Naive 主题 bodyColor 控制） */
@@ -116,10 +120,8 @@ body.dark .adv-field .lbl { color: #cbd5e1; }
 .model-card-title { font-size: .76em; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
 .model-row { display: flex; justify-content: space-between; gap: 18px; padding: 5px 0; font-size: .84em; font-variant-numeric: tabular-nums; }
 .model-row + .model-row { border-top: 1px solid rgba(148, 163, 184, .16); }
-.model-row .k { color: #64748b; white-space: nowrap; }
-body.dark .model-row .k { color: #94a3b8; }
-.model-row .v { font-weight: 600; color: #334155; text-align: right; word-break: break-all; }
-body.dark .model-row .v { color: #e2e8f0; }
+.model-row .k { color: var(--kv-key); white-space: nowrap; }
+.model-row .v { font-weight: 600; color: var(--kv-val); text-align: right; word-break: break-all; }
 .model-row .v.on { color: var(--accent); }
 .model-row .v.off { color: #94a3b8; font-weight: 500; }
 
@@ -224,13 +226,11 @@ body.dark .sess-proto .id { color: #e2e8f0; }
 }
 body.dark .sess-proto .ver { color: #2dd4bf; }
 .sess-meta { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: baseline; }
-.sess-meta .k { font-size: .82em; color: #64748b; }
-body.dark .sess-meta .k { color: #94a3b8; }
+.sess-meta .k { font-size: .82em; color: var(--kv-key); }
 .sess-meta .v {
   font-family: var(--mono); font-size: .82em; font-weight: 600;
-  color: #334155; text-align: right; word-break: break-all; font-variant-numeric: tabular-nums;
+  color: var(--kv-val); text-align: right; word-break: break-all; font-variant-numeric: tabular-nums;
 }
-body.dark .sess-meta .v { color: #e2e8f0; }
 .sess-caps-label {
   font-size: .8em; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
   color: #64748b; margin: 16px 0 9px;

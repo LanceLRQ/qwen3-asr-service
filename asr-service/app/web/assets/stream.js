@@ -137,12 +137,17 @@
   // ffmpeg-wasm 资源走 npmmirror（阿里云，国内可达且 CORS 开放，三包齐全）。
   // unpkg.zhimg 只镜像 @ffmpeg/core，缺 @ffmpeg/ffmpeg 与 @ffmpeg/util（请求 404 → 转码器静默失效），故整体改用 npmmirror。
   const ffFile = (pkg, ver, path) => 'https://registry.npmmirror.com/' + pkg + '/' + ver + '/files/' + path;
-  const FF_FFMPEG_JS = ffFile('@ffmpeg/ffmpeg', '0.12.10', 'dist/umd/ffmpeg.js');
-  const FF_WORKER_JS = ffFile('@ffmpeg/ffmpeg', '0.12.10', 'dist/umd/814.ffmpeg.js');   // FFmpeg 类的 worker chunk
-  const FF_UTIL_JS = ffFile('@ffmpeg/util', '0.12.1', 'dist/umd/index.js');
+  // ⚠️ 升级版本必读：worker chunk 名 '814.ffmpeg.js' 是 @ffmpeg/ffmpeg 的 webpack 产物名，与版本强耦合——
+  //    升级 FF_VER 后该 chunk 名很可能改变，必须同步核对（看 dist/umd 目录），否则 worker 404 → 转码器静默回退原生。
+  //    @ffmpeg/ffmpeg 与 @ffmpeg/core 同版本（FF_VER）；@ffmpeg/util 版本独立（FF_UTIL_VER）。
+  const FF_VER = '0.12.10';
+  const FF_UTIL_VER = '0.12.1';
+  const FF_FFMPEG_JS = ffFile('@ffmpeg/ffmpeg', FF_VER, 'dist/umd/ffmpeg.js');
+  const FF_WORKER_JS = ffFile('@ffmpeg/ffmpeg', FF_VER, 'dist/umd/814.ffmpeg.js');
+  const FF_UTIL_JS = ffFile('@ffmpeg/util', FF_UTIL_VER, 'dist/umd/index.js');
   // core 取 ESM 构建（含 default 导出）：模块 worker 内无 importScripts，靠 import() 加载 core
-  const FF_CORE_JS = ffFile('@ffmpeg/core', '0.12.10', 'dist/esm/ffmpeg-core.js');
-  const FF_CORE_WASM = ffFile('@ffmpeg/core', '0.12.10', 'dist/esm/ffmpeg-core.wasm');
+  const FF_CORE_JS = ffFile('@ffmpeg/core', FF_VER, 'dist/esm/ffmpeg-core.js');
+  const FF_CORE_WASM = ffFile('@ffmpeg/core', FF_VER, 'dist/esm/ffmpeg-core.wasm');
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   function floatToInt16(f32) {
@@ -213,28 +218,28 @@
         'speaker_labels', 'speaker_identification',
         'noise_filter_tunable', 'speaker_tunable', 'endpoint_tunable', 'output_toggles',
       ];
-      const CAP_TIP_KEYS = new Set(['partial_results']);   // 带「为何不可用」说明的能力：hover 弹 tooltip
       const capFlags = computed(() => {
         const c = capParts.value && capParts.value.capabilities;
         if (!c) return [];
         const known = CAP_ORDER.filter(k => k in c);
         const extra = Object.keys(c).filter(k => !CAP_ORDER.includes(k));
         // 已启用排前：成排亮色芯片更易扫读，禁用项弱化随后（sort 稳定，组内保持 CAP_ORDER）
+        // 目前仅「增量结果」带「为何不可用」说明（需 vLLM）；后续若多了再抽成集合/由服务端下发
         return known.concat(extra)
-          .map(k => ({ key: k, label: t('cap.flag.' + k), on: !!c[k], tip: CAP_TIP_KEYS.has(k) ? t('cap.tip.' + k) : '' }))
+          .map(k => ({ key: k, label: t('cap.flag.' + k), on: !!c[k], tip: k === 'partial_results' ? t('cap.tip.partial_results') : '' }))
           .sort((a, b) => Number(b.on) - Number(a.on));
       });
 
       // —— 结果 ——
       const finals = reactive([]);        // {key, start, text, words, speaker, speakerName}
       const partial = ref('');
-      const appendMode = ref(false);      // 追加输出：开始新会话时不清空结果，插分隔线续写
-      let finalSeq = 0;
+      const appendMode = ref(false);      // 追加输出：开始新会话时不清空结果，按批次派生分隔线续写
+      let finalSeq = 0, batchSeq = 0;     // batchSeq：每次追加新会话 +1，渲染层据相邻条目 batch 变化插分隔线
       function appendFinal(m) {
-        finals.push({ key: ++finalSeq, start: m.start, text: m.text || '', words: (m.words && m.words.length) || 0, speaker: m.speaker || null, speakerName: m.speaker_name || null });
+        finals.push({ key: ++finalSeq, batch: batchSeq, start: m.start, text: m.text || '', words: (m.words && m.words.length) || 0, speaker: m.speaker || null, speakerName: m.speaker_name || null });
         if (finals.length > MAX_TRANSCRIPT_LINES) finals.shift();
       }
-      function clearResults() { finals.length = 0; partial.value = ''; }
+      function clearResults() { finals.length = 0; partial.value = ''; batchSeq = 0; }
 
       // 满高布局下转写区内部滚动：新 final/partial 到达时跟随滚底
       const transcriptRef = ref(null);
@@ -346,10 +351,10 @@
       function openWs(onReady) {
         hint.value = '';
         warn.value = '';
-        // 追加输出：保留上次结果并插入分隔线续写；否则照常清空
+        // 追加输出：保留上次结果、递增批次号（渲染层据 batch 变化派生分隔线，无内容则不显示）；否则照常清空
         if (appendMode.value && finals.length) {
           partial.value = '';
-          finals.push({ key: ++finalSeq, divider: true });
+          batchSeq++;
         } else {
           clearResults();
         }
@@ -479,7 +484,7 @@
       }
 
       // —— ffmpeg-wasm 懒加载（外网 CDN；失败回退浏览器原生解码）——
-      let ffmpeg = null, ffmpegTried = false;
+      let ffmpeg = null;
       const ffLoading = ref(false);       // 转码器加载中（首次约 25–30MB）：驱动文件区加载提示
       function loadScript(src) {
         return new Promise((res, rej) => {
@@ -492,28 +497,33 @@
       }
       async function getFFmpeg() {
         if (ffmpeg) return ffmpeg;
-        if (ffmpegTried) return null;
-        ffmpegTried = true;
+        if (ffLoading.value) return null;       // 加载进行中：避免并发重入（不永久闩锁，失败后下次仍可重试）
         ffLoading.value = true;
         try {
           statusKey.value = 'loadingFf'; statusDetail.value = '';
-          if (!window.FFmpegWASM) await loadScript(FF_FFMPEG_JS);
-          if (!window.FFmpegUtil) await loadScript(FF_UTIL_JS);
+          // 两个 UMD 脚本互不依赖，并行注入（已加载则跳过）
+          await Promise.all([
+            window.FFmpegWASM ? null : loadScript(FF_FFMPEG_JS),
+            window.FFmpegUtil ? null : loadScript(FF_UTIL_JS),
+          ]);
           const { FFmpeg } = window.FFmpegWASM;
           const { toBlobURL } = window.FFmpegUtil;
           const ff = new FFmpeg();
           ff.on('log', ({ message }) => log('evt', 'ffmpeg: ' + message));
           // 跨域 CDN 无构建：必须传 classWorkerURL(blob) 走模块 worker——直接 new Worker(跨域URL) 会被浏览器同源策略拦截；
           // 模块 worker 内 importScripts 不可用，FFmpeg 回退 import() 加载 core，故 coreURL 必须指向 ESM 构建。
-          await ff.load({
-            classWorkerURL: await toBlobURL(FF_WORKER_JS, 'text/javascript'),
-            coreURL: await toBlobURL(FF_CORE_JS, 'text/javascript'),
-            wasmURL: await toBlobURL(FF_CORE_WASM, 'application/wasm'),
-          });
+          // 三个 blob 互不依赖，并行下载（~30MB wasm 不必等 worker/core 下完）
+          const [classWorkerURL, coreURL, wasmURL] = await Promise.all([
+            toBlobURL(FF_WORKER_JS, 'text/javascript'),
+            toBlobURL(FF_CORE_JS, 'text/javascript'),
+            toBlobURL(FF_CORE_WASM, 'application/wasm'),
+          ]);
+          await ff.load({ classWorkerURL, coreURL, wasmURL });
           ffmpeg = ff;
           log('evt', 'ffmpeg-wasm ready');
           return ff;
         } catch (e) {
+          // 仅本次返回 null 回退原生，不闩锁——网络恢复后用户再传文件可重新尝试加载
           log('evt', 'ffmpeg-wasm load failed, falling back to native browser decoding: ' + e.message);
           return null;
         } finally {
@@ -822,9 +832,9 @@
               <template #header><span class="panel-title"><a-icon name="doc" size="15"></a-icon>{{ t('panel.result') }}</span></template>
               <div id="transcript" ref="transcriptRef">
                 <n-empty v-if="!finals.length && !partial" :description="t('result.waiting')" size="small" style="margin:24px 0;"></n-empty>
-                <template v-for="line in finals" :key="line.key">
-                  <div v-if="line.divider" class="transcript-divider"><span>{{ t('result.divider') }}</span></div>
-                  <div v-else class="transcript-line">
+                <template v-for="(line, i) in finals" :key="line.key">
+                  <div v-if="i > 0 && line.batch !== finals[i - 1].batch" class="transcript-divider"><span>{{ t('result.divider') }}</span></div>
+                  <div class="transcript-line">
                     <span class="t">{{ line.start != null ? fmtMs(line.start) : '' }}</span>
                     <span class="tx"><span v-if="line.speaker" class="speaker-badge" :class="'spk-' + spkIdx(line.speaker)">{{ line.speakerName || line.speaker }}</span>{{ line.text }}<n-text v-if="line.words" depth="3" style="font-size:.78em;"> {{ t('result.words', line.words) }}</n-text></span>
                   </div>
