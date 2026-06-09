@@ -32,7 +32,7 @@
       'cap.flag.output_toggles': '输出可控',
       // 诊断指标
       'diag.sent': '发送速率', 'diag.recv': '接收速率', 'diag.buf': '发送缓冲',
-      'diag.frame': '最大帧', 'diag.stall': '主线程卡顿',
+      'diag.frame': '最大帧', 'diag.stall': '渲染延迟',
       'diag.unit.frame': '帧/s', 'diag.unit.msg': '条/s', 'diag.unit.kb': 'KB',
       'diag.unit.sample': '样本', 'diag.unit.ms': 'ms',
       // 输入源面板
@@ -54,9 +54,12 @@
       // 文件模拟
       'file.dragHint': '点击或拖拽选择音频文件',
       'file.frameNote': '解码后按 200ms 分帧模拟实时推流',
+      'file.useFfmpeg': '用 ffmpeg-wasm 解码（兼容更多格式）',
+      'file.ffmpegTip': '遇到浏览器无法解码的封装/编码时启用。按需加载 ffmpeg-wasm 转码器：需外网，首次约 25–30MB，仅本次会话加载一次；加载失败自动回退浏览器原生解码。',
+      'file.ffLoading': '正在加载转码器 (ffmpeg-wasm)，首次约 25–30MB…',
       'file.noThrottle': '不限速（自适应最大速率）',
       'file.start': '开始模拟推流', 'file.stop': '停止', 'file.forceClose': '强制断开',
-      'file.longHint': '按需加载 ffmpeg-wasm 解码（需外网，首次约 25–30MB，仅本次会话加载一次；失败自动回退浏览器原生解码）→ 转 16k 单声道 → 200ms 分帧推流，模拟实时输入。勾选不限速时按服务端积压上限自适应控速，不会触发 backlog_overflow。',
+      'file.longHint': '默认浏览器原生解码 → 转 16k 单声道 → 200ms 分帧推流，模拟实时输入。勾选不限速时按服务端积压上限自适应控速，不会触发 backlog_overflow。',
       // 提示与错误
       'err.micAccess': '麦克风访问失败: {0}', 'err.worklet': 'AudioWorklet 加载失败: {0}',
       'err.noFile': '请先选择音频文件。', 'err.decode': '音频解码失败: {0}',
@@ -86,7 +89,7 @@
       'cap.flag.speaker_tunable': 'Speaker tunable', 'cap.flag.endpoint_tunable': 'Endpoint tunable',
       'cap.flag.output_toggles': 'Output toggles',
       'diag.sent': 'Send rate', 'diag.recv': 'Recv rate', 'diag.buf': 'Send buffer',
-      'diag.frame': 'Max frame', 'diag.stall': 'Main-thread stall',
+      'diag.frame': 'Max frame', 'diag.stall': 'Render lag',
       'diag.unit.frame': 'fr/s', 'diag.unit.msg': 'msg/s', 'diag.unit.kb': 'KB',
       'diag.unit.sample': 'samples', 'diag.unit.ms': 'ms',
       'panel.input': 'Input source', 'input.langPlaceholder': 'Language (default auto, e.g. zh / en)',
@@ -104,9 +107,12 @@
       'mic.hint': 'Grant microphone access, then speak to transcribe live.',
       'file.dragHint': 'Click or drag to select an audio file',
       'file.frameNote': 'Decoded then framed at 200ms to simulate live streaming',
+      'file.useFfmpeg': 'Decode with ffmpeg-wasm (more formats)',
+      'file.ffmpegTip': 'Enable for containers/codecs the browser cannot decode. Lazily loads the ffmpeg-wasm transcoder: needs internet, ~25–30MB on first use, loaded once per session; falls back to native decoding on failure.',
+      'file.ffLoading': 'Loading transcoder (ffmpeg-wasm), ~25–30MB on first use…',
       'file.noThrottle': 'Unthrottled (adaptive max rate)',
       'file.start': 'Start simulated streaming', 'file.stop': 'Stop', 'file.forceClose': 'Force disconnect',
-      'file.longHint': 'Lazily loads ffmpeg-wasm for decoding (requires internet, ~25–30MB on first use, loaded once per session; falls back to native browser decoding on failure) → converts to 16k mono → frames at 200ms for streaming, simulating live input. When unthrottled, rate adapts to the server backlog limit without triggering backlog_overflow.',
+      'file.longHint': 'Defaults to native browser decoding → converts to 16k mono → frames at 200ms to simulate live input. When unthrottled, the rate adapts to the server backlog limit without triggering backlog_overflow.',
       'err.micAccess': 'Microphone access failed: {0}', 'err.worklet': 'Failed to load AudioWorklet: {0}',
       'err.noFile': 'Please select an audio file first.', 'err.decode': 'Audio decoding failed: {0}',
       'err.code': '[{0}] {1}',
@@ -124,7 +130,15 @@
   const BP_LIMIT = 1 << 20;           // 1MB 发送缓冲上限（背压）
   const MAX_LOG_LINES = 300;
   const MAX_TRANSCRIPT_LINES = 200;
-  const FFMPEG_MIRROR = 'https://unpkg.zhimg.com';
+  // ffmpeg-wasm 资源走 npmmirror（阿里云，国内可达且 CORS 开放，三包齐全）。
+  // unpkg.zhimg 只镜像 @ffmpeg/core，缺 @ffmpeg/ffmpeg 与 @ffmpeg/util（请求 404 → 转码器静默失效），故整体改用 npmmirror。
+  const ffFile = (pkg, ver, path) => 'https://registry.npmmirror.com/' + pkg + '/' + ver + '/files/' + path;
+  const FF_FFMPEG_JS = ffFile('@ffmpeg/ffmpeg', '0.12.10', 'dist/umd/ffmpeg.js');
+  const FF_WORKER_JS = ffFile('@ffmpeg/ffmpeg', '0.12.10', 'dist/umd/814.ffmpeg.js');   // FFmpeg 类的 worker chunk
+  const FF_UTIL_JS = ffFile('@ffmpeg/util', '0.12.1', 'dist/umd/index.js');
+  // core 取 ESM 构建（含 default 导出）：模块 worker 内无 importScripts，靠 import() 加载 core
+  const FF_CORE_JS = ffFile('@ffmpeg/core', '0.12.10', 'dist/esm/ffmpeg-core.js');
+  const FF_CORE_WASM = ffFile('@ffmpeg/core', '0.12.10', 'dist/esm/ffmpeg-core.wasm');
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   function floatToInt16(f32) {
@@ -235,7 +249,7 @@
         Vue.nextTick(() => { const el = logRef.value; if (el) el.scrollTop = el.scrollHeight; });
       }
 
-      // —— 诊断指标（n-statistic 横排：发送/接收速率、WS 缓冲、最大帧、主线程卡顿）——
+      // —— 诊断指标（n-statistic 横排：发送/接收速率、WS 缓冲、最大帧、渲染延迟＝主线程 rAF 间隔峰值）——
       const diag = reactive({ on: false, sent: 0, recv: 0, buf: 0, frame: 0, stall: 0 });
       let diagTimer = null, rafId = null, sentFrames = 0, recvMsgs = 0, lastRaf = 0, maxStall = 0, maxFrame = 0;
       function startDiag() {
@@ -454,6 +468,7 @@
 
       // —— ffmpeg-wasm 懒加载（外网 CDN；失败回退浏览器原生解码）——
       let ffmpeg = null, ffmpegTried = false;
+      const ffLoading = ref(false);       // 转码器加载中（首次约 25–30MB）：驱动文件区加载提示
       function loadScript(src) {
         return new Promise((res, rej) => {
           const s = document.createElement('script');
@@ -467,18 +482,21 @@
         if (ffmpeg) return ffmpeg;
         if (ffmpegTried) return null;
         ffmpegTried = true;
+        ffLoading.value = true;
         try {
           statusKey.value = 'loadingFf'; statusDetail.value = '';
-          if (!window.FFmpegWASM) await loadScript(FFMPEG_MIRROR + '/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js');
-          if (!window.FFmpegUtil) await loadScript(FFMPEG_MIRROR + '/@ffmpeg/util@0.12.1/dist/umd/index.js');
+          if (!window.FFmpegWASM) await loadScript(FF_FFMPEG_JS);
+          if (!window.FFmpegUtil) await loadScript(FF_UTIL_JS);
           const { FFmpeg } = window.FFmpegWASM;
           const { toBlobURL } = window.FFmpegUtil;
-          const core = FFMPEG_MIRROR + '/@ffmpeg/core@0.12.10/dist/umd';
           const ff = new FFmpeg();
           ff.on('log', ({ message }) => log('evt', 'ffmpeg: ' + message));
+          // 跨域 CDN 无构建：必须传 classWorkerURL(blob) 走模块 worker——直接 new Worker(跨域URL) 会被浏览器同源策略拦截；
+          // 模块 worker 内 importScripts 不可用，FFmpeg 回退 import() 加载 core，故 coreURL 必须指向 ESM 构建。
           await ff.load({
-            coreURL: await toBlobURL(core + '/ffmpeg-core.js', 'text/javascript'),
-            wasmURL: await toBlobURL(core + '/ffmpeg-core.wasm', 'application/wasm'),
+            classWorkerURL: await toBlobURL(FF_WORKER_JS, 'text/javascript'),
+            coreURL: await toBlobURL(FF_CORE_JS, 'text/javascript'),
+            wasmURL: await toBlobURL(FF_CORE_WASM, 'application/wasm'),
           });
           ffmpeg = ff;
           log('evt', 'ffmpeg-wasm ready');
@@ -486,19 +504,12 @@
         } catch (e) {
           log('evt', 'ffmpeg-wasm load failed, falling back to native browser decoding: ' + e.message);
           return null;
+        } finally {
+          ffLoading.value = false;
         }
       }
-      // 文件 → 16k 单声道 PCM16。优先 ffmpeg-wasm（直出 s16le），失败回退 Web Audio
-      async function decodeFileTo16kPCM(file) {
-        const ff = await getFFmpeg();
-        if (ff) {
-          const { fetchFile } = window.FFmpegUtil;
-          await ff.writeFile('input', await fetchFile(file));
-          await ff.exec(['-i', 'input', '-ac', '1', '-ar', String(RT_SR), '-f', 's16le', 'out.pcm']);
-          const out = await ff.readFile('out.pcm');
-          try { await ff.deleteFile('input'); await ff.deleteFile('out.pcm'); } catch (e) { /* noop */ }
-          return new Int16Array(out.buffer, out.byteOffset, Math.floor(out.byteLength / 2));
-        }
+      // 浏览器原生解码（Web Audio）→ 16k 单声道 PCM16
+      async function decodeNativeTo16kPCM(file) {
         const buf = await file.arrayBuffer();
         const ac = new (window.AudioContext || window.webkitAudioContext)();
         const decoded = await ac.decodeAudioData(buf);
@@ -510,11 +521,29 @@
         const rendered = await off.startRendering();
         return floatToInt16(rendered.getChannelData(0));
       }
+      // 文件 → 16k 单声道 PCM16。默认浏览器原生解码；用户勾选「ffmpeg 解码」才按需加载
+      // ffmpeg-wasm（兼容浏览器无法解码的封装/编码，直出 s16le），加载失败回退原生。
+      async function decodeFileTo16kPCM(file) {
+        if (useFfmpeg.value) {
+          const ff = await getFFmpeg();
+          if (ff) {
+            const { fetchFile } = window.FFmpegUtil;
+            await ff.writeFile('input', await fetchFile(file));
+            await ff.exec(['-i', 'input', '-ac', '1', '-ar', String(RT_SR), '-f', 's16le', 'out.pcm']);
+            const out = await ff.readFile('out.pcm');
+            try { await ff.deleteFile('input'); await ff.deleteFile('out.pcm'); } catch (e) { /* noop */ }
+            return new Int16Array(out.buffer, out.byteOffset, Math.floor(out.byteLength / 2));
+          }
+          // ffmpeg 加载失败：已记入协议日志，回退原生解码
+        }
+        return decodeNativeTo16kPCM(file);
+      }
 
       // —— 文件模拟推流 ——
       const streamFile = ref(null);
       const streamFileList = ref([]);
       const noThrottle = ref(false);
+      const useFfmpeg = ref(false);       // 默认浏览器原生解码；勾选才用 ffmpeg-wasm（兼容更多格式）
       const fileProgress = ref(0);
       const fileRunning = ref(false);
       let fileAborted = false;
@@ -632,7 +661,7 @@
         finals, partial, fmtMs, transcriptRef, spkIdx,
         logs, logOpen, logRef,
         streamFile, streamFileList, streamFileSize, onStreamUploadChange,
-        noThrottle, fileProgress, fileRunning,
+        noThrottle, useFfmpeg, ffLoading, fileProgress, fileRunning,
         startMic, stopMic, startFile, stopFile, forceClose,
       };
     },
@@ -721,17 +750,28 @@
                       <span class="file-name" :title="streamFile.name">{{ streamFile.name }}</span>
                       <n-tag size="tiny" :bordered="false">{{ streamFileSize }}</n-tag>
                     </div>
-                    <n-checkbox v-model:checked="noThrottle" size="small">{{ t('file.noThrottle') }}</n-checkbox>
+                    <div class="ff-opt">
+                      <n-checkbox v-model:checked="useFfmpeg" size="small" :disabled="busy || fileRunning">{{ t('file.useFfmpeg') }}</n-checkbox>
+                      <n-popover trigger="hover" placement="top">
+                        <template #trigger><span class="info-dot"><a-icon name="info" size="15"></a-icon></span></template>
+                        <div class="ff-tip">{{ t('file.ffmpegTip') }}</div>
+                      </n-popover>
+                    </div>
+                    <div class="ff-opt">
+                      <n-checkbox v-model:checked="noThrottle" size="small">{{ t('file.noThrottle') }}</n-checkbox>
+                      <n-popover trigger="hover" placement="top">
+                        <template #trigger><span class="info-dot"><a-icon name="info" size="15"></a-icon></span></template>
+                        <div class="ff-tip">{{ t('file.longHint') }}</div>
+                      </n-popover>
+                    </div>
                     <n-button v-if="!busy && !fileRunning" type="primary" size="large" block strong @click="startFile">
                       <a-icon name="play" size="15" style="margin-right:7px;"></a-icon>{{ t('file.start') }}
                     </n-button>
                     <n-button v-else type="error" size="large" block strong @click="streamState === 'stopping' ? forceClose() : stopFile()">
                       <a-icon name="stop" size="15" style="margin-right:7px;"></a-icon>{{ streamState === 'stopping' ? t('file.forceClose') : t('file.stop') }}
                     </n-button>
+                    <div v-if="ffLoading" class="ff-loading"><n-spin :size="14"></n-spin><span>{{ t('file.ffLoading') }}</span></div>
                     <n-progress v-if="fileRunning || fileProgress > 0" type="line" :percentage="fileProgress" :height="8" :border-radius="4" :show-indicator="false"></n-progress>
-                    <n-text depth="3" style="font-size:.74em;line-height:1.6;">
-                      {{ t('file.longHint') }}
-                    </n-text>
                   </n-space>
                 </n-tab-pane>
               </n-tabs>

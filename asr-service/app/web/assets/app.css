@@ -162,6 +162,14 @@ body.dark .status-pill.streaming { color: #f87171; }
 .diag-row { display: flex; gap: 30px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
 .diag-unit { font-size: .6em; opacity: .65; }
 .vu-canvas { display: block; width: 100%; height: 12px; border-radius: 6px; background: rgba(127, 127, 127, .13); }
+/* 文件模拟：ffmpeg 选项（勾选框 + 说明 popover 触发图标）与转码器加载提示 */
+.ff-opt { display: flex; align-items: center; gap: 6px; }
+.info-dot { display: inline-flex; align-items: center; color: #94a3b8; cursor: help; transition: color .15s ease; }
+.info-dot:hover { color: var(--accent-deep); }
+body.dark .info-dot:hover { color: #2dd4bf; }
+.ff-tip { max-width: 264px; font-size: .82em; line-height: 1.65; }
+.ff-loading { display: flex; align-items: center; gap: 8px; font-size: .8em; color: var(--accent-deep); }
+body.dark .ff-loading { color: #2dd4bf; }
 .transcript-line { display: flex; gap: 12px; padding: 3px 0; }
 .transcript-line .t {
   flex: 0 0 80px; text-align: right; padding: 5px 10px 0 0;

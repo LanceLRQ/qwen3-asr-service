@@ -105,6 +105,7 @@ window.AsrCommon = (function () {
     auto: 'M2 5h20v12H2z|M8 21h8|M12 17v4',
     chev: 'M6 9l6 6 6-6',
     chip: 'M5 5h14v14H5z|M9 9h6v6H9z|M9 2v3|M15 2v3|M9 19v3|M15 19v3|M2 9h3|M2 15h3|M19 9h3|M19 15h3',
+    info: 'M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20z|M12 8v5|M12 16h.01',
   };
   const AIcon = {
     name: 'AIcon',
