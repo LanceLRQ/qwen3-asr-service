@@ -20,9 +20,16 @@
       'st.micStopped': '已停止，等待末段结果…', 'st.fileDone': '推流完成，等待末段结果…',
       'st.fileStopped': '已停止', 'st.disconnected': '已断开', 'st.disconnectedCode': '已断开 ({0})',
       'st.sessionClosed': '会话结束',
-      // 能力行（capInfo）
-      'cap.protocol': '协议', 'cap.version': 'v', 'cap.mode': '模式', 'cap.backend': '后端',
+      // 会话协议卡片：标量标签（版本/模式/后端/采样率；协议 ID 以等宽原样呈现，无需标签）
+      'cap.version': 'v', 'cap.mode': '模式', 'cap.backend': '后端',
       'cap.sampleRate': '采样率', 'cap.capabilities': '能力',
+      // 会话协议卡片（输入源下方）
+      'sess.title': '会话协议',
+      'cap.flag.partial_results': '增量结果', 'cap.flag.word_timestamps': '词级时间戳',
+      'cap.flag.languages_auto': '自动语种', 'cap.flag.speaker_labels': '说话人分离',
+      'cap.flag.speaker_identification': '声纹识别', 'cap.flag.noise_filter_tunable': '降噪可调',
+      'cap.flag.speaker_tunable': '说话人可调', 'cap.flag.endpoint_tunable': '断句可调',
+      'cap.flag.output_toggles': '输出可控',
       // 诊断指标
       'diag.sent': '发送速率', 'diag.recv': '接收速率', 'diag.buf': '发送缓冲',
       'diag.frame': '最大帧', 'diag.stall': '主线程卡顿',
@@ -70,8 +77,14 @@
       'st.micStopped': 'Stopped, waiting for final segment…', 'st.fileDone': 'Streaming done, waiting for final segment…',
       'st.fileStopped': 'Stopped', 'st.disconnected': 'Disconnected', 'st.disconnectedCode': 'Disconnected ({0})',
       'st.sessionClosed': 'Session closed',
-      'cap.protocol': 'Protocol', 'cap.version': 'v', 'cap.mode': 'Mode', 'cap.backend': 'Backend',
+      'cap.version': 'v', 'cap.mode': 'Mode', 'cap.backend': 'Backend',
       'cap.sampleRate': 'Sample rate', 'cap.capabilities': 'Capabilities',
+      'sess.title': 'Session protocol',
+      'cap.flag.partial_results': 'Partial results', 'cap.flag.word_timestamps': 'Word timestamps',
+      'cap.flag.languages_auto': 'Auto language', 'cap.flag.speaker_labels': 'Speaker labels',
+      'cap.flag.speaker_identification': 'Speaker ID', 'cap.flag.noise_filter_tunable': 'Denoise tunable',
+      'cap.flag.speaker_tunable': 'Speaker tunable', 'cap.flag.endpoint_tunable': 'Endpoint tunable',
+      'cap.flag.output_toggles': 'Output toggles',
       'diag.sent': 'Send rate', 'diag.recv': 'Recv rate', 'diag.buf': 'Send buffer',
       'diag.frame': 'Max frame', 'diag.stall': 'Main-thread stall',
       'diag.unit.frame': 'fr/s', 'diag.unit.msg': 'msg/s', 'diag.unit.kb': 'KB',
@@ -174,14 +187,23 @@
       const streamDisabled = ref(false);
       const capWarning = computed(() => (streamDisabled.value ? t('cap.warning') : ''));
       const hint = ref('');
-      // capInfo 存原始部件而非拼好的中文串：切语言时经 t() 重新拼接
+      // capParts 存 session.created 原始部件：标量字段直接渲染，capabilities 经 capFlags 转芯片
       const capParts = ref(null);         // {protocol, version, mode, backend, sampleRate, capabilities}
-      const capInfo = computed(() => {
-        const p = capParts.value;
-        if (!p) return '';
-        return t('cap.protocol') + ' ' + p.protocol + ' ' + t('cap.version') + p.version +
-          ' · ' + t('cap.mode') + ' ' + p.mode + ' · ' + t('cap.backend') + ' ' + p.backend +
-          ' · ' + t('cap.sampleRate') + ' ' + p.sampleRate + ' · ' + t('cap.capabilities') + ' ' + p.capabilities;
+      // 能力芯片渲染顺序；已知键给本地化短标签，未知键回退原始键名（漏配可见不报错）
+      const CAP_ORDER = [
+        'languages_auto', 'partial_results', 'word_timestamps',
+        'speaker_labels', 'speaker_identification',
+        'noise_filter_tunable', 'speaker_tunable', 'endpoint_tunable', 'output_toggles',
+      ];
+      const capFlags = computed(() => {
+        const c = capParts.value && capParts.value.capabilities;
+        if (!c) return [];
+        const known = CAP_ORDER.filter(k => k in c);
+        const extra = Object.keys(c).filter(k => !CAP_ORDER.includes(k));
+        // 已启用排前：成排亮色芯片更易扫读，禁用项弱化随后（sort 稳定，组内保持 CAP_ORDER）
+        return known.concat(extra)
+          .map(k => ({ key: k, label: t('cap.flag.' + k), on: !!c[k] }))
+          .sort((a, b) => Number(b.on) - Number(a.on));
       });
 
       // —— 结果 ——
@@ -325,7 +347,7 @@
             }
             capParts.value = {
               protocol: m.protocol, version: m.protocol_version, mode: m.mode,
-              backend: m.backend, sampleRate: m.sample_rate, capabilities: JSON.stringify(m.capabilities),
+              backend: m.backend, sampleRate: m.sample_rate, capabilities: m.capabilities || {},
             };
             statusKey.value = 'connected'; statusDetail.value = m.backend;
             streamState.value = 'streaming';
@@ -606,7 +628,7 @@
         t,
         lang, canIdentify, identifySpeakers, srv, adv, warn, ph,
         streamState, statusText, busy, source,
-        capWarning, hint, capInfo, diag, vuRef,
+        capWarning, hint, capParts, capFlags, diag, vuRef,
         finals, partial, fmtMs, transcriptRef, spkIdx,
         logs, logOpen, logRef,
         streamFile, streamFileList, streamFileSize, onStreamUploadChange,
@@ -629,7 +651,6 @@
               <n-statistic :label="t('diag.stall')" :value="diag.stall"><template #suffix><span class="diag-unit">{{ t('diag.unit.ms') }}</span></template></n-statistic>
             </div>
           </div>
-          <n-text v-if="capInfo" depth="3" style="display:block;margin-top:10px;font-size:.76em;">{{ capInfo }}</n-text>
         </n-card>
 
         <div class="workspace">
@@ -716,6 +737,25 @@
               </n-tabs>
               <n-alert v-if="hint" type="error" :show-icon="true" style="margin-top:12px;">{{ hint }}</n-alert>
               <n-alert v-if="warn" type="warning" :show-icon="true" :bordered="false" style="margin-top:12px;">{{ t('warn.ignored', warn) }}</n-alert>
+            </n-card>
+
+            <n-card v-if="capParts" :bordered="false" class="panel sess-card" size="small">
+              <template #header><span class="panel-title"><a-icon name="chip" size="15"></a-icon>{{ t('sess.title') }}</span></template>
+              <div class="sess-proto">
+                <span class="id">{{ capParts.protocol }}</span>
+                <span class="ver">{{ t('cap.version') }}{{ capParts.version }}</span>
+              </div>
+              <div class="sess-meta">
+                <span class="k">{{ t('cap.mode') }}</span><span class="v">{{ capParts.mode }}</span>
+                <span class="k">{{ t('cap.backend') }}</span><span class="v">{{ capParts.backend }}</span>
+                <span class="k">{{ t('cap.sampleRate') }}</span><span class="v">{{ capParts.sampleRate }} Hz</span>
+              </div>
+              <template v-if="capFlags.length">
+                <div class="sess-caps-label">{{ t('cap.capabilities') }}</div>
+                <div class="sess-caps">
+                  <span v-for="f in capFlags" :key="f.key" class="cap-chip" :class="f.on ? 'on' : 'off'">{{ f.label }}</span>
+                </div>
+              </template>
             </n-card>
           </div>
 

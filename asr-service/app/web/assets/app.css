@@ -188,6 +188,57 @@ body.dark .proto-log .send { color: #60a5fa; }
 body.dark .proto-log .recv { color: #4ade80; }
 body.dark .proto-log .evt { color: #fbbf24; }
 
+/* —— 实时页 · 会话协议卡片（输入源下方，session.created 后出现）—— */
+.sess-card { margin-top: 16px; position: relative; overflow: hidden; }
+/* 顶部主色渐隐细线，呼应「会话握手已建立」语义 */
+.sess-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), rgba(20, 184, 166, 0) 78%);
+}
+.sess-proto {
+  display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+  padding-bottom: 12px; margin-bottom: 12px;
+  border-bottom: 1px dashed rgba(148, 163, 184, .28);
+}
+.sess-proto .id {
+  font-family: var(--mono); font-size: 1em; font-weight: 700;
+  letter-spacing: -.2px; color: #0f172a; word-break: break-all;
+}
+body.dark .sess-proto .id { color: #e2e8f0; }
+.sess-proto .ver {
+  font-family: var(--mono); font-size: .72em; font-weight: 700;
+  padding: 1px 8px; border-radius: 999px;
+  background: rgba(20, 184, 166, .14); color: var(--accent-deep);
+}
+body.dark .sess-proto .ver { color: #2dd4bf; }
+.sess-meta { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: baseline; }
+.sess-meta .k { font-size: .82em; color: #64748b; }
+body.dark .sess-meta .k { color: #94a3b8; }
+.sess-meta .v {
+  font-family: var(--mono); font-size: .82em; font-weight: 600;
+  color: #334155; text-align: right; word-break: break-all; font-variant-numeric: tabular-nums;
+}
+body.dark .sess-meta .v { color: #e2e8f0; }
+.sess-caps-label {
+  font-size: .8em; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: #64748b; margin: 16px 0 9px;
+}
+body.dark .sess-caps-label { color: #94a3b8; }
+.sess-caps { display: flex; flex-wrap: wrap; gap: 6px; }
+.cap-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px 3px 8px; border-radius: 999px;
+  font-size: .75em; font-weight: 600; line-height: 1.5;
+}
+.cap-chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.cap-chip.on { background: rgba(20, 184, 166, .12); color: #0d9488; }
+.cap-chip.on::before { background: var(--accent); box-shadow: 0 0 5px rgba(20, 184, 166, .55); }
+.cap-chip.off { background: rgba(148, 163, 184, .1); color: #94a3b8; }
+.cap-chip.off::before { border: 1.5px solid #cbd5e1; }
+body.dark .cap-chip.on { color: #2dd4bf; }
+body.dark .cap-chip.off { color: #94a3b8; background: rgba(148, 163, 184, .08); }
+body.dark .cap-chip.off::before { border-color: #475569; }
+
 /* —— 文档中心（服务端渲染 Markdown，外壳走 Studio Console）—— */
 .docs-layout { display: flex; gap: 20px; align-items: flex-start; }
 .docs-sidebar {
