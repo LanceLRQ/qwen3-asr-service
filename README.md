@@ -27,14 +27,25 @@ A high-performance, out-of-the-box speech recognition API service based on Qwen3
 
 > Requirements: Python 3.10+, ffmpeg; GPU mode needs NVIDIA GPU + CUDA 12.1+ (see the [deployment guide](docs/deployment_EN.md)).
 
-```bash
-cd asr-service
-bash setup.sh        # Initialize the environment
-bash start.sh        # Start the service (auto-detects device, downloads models, generates config.yaml)
+**Recommended**: run the interactive management script at the repo root (unified Docker / venv entry, guided install and start/stop):
 
+```bash
+bash manage.sh          # Linux / macOS; on Windows run .\manage.ps1 in PowerShell
+```
+
+> Or do it manually, step by step (in the app directory):
+> ```bash
+> cd asr-service
+> bash setup.sh        # Initialize the environment
+> bash start.sh        # Start the service (auto-detects device, downloads models, generates config.yaml)
+> ```
+
+```bash
 # Verify
 curl http://127.0.0.1:8765/v2/health
 ```
+
+> ⚠️ **Upgrading from v1**: if you already have a v1 virtual environment, v2 adds new dependencies (speaker diarization, voiceprint database, documentation center, etc.) — update them before starting. Re-run `bash setup.sh` and answer `N` when asked to recreate the venv to keep your existing one; the script still installs/updates the new dependencies from `requirements.txt`.
 
 Open `http://127.0.0.1:8765/web-ui` in a browser to try it out (Web UI, real-time transcription and task persistence are enabled by default in the auto-generated config).
 

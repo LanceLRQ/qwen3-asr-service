@@ -27,14 +27,25 @@
 
 > 依赖：Python 3.10+、ffmpeg；GPU 模式需 NVIDIA GPU + CUDA 12.1+（详见[部署指南](docs/deployment.md)）。
 
-```bash
-cd asr-service
-bash setup.sh        # 初始化环境
-bash start.sh        # 启动服务（自动检测设备、下载模型、生成 config.yaml）
+**推荐**：在仓库根目录运行交互式管理脚本（Docker / venv 统一入口，向导式安装与启停）：
 
+```bash
+bash manage.sh          # Linux / macOS；Windows 用 PowerShell 运行 .\manage.ps1
+```
+
+> 也可手动分步执行（进入应用目录）：
+> ```bash
+> cd asr-service
+> bash setup.sh        # 初始化环境
+> bash start.sh        # 启动服务（自动检测设备、下载模型、生成 config.yaml）
+> ```
+
+```bash
 # 验证
 curl http://127.0.0.1:8765/v2/health
 ```
+
+> ⚠️ **从 v1 升级**：若此前已安装过 v1 的虚拟环境，v2 新增了依赖（说话人分离、声纹库、文档中心等），需更新依赖后再启动。重新执行 `bash setup.sh`，提示是否重建 venv 时选 `N` 保留原环境即可——脚本仍会安装/更新 `requirements.txt` 中的新依赖。
 
 浏览器访问 `http://127.0.0.1:8765/web-ui` 即可上传音频体验（自动生成的配置中 Web UI、实时转写、任务持久化默认开启）。
 
