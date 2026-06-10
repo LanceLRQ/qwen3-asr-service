@@ -1,7 +1,8 @@
 """文档中心：服务端渲染仓库 Markdown 文档（GET /web-ui/docs）。
 
 - 文档注册表为白名单：仅扫描仓库根 README*.md + docs/*.md + docs/api/*.md
-  两层固定目录，不递归（docs/plan/** 为内部资料，绝不暴露）；请求 slug 只在
+  + docs/api/v2/*.md + docs/api/compat/*.md 固定目录，不递归（docs/plan/** 为
+  内部资料，绝不暴露）；请求 slug 只在
   注册表内查找，不做任何文件系统路径拼接，天然防穿越。
 - 标题锚点使用 GitHub 风格 slugify（中文标题可用），与文档内既有 #锚点 链接对齐。
 - 文档间 .md 相对链接重写为 /web-ui/docs/<slug> 路由；指向仓库内其它文件的
@@ -54,7 +55,7 @@ def _get_template() -> str | None:
 _NAV_ORDER = [
     "readme", "deployment", "configuration", "development",
     "api/v2", "api/v2/basics", "api/v2/transcription", "api/v2/tasks", "api/v2/speakers",
-    "api/v1", "api/compat", "architecture",
+    "api/v1", "api/compat", "api/compat/openai", "api/compat/dashscope", "architecture",
 ]
 _NAV_TITLES = {
     "readme": ("项目主页", "Home"),
@@ -68,6 +69,8 @@ _NAV_TITLES = {
     "api/v2/speakers": ("说话人管理", "Speaker Management"),
     "api/v1": ("API v1（兼容）", "API v1 (legacy)"),
     "api/compat": ("兼容接口", "Compatibility"),
+    "api/compat/openai": ("OpenAI 兼容", "OpenAI"),
+    "api/compat/dashscope": ("DashScope 兼容", "DashScope"),
     "architecture": ("架构说明", "Architecture"),
 }
 
@@ -117,7 +120,7 @@ def _read_title(path: str) -> str | None:
 def _scan_registry() -> dict:
     """扫描白名单目录构建 slug → {relpath, title} 注册表。"""
     candidates = ["README.md", "README_zh.md"]
-    for sub in ("docs", "docs/api", "docs/api/v2"):
+    for sub in ("docs", "docs/api", "docs/api/v2", "docs/api/compat"):
         d = os.path.join(REPO_ROOT, sub)
         if os.path.isdir(d):
             candidates += [
@@ -236,7 +239,7 @@ def _build_nav(active_slug: str, registry: dict) -> str:
         titles = _NAV_TITLES.get(base)
         label = titles[1 if is_en else 0] if titles else registry[slug]["title"]
         classes = []
-        if base.startswith("api/v2/"):   # API v2 子文档：导航缩进
+        if base.startswith(("api/v2/", "api/compat/")):   # 子文档：导航缩进
             classes.append("sub")
         if slug == active_slug:
             classes.append("active")
