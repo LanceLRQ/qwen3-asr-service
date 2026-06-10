@@ -221,7 +221,7 @@ def test_example_passes_schema_validation():
     example = os.path.join(cfg.BASE_DIR, "config.example.yaml")
     parsed = cf.load_config_file(example)
     # 评审定稿的关键默认值组合（2026-06-04）
-    assert parsed["device"] == "cuda"
+    assert parsed["device"] == "auto"   # 自动检测：无 GPU 回退 CPU，避免首次生成 config 即写死 cuda 崩溃
     assert parsed["host"] == "127.0.0.1"
     assert parsed["model_size"] == "0.6b"
     assert parsed["enable_align"] is False

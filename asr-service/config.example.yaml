@@ -6,7 +6,7 @@
 # 注意：真实配置 config.yaml 可能含 api_key，已加入 .gitignore 请勿提交，建议 chmod 600 config.yaml。
 
 serve_mode: standard        # standard | vllm（vllm 为 Phase 3 占位，暂未实现，仅提供 /health /capabilities）
-device: cuda                # auto | cuda | cpu
+device: auto                # auto | cuda | cpu（auto 自动检测：有 GPU 用 cuda，否则回退 cpu）
 model_size: 0.6b            # 0.6b | 1.7b（删除本行 = 按显存自动选择）
 enable_align: false         # 词级时间戳对齐模型（需要时打开；CPU 模式不支持）
 use_punc: false             # 标点恢复
