@@ -9,7 +9,7 @@ from fastapi.responses import RedirectResponse
 
 from app.utils.logger import setup_logger
 from app.utils.arg_schema import build_parser, ARG_SPECS, resolve_help_lang
-from app.utils.config_file import merge_runtime_config
+from app.utils.config_file import merge_runtime_config, run_config_update
 import app.config as cfg
 from app.runtime.device import detect_device, resolve_device, auto_select_model_size, should_disable_align
 from app.runtime.task_manager import TaskManager
@@ -31,9 +31,16 @@ def parse_args(argv=None):
     配置文件的发现/引导生成/校验/合并见 app/utils/config_file.py。
     --help 文案语言先于建 parser 判定（跟随 shell $LANG，--lang 可覆盖），见 resolve_help_lang。
     """
+    return merge_runtime_config(_parse_cli(argv))
+
+
+def _parse_cli(argv=None):
+    """解析 CLI 为原始 Namespace（未合并配置链），供需要在合并前拦截元参数的入口使用。
+
+    --help 文案语言先于建 parser 判定（跟随 shell $LANG，--lang 可覆盖），见 resolve_help_lang。
+    """
     lang = resolve_help_lang(argv)
-    cli_ns = build_parser(lang).parse_args(argv)
-    return merge_runtime_config(cli_ns)
+    return build_parser(lang).parse_args(argv)
 
 
 # 值为 None 时回填的 cfg 真实默认值（"生效配置"不应打"(未指定)"误导成未生效）
@@ -558,7 +565,14 @@ def get_app():
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    cli_ns = _parse_cli()
+    # --update-config：仅同步本地 config.yaml 后退出，不启动服务
+    if getattr(cli_ns, "update_config", False):
+        setup_logger()
+        run_config_update(cli_ns.config, cli_ns.no_config,
+                          getattr(cli_ns, "sync_all", False))
+        sys.exit(0)
+    args = merge_runtime_config(cli_ns)
     if args.host is not None:
         cfg.HOST = args.host
     if args.port is not None:

@@ -274,11 +274,13 @@ def test_sync_appends_missing_active_keys(service_root):
     assert "enable_stream: true" in text              # 新增项以 example 值追加
 
 
-def test_sync_keeps_inline_comment(service_root):
+def test_sync_strips_inline_comment(service_root):
     c = _write(service_root, "device: cpu\n")
     e = _ex(service_root, "use_punc: false  # 标点恢复\n")
     cf.sync_config_with_example(c, e)
-    assert "use_punc: false  # 标点恢复" in (service_root / "config.yaml").read_text(encoding="utf-8")
+    text = (service_root / "config.yaml").read_text(encoding="utf-8")
+    assert "use_punc: false" in text          # 值保留
+    assert "# 标点恢复" not in text            # 行内注释剥离，保持 config 简洁
 
 
 def test_sync_skips_key_commented_in_config(service_root):
@@ -300,16 +302,80 @@ def test_sync_idempotent(service_root):
     assert cf.sync_config_with_example(c, e) == []    # 二次无新增（幂等）
 
 
-def test_update_config_flag_triggers_sync(service_root):
+def test_sync_default_skips_commented_advanced(service_root):
+    c = _write(service_root, "device: cpu\n")
+    e = _ex(service_root, "device: cuda\n# max_queue_size: 100  # 队列\n")
+    assert cf.sync_config_with_example(c, e) == []    # 默认仅同步推荐（激活）项
+
+
+def test_sync_all_includes_commented_advanced(service_root):
+    c = _write(service_root, "device: cpu\n")
+    e = _ex(service_root, "device: cuda\n# max_queue_size: 100  # 队列\n")
+    assert cf.sync_config_with_example(c, e, include_all=True) == ["max_queue_size"]
+    text = (service_root / "config.yaml").read_text(encoding="utf-8")
+    assert "# max_queue_size: 100" in text            # 注释态补入（禁用+默认值引用）
+    assert "# 队列" not in text                       # 行内注释剥离
+    # 二次（--all）幂等：已声明（注释态）不再补
+    assert cf.sync_config_with_example(c, e, include_all=True) == []
+
+
+def test_sync_all_idempotent_against_default(service_root):
+    c = _write(service_root, "device: cpu\n")
+    e = _ex(service_root, "device: cuda\n# max_queue_size: 100\n")
+    cf.sync_config_with_example(c, e, include_all=True)   # 注释态补入 max_queue_size
+    assert cf.sync_config_with_example(c, e) == []        # 默认轮也视其为"已有"，不激活覆盖
+
+
+# ─── run_config_update（--update-config：仅更新文件，不启动服务）───
+
+def test_update_config_syncs_and_returns_added(service_root):
     _write(service_root, "device: cpu\n")
     _ex(service_root, "device: cuda\nuse_punc: true\n")
-    p = cf.resolve_config_path(None, no_config=False, update_config=True)
-    assert p == str(service_root / "config.yaml")
+    added = cf.run_config_update(None, no_config=False)
+    assert added == ["use_punc"]
     assert "use_punc: true" in (service_root / "config.yaml").read_text(encoding="utf-8")
+
+
+def test_update_config_bootstraps_when_no_local(service_root):
+    _ex(service_root, "device: cuda\nuse_punc: true\n")        # 仅有 example，无本地配置
+    assert cf.run_config_update(None, no_config=False) == []   # 引导生成即最新，无"新增"
+    gen = service_root / "config.yaml"
+    assert gen.is_file()
+    assert gen.read_text(encoding="utf-8") == (service_root / cf.EXAMPLE_NAME).read_text(encoding="utf-8")
+    assert gen.stat().st_mode & 0o777 == 0o600
+
+
+def test_update_config_targets_explicit_config_arg(service_root):
+    p = service_root / "custom.yaml"
+    p.write_text("device: cpu\n", encoding="utf-8")
+    _ex(service_root, "device: cuda\nuse_punc: true\n")
+    assert cf.run_config_update(str(p), no_config=False) == ["use_punc"]
+    assert "use_punc: true" in p.read_text(encoding="utf-8")
+
+
+def test_update_config_all_syncs_advanced(service_root):
+    _write(service_root, "device: cpu\n")
+    _ex(service_root, "device: cuda\nuse_punc: false\n# max_queue_size: 100\n")
+    # 默认仅补推荐项（use_punc）；高级注释项 max_queue_size 不补
+    assert cf.run_config_update(None, no_config=False) == ["use_punc"]
+    # --all 再补高级项（注释态）
+    assert cf.run_config_update(None, no_config=False, include_all=True) == ["max_queue_size"]
+    assert "# max_queue_size: 100" in (service_root / "config.yaml").read_text(encoding="utf-8")
+
+
+def test_update_config_conflicts_with_no_config(service_root):
+    _ex(service_root, "device: cuda\n")
+    with pytest.raises(SystemExit, match="互斥"):
+        cf.run_config_update(None, no_config=True)
+
+
+def test_update_config_missing_example_exits(service_root):
+    with pytest.raises(SystemExit, match="缺失"):
+        cf.run_config_update(None, no_config=False)
 
 
 def test_autodiscover_no_sync_by_default(service_root):
     _write(service_root, "device: cpu\n")
     _ex(service_root, "device: cuda\nuse_punc: true\n")
-    cf.resolve_config_path(None, no_config=False)     # 不传 --update-config → 不改动 config.yaml
+    cf.resolve_config_path(None, no_config=False)     # 启动加载路径不再产生同步副作用
     assert "use_punc: true" not in (service_root / "config.yaml").read_text(encoding="utf-8")

@@ -369,11 +369,18 @@ _NO_CONFIG_HELP = {
     "en": "Skip config-file loading and bootstrap (defaults + env + CLI only)",
 }
 _UPDATE_CONFIG_HELP = {
-    "zh": "启动时把 config.example.yaml 的新增项同步进 config.yaml"
-          "（追加缺失项、沿用 example 默认值，保留既有值与注释；默认关）",
-    "en": "Sync newly added items from config.example.yaml into config.yaml on start "
-          "(append missing items with example defaults, keep existing values/comments; "
-          "off by default)",
+    "zh": "仅更新本地 config.yaml：把 config.example.yaml 缺失的项追加进去"
+          "（只补不覆盖、沿用 example 默认值；本地无配置则引导生成），"
+          "完成后直接退出，不启动服务",
+    "en": "Update local config.yaml only: append items missing from it (only add, never "
+          "overwrite; example defaults; bootstraps when none exists), then exit without "
+          "starting the service",
+}
+_SYNC_ALL_HELP = {
+    "zh": "（配合 --update-config）连同高级/可选项一并同步（按注释态补入，禁用+默认值引用），"
+          "默认仅同步推荐项",
+    "en": "(with --update-config) also sync advanced/optional items (added commented out, "
+          "as disabled default references); by default only recommended items are synced",
 }
 
 
@@ -461,6 +468,10 @@ def build_parser(lang: str = "zh") -> argparse.ArgumentParser:
     group.add_argument(
         "--update-config", dest="update_config", action="store_true", default=False,
         help=_UPDATE_CONFIG_HELP["en" if en else "zh"],
+    )
+    group.add_argument(
+        "--all", dest="sync_all", action="store_true", default=False,
+        help=_SYNC_ALL_HELP["en" if en else "zh"],
     )
     return parser
 

@@ -103,7 +103,8 @@ Reduces false triggers from far-field sounds and ambient noise. `--vad-speech-no
 |-----------|-------------|
 | `--config <PATH>` | Explicitly specify a YAML config file (startup fails if missing) |
 | `--no-config` | Skip config-file loading and bootstrap generation (pure defaults + env vars + CLI; for troubleshooting) |
-| `--update-config` | Sync newly added keys from `config.example.yaml` into `config.yaml` (append missing keys, keep existing values; off by default) |
+| `--update-config` | **Update the local config and exit without starting the service**: append **recommended** keys missing from `config.yaml` from `config.example.yaml` (only add, never overwrite; keep existing values) |
+| `--all` | With `--update-config`: also add **advanced/optional** keys, written commented out (`# key: default`, ready to uncomment); by default only recommended keys are added |
 
 ## Config File (config.yaml)
 
@@ -129,7 +130,16 @@ bash start.sh --no-config
 - The scan directory is the service root (`asr-service/`); `config.yaml` takes precedence over `config.yml` (a warning is logged when both exist).
 - **Deleting `config.yaml` and restarting = resetting the configuration** (regenerated from the example).
 - The bootstrap-generated `config.yaml` has permission `600` (it may contain `api_key`).
-- **Sync new keys (`--update-config`, off by default)**: when started with `--update-config`, newly **active** keys from `config.example.yaml` are appended to the auto-discovered `config.yaml` (using the example's default value, under an "auto-sync" comment header); existing values and comments are left untouched. Use it to fill in new config options after an upgrade; keys you have commented out are not re-added. Only the auto-discovered `config.yaml` is touched — an external file passed via `--config` is never modified.
+- **Sync missing keys (`--update-config`)**: `--update-config` is a **standalone maintenance command** — it only updates the config file, then **exits without starting the service**. It appends keys **missing** from the target config, **only adding, never overwriting**: existing values and keys you've commented/declared stay untouched. Appended lines have **inline comments stripped and no extra marker**, keeping `config.yaml` concise.
+  - **Default adds recommended keys only**: the **active (uncommented)** keys in the example, written as `key: default`.
+  - **`--all` also adds advanced keys**: the **commented** advanced/optional keys in the example are added too, but kept commented out (`# key: default`, a disabled default reference, ready to uncomment) — this avoids mistaking an "enabled recommended value" for the default and writing it active.
+  - Target precedence: the file given via `--config` > the auto-discovered `config.yaml`/`config.yml`; if neither exists locally it is bootstrapped from the example. `--update-config` is mutually exclusive with `--no-config`.
+
+  ```bash
+  # Fill in new config keys after an upgrade (updates then exits, no service start)
+  bash start.sh --update-config           # recommended keys only
+  bash start.sh --update-config --all     # also advanced/optional keys (commented out)
+  ```
 
 ### Format and Validation
 
