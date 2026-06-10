@@ -1,17 +1,41 @@
+# 运行时依赖目录（构建时安装/运行时挂载，不进镜像）
 asr-service/venv/
 asr-service/models/
 asr-service/cache/
 asr-service/logs/
 asr-service/bin/
 asr-service/data/
-asr-service/__pycache__/
+
+# 开发/调研与测试物：运行时 app 不引用，且 e2e/.venv 体积巨大（~200MB）
+asr-service/scripts/
+asr-service/tests/
+
 # 真实配置（可能含 api_key）：不打进镜像，运行时由 compose 挂载或容器内从 example 生成
 asr-service/config.yaml
 asr-service/config.yml
 asr-service/.cli_launch_config
+
+# 环境变量文件：防止本地未提交的 .env 被 build 进镜像（docker 读工作区，不看 git）
+.env
+.env.*
+**/.env
+
+# Python 缓存与测试产物
+**/__pycache__/
+asr-service/__pycache__/
 *.pyc
 *.pyo
+**/.pytest_cache/
+asr-service/.coverage
+asr-service/.coverage.*
+htmlcov/
+.codegraph/
+
+# 版本控制与杂项
 .git
 .gitignore
+.idea
+.vscode
+.claude
 docs/plan/
 LICENSE
