@@ -95,7 +95,10 @@ def test_openai_full_flow(ws_app):
 
         ws.send_json({"type": "session.update", "session": {"audio": {"input": {
             "format": {"rate": 16000}, "transcription": {"language": "zh"}}}}})
-        assert ws.receive_json()["type"] == "session.updated"
+        updated = ws.receive_json()
+        assert updated["type"] == "session.updated"
+        # 回显服务端采用的采样率（客户端据此可检测 mismatch）
+        assert updated["session"]["audio"]["input"]["format"]["rate"] == 16000
 
         ws.send_json({"type": "input_audio_buffer.append",
                       "audio": base64.b64encode(b"\x00\x00" * 100).decode()})
@@ -107,6 +110,16 @@ def test_openai_full_flow(ws_app):
         assert ev["item_id"] == "item_0"
         assert "delta" not in ev["type"]   # Stage A 不发逐字增量
     assert backend.released == 1
+
+
+def test_openai_session_update_no_rate_echoes_default(ws_app):
+    client = ws_app(FakeBackend())
+    with client.websocket_connect(OPENAI_WS) as ws:
+        ws.receive_json()   # session.created
+        ws.send_json({"type": "session.update", "session": {}})   # 未声明 rate
+        updated = ws.receive_json()
+        # OpenAI pcm16 惯例默认 24000，回显让客户端可见服务端假设
+        assert updated["session"]["audio"]["input"]["format"]["rate"] == 24000
 
 
 def test_openai_invalid_config(ws_app):

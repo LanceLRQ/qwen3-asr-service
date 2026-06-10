@@ -87,8 +87,10 @@ async def fetch_to_local(url: str, *, max_mb: int, timeout_s: int,
     max_bytes = max_mb * 1024 * 1024
     total = 0
     try:
+        # trust_env=False：禁用环境 HTTP(S)_PROXY，否则下载经代理转发会绕过上面的 IP 校验
         async with httpx.AsyncClient(
-                follow_redirects=False, timeout=httpx.Timeout(timeout_s)) as client:
+                follow_redirects=False, timeout=httpx.Timeout(timeout_s),
+                trust_env=False) as client:
             async with client.stream("GET", url) as resp:
                 if resp.is_redirect:
                     raise FetchError("FetchForbidden", "拒绝跟随重定向")

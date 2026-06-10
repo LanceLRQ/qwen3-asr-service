@@ -148,7 +148,8 @@ async def run_compat_ws(ws: WebSocket, adapter) -> None:
             reuse = await _run_round(ws, adapter, session, deadline, loop, holder)
             if not reuse:
                 break
-            session = backend.create_session(sid)   # 连接复用：重置会话状态
+            # 连接复用：沿用同一 session（下一轮 run-task 的 configure 会重置缓冲/VAD/seg_id），
+            # 不新建——避免多 session 缓冲堆积，且 acquire/release 计数始终配对一次
     except WebSocketDisconnect:
         pass
     except asyncio.TimeoutError:

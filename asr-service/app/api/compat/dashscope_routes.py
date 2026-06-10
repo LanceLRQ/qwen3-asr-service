@@ -6,7 +6,7 @@ TaskManager）→ 轮询返回 results[]（含二跳 transcription_url）→ 二
 仅内存 + TTL（重启丢失未取结果的映射，reference 注明）。诚实降级：speaker_count/channel_id
 等忽略+日志；下载失败/队列满 → 子任务 FAILED 隔离。
 """
-import hmac
+import asyncio
 import logging
 import os
 import queue
@@ -21,9 +21,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 import app.config as cfg
 from app.api.compat.errors import DashScopeCompatError
-from app.api.compat.fetch import FetchError, fetch_to_local
+from app.api.compat.fetch import FetchError, _safe_remove, fetch_to_local
 from app.api.compat.mappers import result_to_dashscope_transcript, v2status_to_dashscope
 from app.api.compat.schemas import DashScopeSubmitRequest
+from app.api.routes import api_key_matches
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ class ParentRec:
     language: str | None
     options: dict
     created_at: float
+    last_access: float       # TTL 基于最后访问，避免活跃长轮询任务被误删
 
 
 def init_dashscope_routes(*, task_manager):
@@ -69,10 +71,8 @@ def init_dashscope_routes(*, task_manager):
 async def verify_dashscope_key(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ):
-    """Bearer 校验（同 routes.verify_api_key 逻辑），失败抛 DashScope 风格 401。"""
-    if not cfg.API_KEY:
-        return
-    if credentials is None or not hmac.compare_digest(credentials.credentials, cfg.API_KEY):
+    """Bearer 校验（复用 routes.api_key_matches），失败抛 DashScope 风格 401。"""
+    if not api_key_matches(credentials):
         raise DashScopeCompatError(401, "Invalid or missing API key", code="InvalidApiKey")
 
 
@@ -80,14 +80,17 @@ async def verify_dashscope_key(
 
 def _purge_expired_locked() -> None:
     now = time.time()
-    expired = [pid for pid, r in _registry.items() if now - r.created_at > _REGISTRY_TTL]
+    expired = [pid for pid, r in _registry.items() if now - r.last_access > _REGISTRY_TTL]
     for pid in expired:
         del _registry[pid]
 
 
 def _get_rec(task_id: str) -> ParentRec:
     with _registry_lock:
+        _purge_expired_locked()          # 读路径也清理，不依赖新 submit 到来
         rec = _registry.get(task_id)
+        if rec is not None:
+            rec.last_access = time.time()
     if rec is None:
         raise DashScopeCompatError(404, "task_id 不存在或已过期", code="UNKNOWN_TASK")
     return rec
@@ -108,14 +111,6 @@ def _transcription_url(request: Request, task_id: str, idx: int) -> str:
     return f"{_external_base(request)}/compat/dashscope/api/v1/tasks/{task_id}/transcription/{idx}"
 
 
-def _safe_remove(path: str) -> None:
-    try:
-        if os.path.exists(path):
-            os.remove(path)
-    except OSError:
-        pass
-
-
 # ─── 后台下载 + 入队（BackgroundTasks）───
 
 async def _process_parent(rec: ParentRec) -> None:
@@ -134,7 +129,9 @@ async def _process_parent(rec: ParentRec) -> None:
                 logger.warning(f"[compat/dashscope] 下载失败 {sub.file_url}: {e.message}")
                 return
             try:
-                sub.inner_id = _task_manager.submit(
+                # submit 是同步阻塞（队列 + 可选 SQLite 写）→ to_thread 避免阻塞事件循环
+                sub.inner_id = await asyncio.to_thread(
+                    _task_manager.submit,
                     file_path=path, language=rec.language,
                     wav_name=os.path.basename(sub.file_url) or "audio.wav",
                     options=rec.options)
@@ -177,8 +174,9 @@ async def create_transcription(body: DashScopeSubmitRequest, request: Request,
             logger.info(f"[compat/dashscope] 忽略不支持参数: {', '.join(ignored)}")
 
     parent_id = uuid.uuid4().hex
+    now = time.time()
     rec = ParentRec(parent_id, [SubTask(idx=i, file_url=u) for i, u in enumerate(file_urls)],
-                    language, options, created_at=time.time())
+                    language, options, created_at=now, last_access=now)
     with _registry_lock:
         _purge_expired_locked()
         _registry[parent_id] = rec
@@ -201,7 +199,6 @@ async def query_task(task_id: str, request: Request):
     """轮询（GET/POST）：返回各子任务状态与二跳 transcription_url（completed 时）。"""
     rec = _get_rec(task_id)
     results = []
-    metrics = {"TOTAL": len(rec.subtasks), "SUCCEEDED": 0, "FAILED": 0}
     for sub in rec.subtasks:
         if sub.status == "FAILED":        # 下载失败/队列满（固定终态）
             st, url = "FAILED", None
@@ -219,14 +216,14 @@ async def query_task(task_id: str, request: Request):
             "code": sub.code,
             "message": sub.message,
         })
-        if st == "SUCCEEDED":
-            metrics["SUCCEEDED"] += 1
-        elif st == "FAILED":
-            metrics["FAILED"] += 1
 
-    agg = _aggregate([r["subtask_status"] for r in results])
+    # 单一来源：父状态与计数都从 statuses 派生，避免两处规则漂移
+    statuses = [r["subtask_status"] for r in results]
+    metrics = {"TOTAL": len(statuses),
+               "SUCCEEDED": statuses.count("SUCCEEDED"),
+               "FAILED": statuses.count("FAILED")}
     return {"request_id": uuid.uuid4().hex,
-            "output": {"task_id": task_id, "task_status": agg,
+            "output": {"task_id": task_id, "task_status": _aggregate(statuses),
                        "results": results, "task_metrics": metrics},
             "usage": {"duration": 0}}
 

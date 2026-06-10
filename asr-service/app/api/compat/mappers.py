@@ -181,17 +181,18 @@ def _dashscope_sentence(idx: int, seg: dict) -> dict:
 def result_to_dashscope_transcript(result: dict, file_url: str) -> dict:
     """pipeline result → DashScope 转写结果文档（transcription_url 内容，毫秒）。"""
     segments = result.get("segments") or []
+    dur_ms = sec_to_ms(_duration(segments))   # 单次扫描，两个时长字段复用
     return {
         "file_url": file_url,
         "properties": {
             "audio_format": "wav",
             "channels": [0],
             "original_sampling_rate": 16000,
-            "original_duration_in_milliseconds": sec_to_ms(_duration(segments)),
+            "original_duration_in_milliseconds": dur_ms,
         },
         "transcripts": [{
             "channel_id": 0,
-            "content_duration_in_milliseconds": sec_to_ms(_duration(segments)),
+            "content_duration_in_milliseconds": dur_ms,
             "text": result.get("full_text", ""),
             "sentences": [_dashscope_sentence(i, seg) for i, seg in enumerate(segments)],
         }],

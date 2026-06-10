@@ -44,6 +44,7 @@ class OpenAIRealtimeAdapter:
 
     def __init__(self):
         self._item_seq = 0
+        self._audio_fs = None      # 上次 configure 采用的采样率（session.updated 回显）
 
     async def on_open(self, ws: WebSocket, backend):
         await ws.send_json({
@@ -70,7 +71,9 @@ class OpenAIRealtimeAdapter:
             return ("ignore", None)
         t = obj.get("type")
         if t == "session.update":
-            return ("configure", _map_session_update(obj))
+            cfg_msg = _map_session_update(obj)
+            self._audio_fs = cfg_msg.get("audio_fs")
+            return ("configure", cfg_msg)
         if t == "input_audio_buffer.append":
             b64 = obj.get("audio")
             if not b64:
@@ -87,9 +90,13 @@ class OpenAIRealtimeAdapter:
     async def on_configured(self, ws: WebSocket, warnings):
         if warnings:
             logger.info(f"[compat-ws/openai] 忽略未启用参数: {', '.join(warnings)}")
+        # 回显服务端采用的采样率，客户端据此可检测与实发 PCM 的不一致（未声明 rate 时为默认 24000）
         await ws.send_json({
             "type": "session.updated",
-            "session": {"object": "realtime.transcription_session"},
+            "session": {
+                "object": "realtime.transcription_session",
+                "audio": {"input": {"format": {"type": "audio/pcm", "rate": self._audio_fs}}},
+            },
         })
 
     def translate_finals(self, final: dict):

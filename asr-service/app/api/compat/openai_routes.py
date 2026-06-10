@@ -6,7 +6,6 @@ wait_done 同步等待终态 → mappers 渲染 response_format。鉴权复用 B
 prompt/temperature→忽略+日志、stream→400，绝不伪造。
 """
 import asyncio
-import hmac
 import json
 import logging
 import os
@@ -20,7 +19,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import app.config as cfg
 from app.api.compat.errors import OpenAICompatError
 from app.api.compat.mappers import result_to_openai, result_to_openai_sse_events
-from app.api.routes import ALLOWED_EXTENSIONS, UPLOAD_CHUNK_SIZE
+from app.api.routes import ALLOWED_EXTENSIONS, UPLOAD_CHUNK_SIZE, api_key_matches
 from app.config import MAX_AUDIO_FILE_SIZE, UPLOADS_DIR
 
 logger = logging.getLogger(__name__)
@@ -43,10 +42,8 @@ def init_openai_routes(*, task_manager, service_info=None):
 async def verify_openai_key(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ):
-    """Bearer 校验（同 routes.verify_api_key 逻辑），失败抛 OpenAI 风格 401。"""
-    if not cfg.API_KEY:
-        return
-    if credentials is None or not hmac.compare_digest(credentials.credentials, cfg.API_KEY):
+    """Bearer 校验（复用 routes.api_key_matches），失败抛 OpenAI 风格 401。"""
+    if not api_key_matches(credentials):
         raise OpenAICompatError(401, "Invalid or missing API key", code="invalid_api_key")
 
 

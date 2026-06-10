@@ -86,6 +86,8 @@ class DashScopeRealtimeAdapter:
             "header": {"task_id": self._task_id, "event": "task-finished", "attributes": {}},
             "payload": {"output": {}, "usage": None},
         })
+        # 清空，避免连接复用时两轮之间的错误事件误用上一轮 task_id
+        self._task_id = None
 
 
 def build_dashscope_ws_router(prefix: str = "/compat/dashscope/api-ws/v1") -> APIRouter:
