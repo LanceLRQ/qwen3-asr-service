@@ -143,6 +143,8 @@ function Install-PipIfNeeded {
     }
 }
 
+# 须在 Install-Dependencies（按 requirements.txt 装入 CPU 版 torch）之后调用：
+# GPU 环境下用 CUDA 版覆盖 requirements.txt 装入的 CPU 版 torch/torchaudio/torchvision。
 function Install-PyTorch {
     Write-Host
     Write-Host '[INFO] Checking NVIDIA GPU...' -ForegroundColor Cyan
@@ -156,31 +158,45 @@ function Install-PyTorch {
         catch { }
     }
 
-    $torchIndex = ''
-    if ($hasGpu) {
-        Write-Host '[INFO] NVIDIA GPU detected, will install CUDA PyTorch' -ForegroundColor Green
-        $torchIndex = 'https://download.pytorch.org/whl/cu124'
-    }
-    else {
-        Write-Host '[WARN] No GPU detected, will install CPU PyTorch' -ForegroundColor Yellow
-        $torchIndex = 'https://download.pytorch.org/whl/cpu'
+    if (-not $hasGpu) {
+        # CPU 版 torch/torchaudio/torchvision 已由 requirements.txt 安装，无需重复
+        Write-Host '[WARN] No GPU detected, using CPU PyTorch from requirements.txt' -ForegroundColor Yellow
+        return
     }
 
+    # GPU：requirements.txt 中的 torch==2.6.0 被 pip 解析为 CPU 版，需替换为 CUDA 版。
+    # --target（便携）模式下 pip 既不会用 CUDA 版覆盖已存在的包，--force-reinstall 也不替换
+    # 包文件，必须先手动删除旧 torch 目录与 dist-info，再以 --no-deps 安装（与 cli.ps1 一致）。
     Write-Host
-    Write-Host '[INFO] Installing PyTorch (this may take several minutes)...' -ForegroundColor Cyan
+    Write-Host '[INFO] Installing CUDA PyTorch (this may take several minutes)...' -ForegroundColor Cyan
 
-    $pipArgs = @('-m', 'pip', 'install') + $script:PipTarget
+    $isTarget = $script:PipTarget.Count -gt 0
+    if ($isTarget) {
+        $sitePkgs = $script:PipTarget[1]
+        foreach ($item in @('torch', 'torchgen', 'torchaudio', 'torchvision')) {
+            $dir = Join-Path $sitePkgs $item
+            if (Test-Path $dir) { Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue }
+        }
+        Get-ChildItem $sitePkgs -Directory -Filter 'torch*.dist-info' -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^torch[a-z]*-\d' } |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    }
 
-    if ($hasGpu) {
-        $pipArgs += @('torch==2.6.0+cu124', 'torchaudio==2.6.0+cu124', '--index-url', $torchIndex)
-    }
-    else {
-        $pipArgs += @('torch', 'torchaudio', '--index-url', $torchIndex)
-    }
+    # requirements.txt 已装好全部依赖，故 --no-deps 仅替换 torch 三件套；
+    # venv 模式（非 --target）pip 能正常替换，补 --force-reinstall 确保覆盖。
+    $pipArgs = @('-m', 'pip', 'install', '--no-deps')
+    if (-not $isTarget) { $pipArgs += '--force-reinstall' }
+    $pipArgs += $script:PipTarget + @(
+        'torch==2.6.0+cu124', 'torchaudio==2.6.0+cu124', 'torchvision==0.21.0+cu124',
+        '--index-url', 'https://download.pytorch.org/whl/cu124'
+    )
 
     & $script:PythonBin @pipArgs
     if ($LASTEXITCODE -ne 0) {
         Write-Host '[ERROR] PyTorch installation failed' -ForegroundColor Red
+    }
+    else {
+        Write-Host '[INFO] CUDA PyTorch installed' -ForegroundColor Green
     }
 }
 
@@ -337,8 +353,9 @@ else {
 
 # --- Common setup (portable or venv) ---
 Install-PipIfNeeded
-Install-PyTorch
+# 先按 requirements.txt 装入 CPU 版 torch，再由 Install-PyTorch 在 GPU 环境下替换为 CUDA 版
 Install-Dependencies
+Install-PyTorch
 New-Directories
 Select-ModelSource
 Show-SetupComplete

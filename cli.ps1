@@ -299,7 +299,8 @@ function Docker-Pull {
     if (-not $script:HasDocker) { Write-Err 'Docker 未安装'; return }
     Write-Info "拉取镜像 ${ImageName}:${ImageTag} ..."
     Write-Host
-    if (docker pull "${ImageName}:${ImageTag}") {
+    docker pull "${ImageName}:${ImageTag}"
+    if ($LASTEXITCODE -eq 0) {
         Write-Host; Write-Ok '镜像拉取完成'
     }
     else { Write-Host; Write-Err '镜像拉取失败' }
@@ -347,7 +348,13 @@ function Docker-Down {
     }
     Write-Info "停止容器 $ContainerName ..."
     Write-Host
-    if ((docker stop $ContainerName) -and (docker rm $ContainerName)) {
+    docker stop $ContainerName | Out-Null
+    $downOk = $LASTEXITCODE -eq 0
+    if ($downOk) {
+        docker rm $ContainerName | Out-Null
+        $downOk = $LASTEXITCODE -eq 0
+    }
+    if ($downOk) {
         Write-Host; Write-Ok '容器已停止并移除'
     }
     else { Write-Host; Write-Err '停止失败' }
@@ -812,7 +819,7 @@ function Portable-UpdateDeps {
         }
         # Remove all torch dist-info directories (may have multiple versions)
         Get-ChildItem $sitePkgs -Directory -Filter 'torch*.dist-info' -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -match '^torch(-[a-z]+)?-\d' } |
+            Where-Object { $_.Name -match '^torch[a-z]*-\d' } |
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
         Write-Info '安装 CUDA 版 PyTorch...'
