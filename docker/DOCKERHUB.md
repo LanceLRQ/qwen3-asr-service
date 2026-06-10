@@ -2,7 +2,7 @@
 
 ---
 
-A ready-to-use long-form speech recognition API service based on Qwen3-ASR, supporting both GPU (CUDA) and CPU (OpenVINO INT8) inference.
+A simple, fast and efficient speech recognition API service based on Qwen3-ASR. Offline long-form + real-time streaming transcription, speaker diarization / voiceprint identification, OpenAI / DashScope compatible APIs and a built-in Web UI; dual-mode inference on GPU (CUDA) and CPU (OpenVINO INT8).
 
 ### Supported tags and respective Dockerfile links
 
@@ -36,6 +36,7 @@ A ready-to-use long-form speech recognition API service based on Qwen3-ASR, supp
 - **Speaker diarization** with anonymous labels (A/B/C…), enabled via `--enable-speaker`
 - **Voiceprint library** for real-name speaker identification (`/v2/speakers*`), enabled via `--enable-speaker-db` (requires an API key)
 - **Real-time speech transcription** (WebSocket endpoint, enabled via `--enable-stream`)
+- **OpenAI / DashScope compatible APIs** — drop-in `/compat/*` endpoints (offline + realtime), just change `base_url`; enabled via `--enable-openai-api` / `--enable-dashscope-api`
 - Task management: list, filter by status, cancel tasks, persisted task history (survives restarts)
 - Optional Bearer Token API authentication (OpenAI-compatible format)
 - YAML config file for unified parameter management (auto-generated on first startup)
@@ -114,6 +115,8 @@ services:
       # - --enable-task-store     # offline task persistence (results survive restarts)
       # - --enable-speaker        # speaker diarization (anonymous A/B/C… labels)
       # - --enable-speaker-db     # voiceprint real-name identification (needs --api-key)
+      # - --enable-openai-api     # OpenAI-compatible /compat/openai/v1/* endpoints
+      # - --enable-dashscope-api  # DashScope-compatible /compat/dashscope/* endpoints
     restart: unless-stopped
 ```
 
@@ -137,6 +140,8 @@ All parameters are passed via `command`:
 | `--enable-task-store` | - | Disabled | Offline task persistence (results survive restarts) |
 | `--enable-speaker` | - | Disabled | Speaker diarization (anonymous A/B/C… labels) |
 | `--enable-speaker-db` | - | Disabled | Voiceprint library for real-name identification (requires `--enable-speaker` + API key) |
+| `--enable-openai-api` | - | Disabled | OpenAI-compatible endpoints `/compat/openai/v1/*` (realtime `WS /realtime` needs `--enable-stream`) |
+| `--enable-dashscope-api` | - | Disabled | DashScope-compatible endpoints `/compat/dashscope/*` (realtime `WS /inference` needs `--enable-stream`) |
 
 > The container always listens on `0.0.0.0` internally. Use `-p` to map the port for external access.
 > Full parameter table and YAML config-file usage: see the [configuration reference](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/configuration_EN.md).
@@ -159,6 +164,7 @@ Full API documentation (parameters, response structures, error codes, WebSocket 
   - [Task management](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/api/v2/tasks_EN.md)
   - [Speaker diarization & voiceprint library](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/api/v2/speakers_EN.md)
 - [API reference v1 (legacy version)](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/api/v1_EN.md)
+- [Compatibility APIs (OpenAI / DashScope drop-in, offline + realtime)](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/api/compat_EN.md)
 - [Configuration reference (startup parameters / config.yaml / task persistence)](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/configuration_EN.md)
 
 Quick check:
@@ -195,7 +201,7 @@ If you find this project helpful, please consider giving a ⭐ on [GitHub](https
 
 ---
 
-基于 Qwen3-ASR 的开箱即用长语音识别 API 服务，支持 GPU（CUDA）和 CPU（OpenVINO INT8）双模式推理。
+基于 Qwen3-ASR 的简单、快速、高效语音识别 API 服务。离线长音频 + 实时流式转写，支持说话人分离 / 声纹库识别、OpenAI / DashScope 兼容接口与内置 Web UI；支持 GPU（CUDA）和 CPU（OpenVINO INT8）双模式推理。
 
 ### Supported tags and respective Dockerfile links
 
@@ -229,6 +235,7 @@ If you find this project helpful, please consider giving a ⭐ on [GitHub](https
 - **说话人分离**：匿名标签（A/B/C…），`--enable-speaker` 开启
 - **声纹库识别**：真名识别接口 `/v2/speakers*`，`--enable-speaker-db` 开启（需配置 API 密钥）
 - **实时语音转写**：WebSocket 端点，`--enable-stream` 开启
+- **OpenAI / DashScope 兼容接口**：drop-in `/compat/*` 端点（离线 + 实时），改 `base_url` 即接入，`--enable-openai-api` / `--enable-dashscope-api` 开启
 - 任务管理：列表查询、状态筛选、任务取消、历史任务持久化（跨重启可查）
 - 可选 Bearer Token API 认证（兼容 OpenAI 格式）
 - YAML 配置文件统一管理启动参数（首启自动生成）
@@ -307,6 +314,8 @@ services:
       # - --enable-task-store     # 离线任务持久化（结果跨重启可查）
       # - --enable-speaker        # 说话人分离（匿名 A/B/C… 标签）
       # - --enable-speaker-db     # 声纹库真名识别（需配合 --api-key）
+      # - --enable-openai-api     # OpenAI 兼容端点 /compat/openai/v1/*
+      # - --enable-dashscope-api  # DashScope 兼容端点 /compat/dashscope/*
     restart: unless-stopped
 ```
 
@@ -330,6 +339,8 @@ services:
 | `--enable-task-store` | - | 关闭 | 离线任务持久化（结果跨重启可查） |
 | `--enable-speaker` | - | 关闭 | 说话人分离（匿名 A/B/C… 标签） |
 | `--enable-speaker-db` | - | 关闭 | 声纹库真名识别（需 `--enable-speaker` + API 密钥） |
+| `--enable-openai-api` | - | 关闭 | OpenAI 兼容端点 `/compat/openai/v1/*`（实时 `WS /realtime` 需 `--enable-stream`） |
+| `--enable-dashscope-api` | - | 关闭 | DashScope 兼容端点 `/compat/dashscope/*`（实时 `WS /inference` 需 `--enable-stream`） |
 
 > 容器内部固定监听 `0.0.0.0`，通过 `-p` 映射端口即可从外部访问。
 > 完整参数表与 YAML 配置文件用法见 [配置文档](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/configuration.md)。
@@ -352,6 +363,7 @@ services:
   - [任务管理](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/api/v2/tasks.md)
   - [说话人分离与声纹库](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/api/v2/speakers.md)
 - [API 文档 v1（兼容版本）](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/api/v1.md)
+- [兼容接口（OpenAI / DashScope drop-in，离线 + 实时）](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/api/compat.md)
 - [配置文档（启动参数 / config.yaml / 任务持久化）](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/configuration.md)
 
 快速验证：

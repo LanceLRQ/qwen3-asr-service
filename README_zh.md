@@ -2,7 +2,7 @@
 
 **中文** | [English](README.md)
 
-基于 Qwen3-ASR 的高性能开箱即用语音识别 API 服务。离线长音频与实时流式转写一体，支持说话人分离 / 声纹库识别，并提供了多功能美观实用的 Web UI。Linux/MacOS/Windows 多平台兼容，支持 Docker 容器部署，支持 GPU（CUDA）和 CPU（OpenVINO INT8）双模式推理。
+基于 Qwen3-ASR 的简单、快速、高效语音识别 API 服务。开箱即用，离线长音频与实时流式转写一体，支持说话人分离 / 声纹库识别，并提供多功能、美观实用的 Web UI。Linux / macOS / Windows 多平台兼容，支持 Docker 容器部署，支持 GPU（CUDA）和 CPU（OpenVINO INT8）双模式推理。
 
 ## 特性
 
