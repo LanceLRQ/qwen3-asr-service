@@ -13,8 +13,14 @@ asr-service/
 │   │   ├── routes.py              # 离线批处理路由（v1/v2 工厂）
 │   │   ├── common_routes.py       # health / capabilities 共性路由
 │   │   ├── ws_routes.py           # 实时转写 WebSocket 端点
+│   │   ├── speaker_routes.py      # 声纹库管理/识别路由（/v2/speakers*）
 │   │   ├── schemas.py             # 请求/响应数据模型
-│   │   └── ws_schemas.py          # 实时转写信封消息模型
+│   │   ├── ws_schemas.py          # 实时转写信封消息模型
+│   │   └── compat/                # OpenAI / DashScope 兼容层（/compat/*，详见开发指南）
+│   │       ├── openai_routes.py / openai_ws_routes.py        # OpenAI 离线 + 实时
+│   │       ├── dashscope_routes.py / dashscope_ws_routes.py  # DashScope 离线 + 实时
+│   │       ├── ws_bridge.py       # 实时 WS 共享骨架（adapter 驱动协议翻译）
+│   │       └── mappers.py / errors.py / fetch.py / schemas.py # 映射 / 错误信封 / SSRF下载 / 模型
 │   ├── engines/
 │   │   ├── qwen_asr_engine.py     # Qwen3-ASR 识别引擎（GPU）
 │   │   ├── openvino_asr_engine.py # OpenVINO ASR 引擎（CPU）
@@ -47,6 +53,8 @@ asr-service/
 ├── data/                          # 任务持久化库（tasks.db，不提交 Git）
 ├── cache/                         # 运行时缓存（上传文件、音频切片）
 ├── logs/                          # 日志文件
+├── scripts/                       # 开发/调研脚本
+│   └── e2e/                       # 兼容接口端到端冒烟（独立 venv 一键 run.sh）
 ├── setup.sh / setup.bat           # 环境初始化
 ├── start.sh / start.bat           # 服务启动
 ├── config.example.yaml            # 配置模板（首启自动拷贝为 config.yaml）

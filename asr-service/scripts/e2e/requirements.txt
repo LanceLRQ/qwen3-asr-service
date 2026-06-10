@@ -1,0 +1,17 @@
+# E2E 独立环境依赖（scripts/e2e/.venv，与项目主 venv 隔离）。
+# 服务端（mock_server.py）复用项目 compat 代码，只需 web 运行期栈，不含 torch/funasr 等模型依赖。
+# 客户端（compat_e2e.py）：离线用官方 SDK 验证字段对齐，实时用裸 websockets。
+
+# 服务端（mock）
+fastapi
+uvicorn[standard]
+pydantic>=2
+python-multipart
+soundfile
+numpy
+
+# 客户端 + 共用
+httpx
+websockets
+openai
+dashscope

@@ -15,6 +15,7 @@ class TaskManager:
         self._queue = queue.Queue(maxsize=max_queue_size)
         self._tasks = {}  # task_id -> task_dict
         self._cancel_events: dict[str, threading.Event] = {}  # task_id -> cancel event
+        self._done_events: dict[str, threading.Event] = {}    # task_id -> 终态通知（同步等待用）
         self._lock = threading.Lock()
         self._worker_thread = None
         self._cleanup_thread = None
@@ -64,6 +65,7 @@ class TaskManager:
         with self._lock:
             self._tasks[task_id] = task
             self._cancel_events[task_id] = threading.Event()
+            self._done_events[task_id] = threading.Event()
 
         self._queue.put_nowait(task_id)  # 队列满时抛出 queue.Full
         if self._store:
@@ -129,6 +131,7 @@ class TaskManager:
                 task["status"] = "cancelled"
                 task["error"] = "任务已取消"
                 task["finished_at"] = datetime.now().isoformat()
+                self._signal_done(task_id)   # pending 直接终态，唤醒同步等待方
                 logger.info(f"任务已取消 (pending): {task_id}")
             else:
                 # processing 中，pipeline 将在下一个 chunk 边界检测到取消
@@ -142,6 +145,25 @@ class TaskManager:
         """检查指定任务是否已被请求取消（依赖 CPython GIL 保证 dict 读取安全）"""
         event = self._cancel_events.get(task_id)
         return event.is_set() if event else False
+
+    def _signal_done(self, task_id: str):
+        """标记任务已达终态，唤醒所有 wait_done 等待方（幂等）。"""
+        event = self._done_events.get(task_id)
+        if event is not None:
+            event.set()
+
+    def wait_done(self, task_id: str, timeout: float) -> dict | None:
+        """阻塞等待任务终态（completed/failed/cancelled），返回任务快照。
+
+        超时返回 None；任务不存在（已被 TTL 清理）时回退到 get_task 当前快照。
+        供兼容层同步端点经 asyncio.to_thread 调用，不阻塞事件循环。
+        """
+        event = self._done_events.get(task_id)
+        if event is None:
+            return self.get_task(task_id)
+        if not event.wait(timeout):
+            return None
+        return self.get_task(task_id)
 
     def _worker(self):
         """工作线程：串行处理任务，使用线程池实现真超时"""
@@ -208,6 +230,7 @@ class TaskManager:
                     self._store.finalize_task(task)
                 logger.error(f"任务失败: {task_id}, 错误: {e}", exc_info=True)
             finally:
+                self._signal_done(task_id)   # 所有终态分支统一唤醒同步等待方
                 self._queue.task_done()
 
     def shutdown(self) -> bool:
@@ -248,6 +271,7 @@ class TaskManager:
             for task_id in expired:
                 del self._tasks[task_id]
                 self._cancel_events.pop(task_id, None)
+                self._done_events.pop(task_id, None)
 
         if expired:
             logger.info(f"已清理 {len(expired)} 个过期任务")

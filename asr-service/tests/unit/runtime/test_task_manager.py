@@ -274,3 +274,52 @@ def test_no_store_zero_behavior_change(tm_factory):
     tm = tm_factory(start=True, processor=lambda task: {"ok": 1})
     tid = tm.submit("/tmp/a.wav")
     assert wait_for(lambda: tm.get_task(tid)["status"] == "completed")
+
+
+# ─── wait_done（兼容层同步等待用） ───
+
+def test_wait_done_completed_returns_snapshot(tm_factory):
+    tm = tm_factory(start=True, processor=lambda task: {"full_text": "ok"})
+    tid = tm.submit("/tmp/a.wav")
+    task = tm.wait_done(tid, timeout=5)
+    assert task is not None
+    assert task["status"] == "completed"
+    assert task["result"] == {"full_text": "ok"}
+
+
+def test_wait_done_failed_returns_snapshot(tm_factory):
+    def boom(task):
+        raise RuntimeError("decode error")
+    tm = tm_factory(start=True, processor=boom)
+    tid = tm.submit("/tmp/a.wav")
+    task = tm.wait_done(tid, timeout=5)
+    assert task["status"] == "failed"
+
+
+def test_wait_done_timeout_returns_none(tm_factory):
+    import time
+    tm = tm_factory(start=True, processor=lambda task: time.sleep(2) or {"ok": 1})
+    tid = tm.submit("/tmp/a.wav")
+    assert tm.wait_done(tid, timeout=0.05) is None
+
+
+def test_wait_done_pending_cancel_wakes(tm_factory):
+    # 不启动 worker：pending 直接取消，wait_done 应立即返回 cancelled 快照
+    tm = tm_factory()
+    tid = tm.submit("/tmp/a.wav")
+    tm.cancel_task(tid)
+    task = tm.wait_done(tid, timeout=1)
+    assert task is not None and task["status"] == "cancelled"
+
+
+def test_wait_done_unknown_task_returns_none(tm_factory):
+    tm = tm_factory()
+    assert tm.wait_done("nope", timeout=0.1) is None
+
+
+def test_wait_done_pops_done_event_on_cleanup(tm_factory):
+    tm = tm_factory(start=True, processor=lambda task: {"ok": 1})
+    tid = tm.submit("/tmp/a.wav")
+    assert wait_for(lambda: tm.get_task(tid)["status"] == "completed")
+    # _done_events 与 _cancel_events 一样在 submit 登记
+    assert tid in tm._done_events

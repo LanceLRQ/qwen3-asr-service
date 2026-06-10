@@ -62,7 +62,9 @@ docker run -d --gpus all -p 8765:8765 \
 | [配置文档](docs/configuration.md) | 启动参数全表、config.yaml 配置文件、环境变量、任务持久化、内置常量 |
 | [API 文档 v2（默认）](docs/api/v2.md) | 离线批处理、健康检查 / 能力查询、实时转写 WebSocket 协议 |
 | [API 文档 v1（兼容）](docs/api/v1.md) | 旧客户端兼容说明与版本演进约定 |
+| [兼容接口](docs/api/compat.md) | OpenAI / 阿里云 DashScope drop-in 兼容（离线 + 实时），改 base_url 即接入 |
 | [架构说明](docs/architecture.md) | 项目结构、处理流程、关键设计 |
+| [开发指南](docs/development.md) | 开发环境、测试、端到端冒烟、单一 schema / 文档 / 兼容层扩展约定 |
 
 ---
 

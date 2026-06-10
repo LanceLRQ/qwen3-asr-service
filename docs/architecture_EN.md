@@ -13,8 +13,14 @@ asr-service/
 │   │   ├── routes.py              # Offline batch routes (v1/v2 factory)
 │   │   ├── common_routes.py       # health / capabilities shared routes
 │   │   ├── ws_routes.py           # Real-time transcription WebSocket endpoint
+│   │   ├── speaker_routes.py      # Voiceprint DB management/recognition (/v2/speakers*)
 │   │   ├── schemas.py             # Request/response data models
-│   │   └── ws_schemas.py          # Real-time envelope message models
+│   │   ├── ws_schemas.py          # Real-time envelope message models
+│   │   └── compat/                # OpenAI / DashScope compat layer (/compat/*, see Dev Guide)
+│   │       ├── openai_routes.py / openai_ws_routes.py        # OpenAI offline + realtime
+│   │       ├── dashscope_routes.py / dashscope_ws_routes.py  # DashScope offline + realtime
+│   │       ├── ws_bridge.py       # Shared realtime-WS skeleton (adapter-driven translation)
+│   │       └── mappers.py / errors.py / fetch.py / schemas.py # mapping / error envelopes / SSRF download / models
 │   ├── engines/
 │   │   ├── qwen_asr_engine.py     # Qwen3-ASR recognition engine (GPU)
 │   │   ├── openvino_asr_engine.py # OpenVINO ASR engine (CPU)
@@ -47,6 +53,8 @@ asr-service/
 ├── data/                          # Task persistence database (tasks.db, not committed)
 ├── cache/                         # Runtime cache (uploads, audio segments)
 ├── logs/                          # Log files
+├── scripts/                       # Dev/research scripts
+│   └── e2e/                       # Compat-API end-to-end smoke (isolated venv, one-shot run.sh)
 ├── setup.sh / setup.bat           # Environment initialization
 ├── start.sh / start.bat           # Service startup
 ├── config.example.yaml            # Config template (auto-copied to config.yaml on first run)

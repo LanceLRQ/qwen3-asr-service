@@ -62,7 +62,9 @@ docker run -d --gpus all -p 8765:8765 \
 | [Configuration Reference](docs/configuration_EN.md) | Full startup-parameter table, config.yaml, environment variables, task persistence, built-in constants |
 | [API Reference v2 (default)](docs/api/v2_EN.md) | Offline batch processing, health / capabilities, real-time WebSocket protocol |
 | [API Reference v1 (legacy)](docs/api/v1_EN.md) | Legacy-client compatibility notes and versioning conventions |
+| [Compatibility APIs](docs/api/compat_EN.md) | OpenAI / Alibaba Cloud DashScope drop-in compatibility (offline + realtime), just change base_url |
 | [Architecture](docs/architecture_EN.md) | Project structure, processing pipeline, key design decisions |
+| [Development Guide](docs/development_EN.md) | Dev environment, testing, E2E smoke, single-schema / docs / compat-layer conventions |
 
 ---
 

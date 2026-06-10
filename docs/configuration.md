@@ -103,7 +103,8 @@
 |------|------|
 | `--config <PATH>` | 显式指定 YAML 配置文件（文件不存在则启动报错） |
 | `--no-config` | 跳过配置文件加载与引导生成（纯默认值 + 环境变量 + 命令行，排障用） |
-| `--update-config` | 把 `config.example.yaml` 的新增项同步进 `config.yaml`（追加缺失项、保留既有值；默认关） |
+| `--update-config` | **仅更新本地配置后退出，不启动服务**：把 `config.example.yaml` 里 `config.yaml` 缺失的**推荐项**追加进去（只补不覆盖、保留既有值） |
+| `--all` | 配合 `--update-config`：连**高级/可选项**一并补入（按注释态写入，即 `# 键: 默认值`，随时可取消注释）；默认只补推荐项 |
 
 ## 配置文件（config.yaml）
 
@@ -129,7 +130,16 @@ bash start.sh --no-config
 - 扫描目录为服务根目录（`asr-service/`），`config.yaml` 优先于 `config.yml`（并存时告警并取 `.yaml`）。
 - **删除 `config.yaml` 后重启 = 重置配置**（重新由 example 生成默认配置）。
 - 引导生成的 `config.yaml` 权限为 `600`（该文件可能写入 `api_key`）。
-- **同步新增项（`--update-config`，默认关）**：加 `--update-config` 启动时，会把 `config.example.yaml` 里**新增的激活项**追加进自动发现到的 `config.yaml`（沿用 example 默认值，加「自动同步」注释头），既有值与注释保持不动。服务升级带来新配置项时用它一键补齐；已被你注释掉的键不会被重新加入。仅作用于自动发现的 `config.yaml`，`--config` 指定的外部文件不改动。
+- **同步缺失项（`--update-config`）**：`--update-config` 是一个**独立的维护命令**——只更新配置文件，完成后**直接退出，不启动服务**。它把 `config.example.yaml` 里目标配置**缺失的项**追加进去，**只补不覆盖**：既有值与你已注释/声明的键一律不动。追加的行**去掉行内注释、不加额外标记**，保持 `config.yaml` 简洁。
+  - **默认只补推荐项**：即 example 里**激活（未注释）**的项，以 `键: 默认值` 形式补入。
+  - **`--all` 连高级项一起补**：example 里**注释掉的高级/可选项**也补，但保持注释态（`# 键: 默认值`，禁用 + 默认值引用，随时可取消注释启用）——避免把「启用时的推荐值」误当默认值写成激活态。
+  - 目标文件优先级：`--config` 指定文件 > 自动发现的 `config.yaml`/`config.yml`；本地都不存在时由 example 引导生成。`--update-config` 与 `--no-config` 互斥。
+
+  ```bash
+  # 升级后补齐新配置项（更新即退出，不起服务）
+  bash start.sh --update-config           # 只补推荐项
+  bash start.sh --update-config --all     # 连高级/可选项也补（注释态）
+  ```
 
 ### 格式与校验
 

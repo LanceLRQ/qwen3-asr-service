@@ -10,6 +10,7 @@ onnxruntime
 fastapi
 uvicorn[standard]
 python-multipart
+httpx                   # 兼容层 DashScope file_urls 服务端下载（SSRF 防护）
 
 # 文档中心（/web-ui/docs 服务端 Markdown 渲染）
 markdown

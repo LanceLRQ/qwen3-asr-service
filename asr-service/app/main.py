@@ -8,8 +8,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
 from app.utils.logger import setup_logger
-from app.utils.arg_schema import build_parser, ARG_SPECS
-from app.utils.config_file import merge_runtime_config
+from app.utils.arg_schema import build_parser, ARG_SPECS, resolve_help_lang
+from app.utils.config_file import merge_runtime_config, run_config_update
 import app.config as cfg
 from app.runtime.device import detect_device, resolve_device, auto_select_model_size, should_disable_align
 from app.runtime.task_manager import TaskManager
@@ -29,9 +29,18 @@ def parse_args(argv=None):
 
     参数定义见 app/utils/arg_schema.py（单一 schema，argparse 全 SUPPRESS）；
     配置文件的发现/引导生成/校验/合并见 app/utils/config_file.py。
+    --help 文案语言先于建 parser 判定（跟随 shell $LANG，--lang 可覆盖），见 resolve_help_lang。
     """
-    cli_ns = build_parser().parse_args(argv)
-    return merge_runtime_config(cli_ns)
+    return merge_runtime_config(_parse_cli(argv))
+
+
+def _parse_cli(argv=None):
+    """解析 CLI 为原始 Namespace（未合并配置链），供需要在合并前拦截元参数的入口使用。
+
+    --help 文案语言先于建 parser 判定（跟随 shell $LANG，--lang 可覆盖），见 resolve_help_lang。
+    """
+    lang = resolve_help_lang(argv)
+    return build_parser(lang).parse_args(argv)
 
 
 # 值为 None 时回填的 cfg 真实默认值（"生效配置"不应打"(未指定)"误导成未生效）
@@ -132,6 +141,17 @@ def _apply_cli_config(args):
     if getattr(args, "speaker_auto_enroll_min_sec", None) is not None:
         cfg.SPEAKER_AUTO_ENROLL_MIN_SEC = args.speaker_auto_enroll_min_sec
     cfg.SPEAKER_STORE_AUDIO = getattr(args, "speaker_store_audio", False)
+    cfg.ENABLE_OPENAI_API = getattr(args, "enable_openai_api", False)
+    if getattr(args, "openai_sync_timeout", None) is not None:
+        cfg.OPENAI_SYNC_TIMEOUT = args.openai_sync_timeout
+    cfg.ENABLE_DASHSCOPE_API = getattr(args, "enable_dashscope_api", False)
+    if getattr(args, "compat_fetch_max_mb", None) is not None:
+        cfg.COMPAT_FETCH_MAX_MB = args.compat_fetch_max_mb
+    if getattr(args, "compat_fetch_timeout", None) is not None:
+        cfg.COMPAT_FETCH_TIMEOUT = args.compat_fetch_timeout
+    cfg.COMPAT_FETCH_ALLOW_PRIVATE = getattr(args, "compat_fetch_allow_private", False)
+    if getattr(args, "compat_external_base_url", None) is not None:
+        cfg.COMPAT_EXTERNAL_BASE_URL = args.compat_external_base_url
     if cfg.API_KEY:
         logger.info("API 密钥已配置，Bearer token 认证已启用")
 
@@ -435,6 +455,36 @@ def _assemble_standard(app: FastAPI, args) -> None:
         app.include_router(ws_router_stream)
         logger.info("实时转写已启用：WS /v2/asr/stream（路线B / vad-offline）")
 
+    # 兼容接口（/compat/*）：可选挂载，与 v1/v2 完全隔离（错误信封按异常类型分派）
+    enable_openai = getattr(args, "enable_openai_api", False)
+    enable_dashscope = getattr(args, "enable_dashscope_api", False)
+    if enable_openai or enable_dashscope:
+        from app.api.compat import init_compat
+        from app.api.compat.errors import register_compat_exception_handlers
+        init_compat(task_manager=task_manager, task_store=task_store,
+                    backend=stream_backend, service_info=service_info)
+        register_compat_exception_handlers(app)
+    if enable_openai:
+        from app.api.compat.openai_routes import build_openai_router
+        app.include_router(build_openai_router())
+        logger.info("OpenAI 兼容接口已启用：/compat/openai/v1/*")
+        if stream_backend is not None:
+            from app.api.compat.openai_ws_routes import build_openai_ws_router
+            app.include_router(build_openai_ws_router())
+            logger.info("OpenAI 实时兼容已启用：WS /compat/openai/v1/realtime（整句，无逐字增量）")
+        elif stream_enabled is False:
+            logger.info("OpenAI 实时兼容未挂载：需 --enable-stream")
+    if enable_dashscope:
+        from app.api.compat.dashscope_routes import build_dashscope_router
+        app.include_router(build_dashscope_router())
+        logger.info("DashScope 兼容接口已启用：/compat/dashscope/api/v1/*")
+        if stream_backend is not None:
+            from app.api.compat.dashscope_ws_routes import build_dashscope_ws_router
+            app.include_router(build_dashscope_ws_router())
+            logger.info("DashScope 实时兼容已启用：WS /compat/dashscope/api-ws/v1/inference（整句，无中间结果）")
+        elif stream_enabled is False:
+            logger.info("DashScope 实时兼容未挂载：需 --enable-stream")
+
     # 条件挂载 Web UI
     if getattr(args, "web", False):
         from app.web.views import web_router, ASSETS_DIR, DOCS_MEDIA_DIR
@@ -515,7 +565,14 @@ def get_app():
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    cli_ns = _parse_cli()
+    # --update-config：仅同步本地 config.yaml 后退出，不启动服务
+    if getattr(cli_ns, "update_config", False):
+        setup_logger()
+        run_config_update(cli_ns.config, cli_ns.no_config,
+                          getattr(cli_ns, "sync_all", False))
+        sys.exit(0)
+    args = merge_runtime_config(cli_ns)
     if args.host is not None:
         cfg.HOST = args.host
     if args.port is not None:

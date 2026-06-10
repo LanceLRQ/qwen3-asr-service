@@ -19,13 +19,22 @@ logger = logging.getLogger(__name__)
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
+def api_key_matches(credentials: HTTPAuthorizationCredentials | None) -> bool:
+    """Bearer 凭证是否匹配 cfg.API_KEY；未配置 API_KEY 时恒 True（放行）。
+
+    单一鉴权谓词：兼容层 verify_openai_key/verify_dashscope_key 共用，仅错误信封各异。
+    """
+    if not cfg.API_KEY:
+        return True
+    return credentials is not None and hmac.compare_digest(
+        credentials.credentials, cfg.API_KEY)
+
+
 async def verify_api_key(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ):
     """配置了 API_KEY 时，要求请求携带有效的 Bearer token"""
-    if not cfg.API_KEY:
-        return
-    if credentials is None or not hmac.compare_digest(credentials.credentials, cfg.API_KEY):
+    if not api_key_matches(credentials):
         raise HTTPException(
             status_code=401,
             detail="Invalid or missing API key",

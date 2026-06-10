@@ -147,6 +147,7 @@ docs/plan/*
 asr-service/models
 asr-service/bin
 asr-service/venv
+asr-service/scripts/e2e/.venv
 asr-service/logs
 
 # Python test artifacts

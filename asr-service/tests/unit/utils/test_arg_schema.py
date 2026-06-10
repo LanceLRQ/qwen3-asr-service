@@ -49,6 +49,14 @@ LEGACY_DEFAULTS = {
     "speaker_auto_enroll": True,
     "speaker_auto_enroll_min_sec": 10.0,
     "speaker_store_audio": False,
+    # ── 兼容接口（/compat/*）新增，非重构前遗留 ──
+    "enable_openai_api": False,
+    "openai_sync_timeout": 300,
+    "enable_dashscope_api": False,
+    "compat_fetch_max_mb": None,
+    "compat_fetch_timeout": 120,
+    "compat_fetch_allow_private": False,
+    "compat_external_base_url": None,
 }
 
 
@@ -57,9 +65,10 @@ def test_schema_defaults_match_legacy():
 
 
 def test_no_args_only_meta_keys():
-    """未传任何参数：Namespace 仅含 --config/--no-config/--update-config 元参数，schema 参数全部缺席。"""
+    """未传任何参数：Namespace 仅含配置加载元参数，schema 参数全部缺席。"""
     ns = build_parser().parse_args([])
-    assert vars(ns) == {"config": None, "no_config": False, "update_config": False}
+    assert vars(ns) == {"config": None, "no_config": False,
+                        "update_config": False, "sync_all": False}
 
 
 @pytest.mark.parametrize("spec", ARG_SPECS, ids=lambda s: s.key)
