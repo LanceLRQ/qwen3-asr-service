@@ -7,24 +7,21 @@ A simple, fast and efficient speech recognition API service based on Qwen3-ASR. 
 ### Supported tags and respective Dockerfile links
 
 **GPU** (CUDA 12.1, requires NVIDIA GPU and nvidia-docker)
-- [`latest`, `2.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile)
-- [`1.2.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile) — previous release
+- [`latest`, `2.0.2`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile)
+- [`2.0.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile) — previous release
 
-**CPU** (x86_64, no GPU required, for standard Linux/Windows servers)
-- [`latest-cpu`, `2.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu)
-- [`1.2.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — previous release
+**CPU** (multi-arch: amd64 + arm64, no GPU required — for standard Linux/Windows servers, Apple Silicon and ARM64 Linux servers)
+- [`latest-cpu`, `2.0.2-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — multi-arch manifest; Docker auto-selects amd64 or arm64 by host
+- [`2.0.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — previous release
 
-**ARM64** (arm64/aarch64, no GPU required, for Apple Silicon and ARM64 Linux servers)
-- [`latest-arm64`, `2.0-arm64`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu)
-- [`1.2.0-arm64`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — previous release
+> Note: separate `*-arm64` tags are deprecated since 2.0.2 — arm64 is now folded into the multi-arch `*-cpu` tag. Older `2.0.0-arm64` / `1.2.0-arm64` tags remain available for existing users.
 
 ### Image tag comparison
 
 | Tag | Base Image | Arch | Inference Engine | NVIDIA GPU | Image Size (compressed / on-disk) |
 |-----|-----------|------|-----------------|-----------|-----------|
-| `latest` / `2.0` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | PyTorch (CUDA) | Required | ~4.9GB / ~8-10GB |
-| `latest-cpu` / `2.0-cpu` | `ubuntu:22.04` | amd64 | OpenVINO (INT8) | Not required | ~2GB / ~3-4GB |
-| `latest-arm64` / `2.0-arm64` | `ubuntu:22.04` | arm64 | OpenVINO (FP32) | Not required | ~2GB / ~3-4GB |
+| `latest` / `2.0.2` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | PyTorch (CUDA) | Required | ~4.9GB / ~8-10GB |
+| `latest-cpu` / `2.0.2-cpu` | `ubuntu:22.04` | amd64 + arm64 (multi-arch) | OpenVINO (amd64: INT8 / arm64: FP32, selected at runtime) | Not required | ~2GB / ~3-4GB |
 
 ### Features
 
@@ -68,7 +65,9 @@ docker run -d \
   lancelrq/qwen3-asr-service:latest-cpu
 ```
 
-#### ARM64 Mode (Apple Silicon, etc.)
+#### ARM64 (Apple Silicon, ARM64 Linux servers)
+
+ARM64 is served by the same multi-arch `latest-cpu` tag — Docker automatically pulls the arm64 image on ARM64 hosts. Just use `latest-cpu` as in CPU mode above:
 
 ```bash
 docker run -d \
@@ -77,12 +76,12 @@ docker run -d \
   -v /path/to/logs:/app/logs \
   -v /path/to/data:/app/data \
   --name qwen3-asr-service \
-  lancelrq/qwen3-asr-service:latest-arm64
+  lancelrq/qwen3-asr-service:latest-cpu
 ```
 
 Models are downloaded automatically on first startup. Mount `/app/models` to persist them across restarts.
 
-> CPU and ARM64 images do not require NVIDIA GPU or nvidia-docker.
+> The CPU image does not require NVIDIA GPU or nvidia-docker.
 
 ### Docker Compose
 
@@ -182,9 +181,9 @@ curl http://localhost:8765/v2/tasks/{task_id}
 
 ### Mode Comparison
 
-| | GPU Mode | CPU Mode | ARM64 Mode |
+| | GPU Mode | CPU Mode (amd64) | CPU Mode (arm64) |
 |--|---------|---------|-----------|
-| Image Tag | `latest` | `latest-cpu` | `latest-arm64` |
+| Image Tag | `latest` | `latest-cpu` | `latest-cpu` (same multi-arch tag) |
 | Inference Engine | PyTorch (CUDA) | OpenVINO (INT8) | OpenVINO (FP32) |
 | Alignment (word timestamps) | Supported | Not supported | Not supported |
 | VRAM / Memory | ~2-8GB VRAM | ~4-6GB RAM | ~4-6GB RAM |
@@ -206,24 +205,21 @@ If you find this project helpful, please consider giving a ⭐ on [GitHub](https
 ### Supported tags and respective Dockerfile links
 
 **GPU 版本**（CUDA 12.1，需要 NVIDIA GPU 和 nvidia-docker）
-- [`latest`, `2.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile)
-- [`1.2.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile) — 历史版本
+- [`latest`, `2.0.2`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile)
+- [`2.0.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile) — 历史版本
 
-**CPU 版本**（x86_64，无需 GPU，适用于普通 Linux/Windows 服务器）
-- [`latest-cpu`, `2.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu)
-- [`1.2.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — 历史版本
+**CPU 版本**（多架构：amd64 + arm64，无需 GPU，适用于普通 Linux/Windows 服务器、Apple Silicon、ARM64 Linux 服务器）
+- [`latest-cpu`, `2.0.2-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — 多架构 manifest，Docker 按本机架构自动选择 amd64 或 arm64
+- [`2.0.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — 历史版本
 
-**ARM64 版本**（arm64/aarch64，无需 GPU，适用于 Apple Silicon、ARM64 Linux 服务器）
-- [`latest-arm64`, `2.0-arm64`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu)
-- [`1.2.0-arm64`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — 历史版本
+> 说明：自 2.0.2 起独立 `*-arm64` tag 已弃用，arm64 已并入多架构 `*-cpu` tag。历史 `2.0.0-arm64` / `1.2.0-arm64` 仍保留供存量用户使用。
 
 ### 镜像版本对比
 
 | Tag | 基础镜像 | 架构 | 推理引擎 | NVIDIA GPU | 镜像体积（压缩 / 解压） |
 |-----|---------|------|---------|-----------|---------|
-| `latest` / `2.0` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | PyTorch (CUDA) | 需要 | ~4.9GB / ~8-10GB |
-| `latest-cpu` / `2.0-cpu` | `ubuntu:22.04` | amd64 | OpenVINO (INT8) | 不需要 | ~2GB / ~3-4GB |
-| `latest-arm64` / `2.0-arm64` | `ubuntu:22.04` | arm64 | OpenVINO (FP32) | 不需要 | ~2GB / ~3-4GB |
+| `latest` / `2.0.2` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | PyTorch (CUDA) | 需要 | ~4.9GB / ~8-10GB |
+| `latest-cpu` / `2.0.2-cpu` | `ubuntu:22.04` | amd64 + arm64（多架构） | OpenVINO（amd64: INT8 / arm64: FP32，运行时自选） | 不需要 | ~2GB / ~3-4GB |
 
 ### 特性
 
@@ -267,7 +263,9 @@ docker run -d \
   lancelrq/qwen3-asr-service:latest-cpu
 ```
 
-#### ARM64 模式（Apple Silicon 等）
+#### ARM64（Apple Silicon、ARM64 Linux 服务器）
+
+ARM64 由多架构 `latest-cpu` tag 直接提供——在 ARM64 主机上 Docker 会自动拉取 arm64 镜像，直接按上面 CPU 模式使用 `latest-cpu` 即可：
 
 ```bash
 docker run -d \
@@ -276,12 +274,12 @@ docker run -d \
   -v /path/to/logs:/app/logs \
   -v /path/to/data:/app/data \
   --name qwen3-asr-service \
-  lancelrq/qwen3-asr-service:latest-arm64
+  lancelrq/qwen3-asr-service:latest-cpu
 ```
 
 首次启动会自动下载模型文件，挂载 `/app/models` 目录可持久化模型避免重复下载。
 
-> CPU 和 ARM64 镜像无需 NVIDIA GPU 和 nvidia-docker，开箱即用。
+> CPU 镜像无需 NVIDIA GPU 和 nvidia-docker，开箱即用。
 
 ### Docker Compose
 
@@ -381,9 +379,9 @@ curl http://localhost:8765/v2/tasks/{task_id}
 
 ### 运行模式对比
 
-| | GPU 模式 | CPU 模式 | ARM64 模式 |
+| | GPU 模式 | CPU 模式 (amd64) | CPU 模式 (arm64) |
 |--|---------|---------|-----------|
-| 镜像 Tag | `latest` | `latest-cpu` | `latest-arm64` |
+| 镜像 Tag | `latest` | `latest-cpu` | `latest-cpu`（同一多架构 tag） |
 | 推理引擎 | PyTorch (CUDA) | OpenVINO (INT8) | OpenVINO (FP32) |
 | 对齐（字级时间戳） | 支持 | 不支持 | 不支持 |
 | 显存/内存需求 | ~2-8GB 显存 | ~4-6GB 内存 | ~4-6GB 内存 |
