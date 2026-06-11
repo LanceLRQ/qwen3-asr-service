@@ -3,9 +3,11 @@ FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
-# 替换 APT 源为华科镜像（加速国内构建）
-RUN sed -i 's|http://archive.ubuntu.com/ubuntu|https://mirrors.hust.edu.cn/ubuntu|g' /etc/apt/sources.list && \
-    sed -i 's|http://security.ubuntu.com/ubuntu|https://mirrors.hust.edu.cn/ubuntu|g' /etc/apt/sources.list
+# APT 镜像源（可选）：默认官方源（CI/境外可达）；本地构建可传 mirrors.hust.edu.cn 加速
+ARG APT_MIRROR=""
+RUN if [ -n "$APT_MIRROR" ]; then \
+        sed -i "s|http://archive.ubuntu.com/ubuntu|https://${APT_MIRROR}/ubuntu|g; s|http://security.ubuntu.com/ubuntu|https://${APT_MIRROR}/ubuntu|g" /etc/apt/sources.list; \
+    fi
 
 # 安装系统依赖：Python 3.12、ffmpeg
 RUN apt-get update && \

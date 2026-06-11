@@ -7,6 +7,9 @@ cd "$(dirname "$0")/.."
 
 IMAGE_NAME="lancelrq/qwen3-asr-service"
 
+# 本地构建默认走华科镜像加速 APT 源；可用环境变量覆盖（置空则用 Ubuntu 官方源）
+APT_MIRROR="${APT_MIRROR-mirrors.hust.edu.cn}"
+
 # 选择构建版本：GPU / CPU / ARM64
 echo "请选择构建版本："
 echo "  1) GPU（默认）"
@@ -41,16 +44,16 @@ echo ""
 case "$VARIANT" in
     cpu)
         echo "Building ${IMAGE_NAME}:${TAG} (CPU, amd64) ..."
-        docker build -f docker/Dockerfile.cpu --build-arg APP_VERSION="${APP_VER}" -t "${IMAGE_NAME}:${TAG}" .
+        docker build -f docker/Dockerfile.cpu --build-arg APP_VERSION="${APP_VER}" --build-arg APT_MIRROR="${APT_MIRROR}" -t "${IMAGE_NAME}:${TAG}" .
         ;;
     arm64)
         echo "Building ${IMAGE_NAME}:${TAG} (CPU, arm64) ..."
         docker buildx build --platform linux/arm64 \
-            -f docker/Dockerfile.cpu --build-arg APP_VERSION="${APP_VER}" -t "${IMAGE_NAME}:${TAG}" --load .
+            -f docker/Dockerfile.cpu --build-arg APP_VERSION="${APP_VER}" --build-arg APT_MIRROR="${APT_MIRROR}" -t "${IMAGE_NAME}:${TAG}" --load .
         ;;
     *)
         echo "Building ${IMAGE_NAME}:${TAG} (GPU) ..."
-        docker build -f docker/Dockerfile --build-arg APP_VERSION="${APP_VER}" -t "${IMAGE_NAME}:${TAG}" .
+        docker build -f docker/Dockerfile --build-arg APP_VERSION="${APP_VER}" --build-arg APT_MIRROR="${APT_MIRROR}" -t "${IMAGE_NAME}:${TAG}" .
         ;;
 esac
 
