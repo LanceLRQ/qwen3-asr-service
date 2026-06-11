@@ -205,13 +205,3 @@ jobs:
         run: |
           docker buildx imagetools inspect "${IMAGE_NAME}:${VERSION}"
           docker buildx imagetools inspect "${IMAGE_NAME}:${VERSION}-cpu"
-
-      # 发布成功后，把 docker/DOCKERHUB.md 同步为 Docker Hub 仓库的 full description
-      - name: Sync Docker Hub description
-        uses: peter-evans/dockerhub-description@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          # 描述更新接口需账号级凭据：优先用专门的 password secret，缺省回退到 token
-          password: ${{ secrets.DOCKERHUB_PASSWORD || secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ env.IMAGE_NAME }}
-          readme-filepath: ./docker/DOCKERHUB.md

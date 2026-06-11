@@ -1,0 +1,30 @@
+name: Sync Docker Hub Description
+
+# 单独同步 docker/DOCKERHUB.md 到 Docker Hub 仓库的 full description。
+# 不构建任何镜像，几秒完成。
+#   - 改动 docker/DOCKERHUB.md 并入 main 时自动触发；
+#   - 也可在 Actions 页面用 "Run workflow" 手动触发（workflow_dispatch）。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker/DOCKERHUB.md'
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: lancelrq/qwen3-asr-service
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          # 描述更新接口需账号级凭据：优先用专门的 password secret，缺省回退到 token
+          password: ${{ secrets.DOCKERHUB_PASSWORD || secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.IMAGE_NAME }}
+          readme-filepath: ./docker/DOCKERHUB.md
