@@ -142,6 +142,10 @@ def _apply_cli_config(args):
         cfg.VLLM_CONCURRENCY = args.vllm_concurrency
     if getattr(args, "vllm_end_silence_ms", None) is not None:
         cfg.VLLM_END_SILENCE_MS = args.vllm_end_silence_ms
+    if getattr(args, "vllm_enable_align", None) is not None:
+        cfg.VLLM_ENABLE_ALIGN = args.vllm_enable_align
+    if getattr(args, "vllm_segment_gap_ms", None) is not None:
+        cfg.VLLM_SEGMENT_GAP_MS = args.vllm_segment_gap_ms
     cfg.ENABLE_SPEAKER = getattr(args, "enable_speaker", False)
     if getattr(args, "speaker_threshold", None) is not None:
         cfg.SPEAKER_THRESHOLD = args.speaker_threshold
@@ -572,6 +576,7 @@ def _assemble_vllm(app: FastAPI, args) -> None:
         chunk_size_sec=cfg.VLLM_CHUNK_SIZE_SEC,
         unfixed_chunk_num=cfg.VLLM_UNFIXED_CHUNK_NUM,
         unfixed_token_num=cfg.VLLM_UNFIXED_TOKEN_NUM,
+        enable_align=cfg.VLLM_ENABLE_ALIGN,
     )
     try:
         engine.load()
@@ -590,9 +595,47 @@ def _assemble_vllm(app: FastAPI, args) -> None:
     init_ws_stream(stream_backend)
     app.include_router(ws_router_stream)
 
+    # 离线任务层（Phase 1）：复用 standard 的 TaskManager/TaskStore/离线路由（依赖中性，
+    # 惰性导入——module 顶层这些名在 venv-vllm 因 funasr 缺失为 None，故此处重新导入）；
+    # 处理函数换成 vLLM 批量 transcribe（runtime/vllm_offline）。
+    from app.runtime.task_manager import TaskManager
+    from app.runtime.vllm_offline import run_vllm_offline
+
+    task_store = None
+    if getattr(args, "enable_task_store", False):
+        from app.runtime.task_store import TaskStore
+        db_path = args.task_db_path
+        if not os.path.isabs(db_path):
+            db_path = os.path.join(cfg.BASE_DIR, db_path)
+        try:
+            task_store = TaskStore(db_path, retention_days=args.task_retention_days)
+            dangling = task_store.close_dangling()
+            if dangling:
+                logger.warning(f"上次退出时有 {dangling} 个未完成任务，已标记为失败（service restarted）")
+            expired = task_store.cleanup_expired()
+            if expired:
+                logger.info(f"已清理 {expired} 个过期历史任务（>{args.task_retention_days} 天）")
+        except Exception as e:
+            logger.error(f"任务持久化初始化失败，本次以纯内存模式运行: {e}")
+            task_store = None
+
+    task_manager = TaskManager(max_queue_size=cfg.MAX_QUEUE_SIZE, store=task_store)
+
+    def process_task(task: dict):
+        def on_progress(p):
+            task_manager.update_progress(task["task_id"], p)
+        return run_vllm_offline(
+            engine, task,
+            progress_callback=on_progress,
+            cancelled=lambda: task_manager.is_stopping or task_manager.is_cancelled(task["task_id"]),
+        )
+
+    task_manager.set_processor(process_task)
+    task_manager.start()
+
     capabilities = {
         "mode": "vllm",
-        "offline_api": False,
+        "offline_api": True,
         "stream": {
             "enabled": True,
             "backend": "vllm-native",
@@ -600,12 +643,19 @@ def _assemble_vllm(app: FastAPI, args) -> None:
             "partial_results": True,
             "word_timestamps": False,
         },
+        # 离线可覆盖默认（Web UI 占位/对照用）；vLLM 无 FSMN，分段用词间隙
+        "defaults": {
+            "max_segment": cfg.MAX_SEGMENT_DURATION,
+            "segment_gap_ms": cfg.VLLM_SEGMENT_GAP_MS,
+        },
     }
     service_info = {
         "status": "ready",
         "mode": "vllm",
         "device": device,
         "model_size": model_size,
+        "align_enabled": engine.align_enabled,
+        "punc_enabled": True,        # 模型原生标点（恒有，不可单独关；详见能力对照文档）
         "asr_backend": "vllm",
         "config_file": cfg.CONFIG_FILE,
         "capabilities": capabilities,
@@ -614,6 +664,12 @@ def _assemble_vllm(app: FastAPI, args) -> None:
     init_common(service_info)
     app.include_router(build_common_router("/v1"))
     app.include_router(build_common_router("/v2"))
+
+    # 离线路由：v1（含 deprecated 别名）+ v2（同名复用）——与 standard 同一套契约
+    from app.api.routes import init_routes, build_offline_router
+    init_routes(task_manager, task_store)
+    app.include_router(build_offline_router("/v1", include_deprecated=True))
+    app.include_router(build_offline_router("/v2"))
 
     # 条件挂载 Web UI（演示页已内置 partial→final 实时渲染）
     if getattr(args, "web", False):
@@ -627,7 +683,8 @@ def _assemble_vllm(app: FastAPI, args) -> None:
 
     @app.on_event("shutdown")
     def _on_vllm_shutdown():
-        logger.info("收到终止信号，正在关闭 vLLM 实时后端...")
+        logger.info("收到终止信号，正在关闭 vLLM 实时后端与离线任务...")
+        task_manager.shutdown()
         stream_backend.shutdown()
         logger.info("Qwen3-ASR Service (vllm) 已安全退出")
 

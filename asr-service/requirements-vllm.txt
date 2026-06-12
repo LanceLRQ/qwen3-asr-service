@@ -13,11 +13,12 @@
 # 核心：ASR + vLLM 原生流式（锚点，精确锁定 → vllm 0.14.0 + torch 2.9.1+cu128 + transformers 4.57.6 整条栈）
 qwen-asr[vllm]==0.0.6
 
-# Web 框架（vllm 模式：共性接口 + WS /v2/asr/stream）
+# Web 框架（vllm 模式：共性接口 + WS /v2/asr/stream + 离线 /v2/asr 文件上传）
 fastapi==0.136.3
 uvicorn[standard]==0.49.0
 websockets==16.0
 pydantic==2.13.4
+python-multipart==0.0.32        # 离线 /v2/asr multipart 文件上传（FastAPI Form/UploadFile 必需）
 
 # 配置文件（--config）
 PyYAML==6.0.3

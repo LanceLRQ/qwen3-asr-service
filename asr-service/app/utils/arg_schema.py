@@ -211,6 +211,21 @@ ARG_SPECS = (
         help_en=f"Energy endpointer end-silence threshold (ms) (default: {cfg.VLLM_END_SILENCE_MS})",
     ),
     ArgSpec(
+        key="vllm_enable_align", flags=("--vllm-enable-align",),
+        default=None, type=bool, group="vLLM",
+        help=f"vLLM 离线加载对齐模型出词级时间戳 (default: {cfg.VLLM_ENABLE_ALIGN})",
+        help_en=f"vLLM offline: load aligner for word-level timestamps (default: {cfg.VLLM_ENABLE_ALIGN})",
+        negative_flags=("--no-vllm-align",),
+        negative_help="vLLM 离线不加载对齐模型（省显存，无词级时间戳）",
+        negative_help_en="vLLM offline: do not load the aligner (save VRAM, no word timestamps)",
+    ),
+    ArgSpec(
+        key="vllm_segment_gap_ms", flags=("--vllm-segment-gap-ms",),
+        default=None, type=int, group="vLLM",
+        help=f"vLLM 离线分段词间隙阈值（ms），相邻词间隙超此断句 (default: {cfg.VLLM_SEGMENT_GAP_MS})",
+        help_en=f"vLLM offline segmentation word-gap threshold (ms) (default: {cfg.VLLM_SEGMENT_GAP_MS})",
+    ),
+    ArgSpec(
         key="enable_task_store", flags=("--enable-task-store",), default=False, type=bool,
         group="离线任务",
         help="离线任务持久化（data/tasks.db）：结果跨重启可查",

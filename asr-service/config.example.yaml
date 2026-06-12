@@ -38,6 +38,8 @@ enable_stream: true         # WS /v2/asr/stream（standard 模式）
 # vllm_max_utterance_sec: 20    # 单句兜底切分（秒）：约束上下文/显存增长
 # vllm_concurrency: 1           # 同时解码会话数（generate 串行，>1 无吞吐收益）
 # vllm_end_silence_ms: 800      # 能量端点尾静音判停（毫秒）
+# vllm_enable_align: true       # 离线 /v2/asr 词级时间戳：加载对齐模型（false 省显存、无 words）
+# vllm_segment_gap_ms: 500      # 离线分段：相邻词间隙 > 此值断句（无 FSMN，以词间隙替代）
 
 # ── 离线任务持久化 ──
 enable_task_store: true     # 任务结果跨重启可查（data/tasks.db）；重启时未完成任务标记为失败
