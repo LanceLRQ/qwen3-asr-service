@@ -20,6 +20,8 @@ services:
       # vLLM 加载 HF 全精度模型（models/asr/0.6b 或 1.7b）；与 standard 共用同一 models 目录
       - ../asr-service/models:/app/models
       - ../asr-service/logs:/app/logs
+      # SQLite（任务持久化 data/tasks.db、声纹库 data/speakers.db）：vLLM 模式同样支持，挂出以跨重建保留
+      - ../asr-service/data:/app/data
     deploy:
       resources:
         reservations:

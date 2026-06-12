@@ -264,11 +264,16 @@ api_key: "sk-your-key"
 **启动**
 
 ```bash
-# 本地（独立 venv-vllm，仅装 requirements-vllm.txt）
+# 本地：先装独立 venv-vllm（仅 requirements-vllm.txt，自带 vllm/torch），再启动
+bash asr-service/setup.sh --vllm                                          # 建 venv-vllm 并装依赖
+QWEN_VENV=venv-vllm bash asr-service/start.sh --serve-mode vllm --model-size 0.6b --web
+# 或直接用 venv-vllm 解释器：
 asr-service/venv-vllm/bin/python -m app.main --serve-mode vllm --model-size 0.6b --web
 
 # Docker（独立镜像，独立端口 8766）
 docker compose -f docker/docker-compose.vllm.yml up -d
+
+# 交互式：bash manage.sh → Venv 方式（启动模式选 vllm）/ Compose 方式（切 vLLM 编排）
 ```
 
 **注意**

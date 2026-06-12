@@ -264,11 +264,16 @@ api_key: "sk-your-key"
 **Start**
 
 ```bash
-# Local (isolated venv-vllm, installs only requirements-vllm.txt)
+# Local: first install the isolated venv-vllm (requirements-vllm.txt brings vllm/torch), then start
+bash asr-service/setup.sh --vllm                                          # create venv-vllm + install deps
+QWEN_VENV=venv-vllm bash asr-service/start.sh --serve-mode vllm --model-size 0.6b --web
+# Or call the venv-vllm interpreter directly:
 asr-service/venv-vllm/bin/python -m app.main --serve-mode vllm --model-size 0.6b --web
 
 # Docker (separate image, separate port 8766)
 docker compose -f docker/docker-compose.vllm.yml up -d
+
+# Interactive: bash manage.sh → venv mode (pick serve-mode vllm) / compose mode (switch to vLLM)
 ```
 
 **Notes**

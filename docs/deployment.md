@@ -226,10 +226,10 @@ bash manage.sh
 
 管理脚本支持：
 
-- **Docker Compose 启动（config.yaml 驱动，推荐）**：首次使用自动从 `config.example.yaml` 生成 `config.yaml`，可直接编辑配置后启动/停止/重启容器、查看日志、切换 GPU/CPU 编排
-- Docker 管理（拉取/构建镜像、参数向导启动/停止容器、查看日志）
-- 虚拟环境管理（安装/卸载/查看信息）
-- 启动服务（交互式配置参数，支持保存配置）
+- **Docker Compose 启动（config.yaml 驱动，推荐）**：首次使用自动从 `config.example.yaml` 生成 `config.yaml`，可直接编辑配置后启动/停止/重启容器、查看日志、切换 GPU/CPU/**vLLM** 编排
+- Docker 管理（拉取镜像支持 GPU/CPU/**vLLM** 变体、构建镜像、参数向导启动/停止容器、查看日志）
+- 虚拟环境管理（standard `venv` 与 **vLLM `venv-vllm`** 双环境的安装/卸载/查看信息）
+- 启动服务（交互式配置参数，含 **`serve-mode` 选择 standard/vllm**，vLLM 自动用 venv-vllm 环境/`-vllm` 镜像，支持保存配置）
 
 ## 验证服务
 

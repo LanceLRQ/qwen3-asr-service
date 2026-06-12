@@ -226,10 +226,10 @@ bash manage.sh
 
 Management script features:
 
-- **Docker Compose start (config.yaml-driven, recommended)**: on first use, auto-generates `config.yaml` from `config.example.yaml`; edit the config then start/stop/restart the container, view logs, switch GPU/CPU compose
-- Docker management (pull/build images, parameter-wizard start/stop containers, view logs)
-- Virtual environment management (install/uninstall/view info)
-- Start service (interactive parameter configuration with config saving)
+- **Docker Compose start (config.yaml-driven, recommended)**: on first use, auto-generates `config.yaml` from `config.example.yaml`; edit the config then start/stop/restart the container, view logs, switch GPU/CPU/**vLLM** compose
+- Docker management (pull images in GPU/CPU/**vLLM** variants, build images, parameter-wizard start/stop containers, view logs)
+- Virtual environment management (install/uninstall/view info for both standard `venv` and **vLLM `venv-vllm`**)
+- Start service (interactive parameter configuration including **`serve-mode` standard/vllm**; vLLM auto-uses the venv-vllm env / `-vllm` image; config saving supported)
 
 ## Verify the Service
 

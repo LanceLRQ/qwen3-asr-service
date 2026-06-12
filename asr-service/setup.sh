@@ -58,6 +58,50 @@ detect_python() {
     fi
 }
 
+# vLLM 独立环境安装（--vllm）：建 venv-vllm + 装 requirements-vllm.txt。
+# qwen-asr[vllm] 自带 vllm/torch（cu128），故不另装 cu121 torch；vLLM 必 CUDA GPU。
+# 与 standard 的 venv 完全隔离、互不影响，可并存。
+if [ "${1:-}" = "--vllm" ]; then
+    echo ""
+    echo "[INFO] vLLM 模式：安装独立环境 venv-vllm（GPU 专用）"
+    if ! command -v nvidia-smi &> /dev/null; then
+        echo "[WARN] 未检测到 NVIDIA GPU —— vLLM 模式启动必须 CUDA，装好后仍需 GPU 才能运行"
+    fi
+    detect_python
+    if [ -d "venv-vllm" ]; then
+        echo "[INFO] Existing venv-vllm detected"
+        read -p "Delete and reinstall? [y/N]: " REINSTALL_VLLM
+        case "${REINSTALL_VLLM:-N}" in
+            [Yy]|[Yy][Ee][Ss])
+                echo "[INFO] Removing old venv-vllm..."
+                rm -rf venv-vllm
+                $PYTHON_BIN -m venv venv-vllm
+                ;;
+            *)
+                echo "[INFO] Keeping existing venv-vllm, skipping creation"
+                ;;
+        esac
+    else
+        echo "[INFO] Creating venv-vllm..."
+        $PYTHON_BIN -m venv venv-vllm
+    fi
+    source venv-vllm/bin/activate
+    echo "[INFO] Upgrading pip..."
+    pip install --upgrade pip
+    echo "[INFO] 安装 vLLM 依赖（requirements-vllm.txt；qwen-asr[vllm] 将拉取 vllm/torch，体积较大）..."
+    pip install -r requirements-vllm.txt
+    # vLLM 用 HF 全精度 ASR + 对齐器 + CAM++ 声纹（与 standard 共用 models/）；data 供任务持久化/声纹库
+    mkdir -p models/asr/0.6b models/asr/1.7b models/asr/aligner models/speaker/campplus logs data
+    echo ""
+    echo "=========================================="
+    echo "  vLLM 环境安装完成（venv-vllm）"
+    echo "=========================================="
+    echo "启动： QWEN_VENV=venv-vllm bash start.sh --serve-mode vllm"
+    echo "（或用根目录 manage.sh → Venv 方式 → 启动模式选 vllm）"
+    echo ""
+    exit 0
+fi
+
 # 0. Linux users are advised to use Docker image
 if [ "$(uname -s)" = "Linux" ]; then
     echo ""

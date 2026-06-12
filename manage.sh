@@ -12,6 +12,7 @@ PROJECT_ROOT="$SCRIPT_DIR"                          # 脚本已置于仓库根
 SERVICE_DIR="$SCRIPT_DIR/asr-service"               # 应用目录（venv / 启动脚本 / 配置 / 模型 / 日志）
 COMPOSE_FILE="$PROJECT_ROOT/docker/docker-compose.yml"
 COMPOSE_FILE_CPU="$PROJECT_ROOT/docker/docker-compose.cpu.yml"
+COMPOSE_FILE_VLLM="$PROJECT_ROOT/docker/docker-compose.vllm.yml"
 SERVICE_CONFIG="$SERVICE_DIR/config.yaml"
 SERVICE_CONFIG_EXAMPLE="$SERVICE_DIR/config.example.yaml"
 CONFIG_FILE="$SERVICE_DIR/.cli_launch_config"
@@ -34,11 +35,13 @@ HAS_DOCKER=0
 HAS_COMPOSE=0
 COMPOSE_CMD=""
 HAS_VENV=0
+HAS_VENV_VLLM=0
 HAS_GPU=0
 VENV_PYTHON_VERSION=""
+VENV_VLLM_PYTHON_VERSION=""
 MENU_RESULT=0
 INPUT_RESULT=""
-ACTIVE_COMPOSE_VARIANT="gpu"   # Compose 编排：gpu / cpu（菜单内可切换）
+ACTIVE_COMPOSE_VARIANT="gpu"   # Compose 编排：gpu / cpu / vllm（菜单内可切换）
 
 # ============================================================
 # 信号处理：确保退出时恢复光标
@@ -198,10 +201,16 @@ check_prerequisites() {
         HAS_GPU=1
     fi
 
-    # venv
+    # venv（standard）与 venv-vllm（vLLM 独立环境）——重跑时先重置，反映删除/新建
+    HAS_VENV=0; VENV_PYTHON_VERSION=""
     if [ -d "$SERVICE_DIR/venv" ] && [ -f "$SERVICE_DIR/venv/bin/python3" ]; then
         HAS_VENV=1
         VENV_PYTHON_VERSION=$("$SERVICE_DIR/venv/bin/python3" --version 2>/dev/null | awk '{print $2}' || echo "未知")
+    fi
+    HAS_VENV_VLLM=0; VENV_VLLM_PYTHON_VERSION=""
+    if [ -d "$SERVICE_DIR/venv-vllm" ] && [ -f "$SERVICE_DIR/venv-vllm/bin/python3" ]; then
+        HAS_VENV_VLLM=1
+        VENV_VLLM_PYTHON_VERSION=$("$SERVICE_DIR/venv-vllm/bin/python3" --version 2>/dev/null | awk '{print $2}' || echo "未知")
     fi
 }
 
@@ -238,6 +247,12 @@ print_status_summary() {
         printf "  Python 虚拟环境:    ${RED}✘ 未创建${NC}\n"
     fi
 
+    if [ "$HAS_VENV_VLLM" -eq 1 ]; then
+        printf "  vLLM 环境 venv-vllm: ${GREEN}✔ Python %s${NC}\n" "$VENV_VLLM_PYTHON_VERSION"
+    else
+        printf "  vLLM 环境 venv-vllm: ${DIM}✘ 未创建（仅 vLLM 模式需要）${NC}\n"
+    fi
+
     echo "─────────────────────────────────────"
     echo
 }
@@ -258,9 +273,19 @@ docker_pull() {
         error_msg "Docker 未安装"
         return
     fi
-    info_msg "拉取镜像 ${IMAGE_NAME}:${IMAGE_TAG} ..."
+    show_menu "拉取哪个镜像变体？" \
+        "GPU standard（${IMAGE_TAG}）" \
+        "CPU（${IMAGE_TAG}-cpu）" \
+        "vLLM 原生流式（${IMAGE_TAG}-vllm）"
+    local tag
+    case $MENU_RESULT in
+        0) tag="$IMAGE_TAG" ;;
+        1) tag="${IMAGE_TAG}-cpu" ;;
+        2) tag="${IMAGE_TAG}-vllm" ;;
+    esac
+    info_msg "拉取镜像 ${IMAGE_NAME}:${tag} ..."
     echo
-    if docker pull "${IMAGE_NAME}:${IMAGE_TAG}"; then
+    if docker pull "${IMAGE_NAME}:${tag}"; then
         echo
         success_msg "镜像拉取完成"
     else
@@ -422,11 +447,11 @@ menu_docker() {
 # ============================================================
 # 当前选中的编排文件（GPU / CPU，可在菜单切换）
 active_compose_file() {
-    if [ "$ACTIVE_COMPOSE_VARIANT" = "cpu" ]; then
-        echo "$COMPOSE_FILE_CPU"
-    else
-        echo "$COMPOSE_FILE"
-    fi
+    case "$ACTIVE_COMPOSE_VARIANT" in
+        cpu)  echo "$COMPOSE_FILE_CPU" ;;
+        vllm) echo "$COMPOSE_FILE_VLLM" ;;
+        *)    echo "$COMPOSE_FILE" ;;
+    esac
 }
 
 # 首次使用引导：无 config.yaml 时从 config.example.yaml 拷贝生成。
@@ -537,12 +562,17 @@ edit_service_config() {
 toggle_compose_variant() {
     show_menu "选择 Compose 编排" \
         "GPU（docker-compose.yml）" \
-        "CPU（docker-compose.cpu.yml）"
+        "CPU（docker-compose.cpu.yml）" \
+        "vLLM（docker-compose.vllm.yml · GPU 原生流式 · 8766）"
     case $MENU_RESULT in
         0) ACTIVE_COMPOSE_VARIANT="gpu" ;;
         1) ACTIVE_COMPOSE_VARIANT="cpu" ;;
+        2) ACTIVE_COMPOSE_VARIANT="vllm" ;;
     esac
     success_msg "已切换为 $ACTIVE_COMPOSE_VARIANT 编排"
+    if [ "$ACTIVE_COMPOSE_VARIANT" = "vllm" ]; then
+        info_msg "vLLM 镜像 lancelrq/qwen3-asr-service:latest-vllm；首次需先拉取或构建（docker/build.sh 选 4）"
+    fi
     press_any_key
 }
 
@@ -559,7 +589,7 @@ menu_compose() {
             "3. 重启容器" \
             "4. 查看日志" \
             "5. 编辑 config.yaml 配置" \
-            "6. 切换 GPU / CPU 编排" \
+            "6. 切换 GPU / CPU / vLLM 编排" \
             "0. 返回主菜单"
         case $MENU_RESULT in
             0) compose_up ;;
@@ -576,75 +606,76 @@ menu_compose() {
 # ============================================================
 # 虚拟环境管理
 # ============================================================
+# 安装/重装虚拟环境：target = standard（venv）| vllm（venv-vllm）
+# 已存在时由 setup.sh 自身交互询问是否重装，故此处不重复确认
 venv_install_or_reinstall() {
+    local target="${1:-standard}"
+    local setup_flag="" label="standard"
+    if [ "$target" = "vllm" ]; then
+        setup_flag="--vllm"; label="vLLM（venv-vllm）"
+    fi
     if [ ! -f "$SERVICE_DIR/setup.sh" ]; then
         error_msg "未找到 setup.sh"
         press_any_key
         return
     fi
-
-    # 已有 venv 时作为重新安装处理
-    if [ "$HAS_VENV" -eq 1 ]; then
-        warn_msg "检测到已有虚拟环境"
-        if ! confirm "将删除现有虚拟环境并重新安装，是否继续？"; then
-            info_msg "已取消"
-            return
-        fi
-        info_msg "删除现有虚拟环境..."
-        rm -rf "$SERVICE_DIR/venv"
-        HAS_VENV=0
-        VENV_PYTHON_VERSION=""
+    if [ "$target" = "vllm" ] && [ "$HAS_GPU" -eq 0 ]; then
+        warn_msg "未检测到 GPU —— vLLM 环境装好后仍需 CUDA 才能启动"
     fi
-
-    info_msg "运行安装脚本..."
+    info_msg "运行安装脚本（$label；已存在则脚本会询问是否重装）..."
     echo
-    (cd "$SERVICE_DIR" && bash setup.sh) || true
-    # 刷新检测
-    if [ -d "$SERVICE_DIR/venv" ] && [ -f "$SERVICE_DIR/venv/bin/python3" ]; then
-        HAS_VENV=1
-        VENV_PYTHON_VERSION=$("$SERVICE_DIR/venv/bin/python3" --version 2>/dev/null | awk '{print $2}' || echo "未知")
-    fi
+    (cd "$SERVICE_DIR" && bash setup.sh $setup_flag) || true
+    check_prerequisites   # 刷新 venv / venv-vllm 检测
     press_any_key
 }
 
 venv_remove() {
-    if [ "$HAS_VENV" -eq 0 ]; then
-        warn_msg "虚拟环境未创建"
+    if [ "$HAS_VENV" -eq 0 ] && [ "$HAS_VENV_VLLM" -eq 0 ]; then
+        warn_msg "无虚拟环境可删除"
         press_any_key
         return
     fi
-    if ! confirm "确定要删除虚拟环境？"; then
+    show_menu "删除哪个虚拟环境？" \
+        "standard（venv）" \
+        "vLLM（venv-vllm）" \
+        "取消"
+    local target_dir=""
+    case $MENU_RESULT in
+        0) target_dir="venv" ;;
+        1) target_dir="venv-vllm" ;;
+        2) return ;;
+    esac
+    if [ ! -d "$SERVICE_DIR/$target_dir" ]; then
+        warn_msg "$target_dir 不存在"
+        press_any_key
+        return
+    fi
+    if ! confirm "确定要删除 $target_dir？"; then
         info_msg "已取消"
         return
     fi
-    info_msg "删除虚拟环境..."
-    rm -rf "$SERVICE_DIR/venv"
-    HAS_VENV=0
-    VENV_PYTHON_VERSION=""
-    success_msg "虚拟环境已删除"
+    info_msg "删除 $target_dir ..."
+    rm -rf "$SERVICE_DIR/$target_dir"
+    check_prerequisites
+    success_msg "$target_dir 已删除"
     press_any_key
 }
 
-venv_info() {
-    echo
-    if [ "$HAS_VENV" -eq 0 ]; then
-        warn_msg "虚拟环境未创建"
-        press_any_key
-        return
-    fi
-
-    local python_bin="$SERVICE_DIR/venv/bin/python3"
+# 单个环境的版本信息（dir=venv|venv-vllm；present=1 才打印）
+_venv_info_one() {
+    local dir="$1" label="$2" present="$3"
+    [ "$present" -eq 1 ] || return 0
+    local python_bin="$SERVICE_DIR/$dir/bin/python3"
     # 统一用 python -m pip：venv 跨路径迁移后，venv/bin/pip 等控制台脚本的 shebang
     # 仍指向旧的创建路径会报 bad interpreter；-m pip 由解释器定位，不受影响。
     local pip_run=("$python_bin" -m pip)
 
-    printf "${BOLD}虚拟环境信息：${NC}\n"
+    printf "${BOLD}%s 环境（%s）：${NC}\n" "$label" "$dir"
     echo "─────────────────────────────────────"
-    printf "  路径:         %s/venv\n" "$SERVICE_DIR"
+    printf "  路径:         %s/%s\n" "$SERVICE_DIR" "$dir"
     printf "  Python 版本:  %s\n" "$("$python_bin" --version 2>/dev/null || echo '未知')"
     printf "  Pip 版本:     %s\n" "$("${pip_run[@]}" --version 2>/dev/null | awk '{print $2}' || echo '未知')"
 
-    # 关键包版本
     local torch_ver
     torch_ver=$("${pip_run[@]}" show torch 2>/dev/null | grep "^Version:" | awk '{print $2}' || echo "未安装")
     printf "  PyTorch:      %s\n" "$torch_ver"
@@ -653,45 +684,50 @@ venv_info() {
     qwen_ver=$("${pip_run[@]}" show qwen-asr 2>/dev/null | grep "^Version:" | awk '{print $2}' || echo "未安装")
     printf "  qwen-asr:     %s\n" "$qwen_ver"
 
+    if [ "$dir" = "venv-vllm" ]; then
+        local vllm_ver
+        vllm_ver=$("${pip_run[@]}" show vllm 2>/dev/null | grep "^Version:" | awk '{print $2}' || echo "未安装")
+        printf "  vLLM:         %s\n" "$vllm_ver"
+    fi
+
     # 包数量：pip 段加 || true，避免 pipefail 下 wc 仍输出而被 "|| echo" 叠加成 "0\n0"
     local pkg_count
     pkg_count=$( { "${pip_run[@]}" list 2>/dev/null || true; } | tail -n +3 | wc -l | tr -d ' ')
     printf "  已安装包:     %s 个\n" "$pkg_count"
     echo "─────────────────────────────────────"
+}
 
+venv_info() {
+    echo
+    if [ "$HAS_VENV" -eq 0 ] && [ "$HAS_VENV_VLLM" -eq 0 ]; then
+        warn_msg "尚无虚拟环境（venv / venv-vllm 均未创建）"
+        press_any_key
+        return
+    fi
+    _venv_info_one "venv" "standard" "$HAS_VENV"
+    _venv_info_one "venv-vllm" "vLLM" "$HAS_VENV_VLLM"
     press_any_key
 }
 
 menu_venv() {
     while true; do
         clear
-        if [ "$HAS_VENV" -eq 1 ]; then
-            # 有 venv：启动服务、重新安装、卸载、检测版本
-            show_menu "Venv 虚拟环境方式（本地 start.sh，参数向导）" \
-                "1. 启动服务（参数向导）" \
-                "2. 重新安装虚拟环境" \
-                "3. 卸载删除" \
-                "4. 检测版本信息" \
-                "0. 返回主菜单"
+        show_menu "Venv 虚拟环境方式（standard=venv · vLLM=venv-vllm · 本地 start.sh）" \
+            "1. 启动服务（参数向导，启动模式在面板内选）" \
+            "2. 安装/重装 standard 环境（venv）" \
+            "3. 安装/重装 vLLM 环境（venv-vllm，GPU 专用）" \
+            "4. 卸载删除环境" \
+            "5. 检测版本信息" \
+            "0. 返回主菜单"
 
-            case $MENU_RESULT in
-                0) venv_start ;;
-                1) venv_install_or_reinstall ;;
-                2) venv_remove ;;
-                3) venv_info ;;
-                4) return ;;
-            esac
-        else
-            # 无 venv：仅安装
-            show_menu "Venv 虚拟环境方式" \
-                "1. 安装虚拟环境" \
-                "0. 返回主菜单"
-
-            case $MENU_RESULT in
-                0) venv_install_or_reinstall ;;
-                1) return ;;
-            esac
-        fi
+        case $MENU_RESULT in
+            0) venv_start ;;
+            1) venv_install_or_reinstall standard ;;
+            2) venv_install_or_reinstall vllm ;;
+            3) venv_remove ;;
+            4) venv_info ;;
+            5) return ;;
+        esac
     done
 }
 
@@ -716,6 +752,14 @@ default_config() {
     LAUNCH_ENABLE_TASK_STORE="yes"
     LAUNCH_ENABLE_SPEAKER="no"
     LAUNCH_ENABLE_SPEAKER_DB="no"
+    # serve-mode：standard（默认）/ vllm（GPU 原生流式，独立 venv-vllm/镜像）
+    LAUNCH_SERVE_MODE="standard"
+    # vLLM 专属（仅 serve-mode=vllm 生效）：对齐器设备 + 一次对齐/ASR 的音频块数
+    LAUNCH_VLLM_ALIGN_DEVICE="cuda"
+    LAUNCH_VLLM_INFER_BATCH="4"
+    # 兼容接口（两模式通用；vLLM 模式实时随其挂载、无需 --enable-stream）
+    LAUNCH_ENABLE_OPENAI="no"
+    LAUNCH_ENABLE_DASHSCOPE="no"
     LAUNCH_METHOD=""
 }
 
@@ -746,6 +790,11 @@ LAUNCH_ENABLE_STREAM="$LAUNCH_ENABLE_STREAM"
 LAUNCH_ENABLE_TASK_STORE="$LAUNCH_ENABLE_TASK_STORE"
 LAUNCH_ENABLE_SPEAKER="$LAUNCH_ENABLE_SPEAKER"
 LAUNCH_ENABLE_SPEAKER_DB="$LAUNCH_ENABLE_SPEAKER_DB"
+LAUNCH_SERVE_MODE="$LAUNCH_SERVE_MODE"
+LAUNCH_VLLM_ALIGN_DEVICE="$LAUNCH_VLLM_ALIGN_DEVICE"
+LAUNCH_VLLM_INFER_BATCH="$LAUNCH_VLLM_INFER_BATCH"
+LAUNCH_ENABLE_OPENAI="$LAUNCH_ENABLE_OPENAI"
+LAUNCH_ENABLE_DASHSCOPE="$LAUNCH_ENABLE_DASHSCOPE"
 LAUNCH_METHOD="$LAUNCH_METHOD"
 EOF
 }
@@ -753,6 +802,7 @@ EOF
 print_config_summary() {
     printf "${BOLD}当前启动配置：${NC}\n"
     echo "─────────────────────────────────────"
+    printf "  启动模式:     %s\n" "$LAUNCH_SERVE_MODE"
     printf "  模型大小:     %s\n" "$LAUNCH_MODEL_SIZE"
     printf "  运行设备:     %s\n" "$LAUNCH_DEVICE"
     printf "  模型下载源:   %s\n" "$LAUNCH_MODEL_SOURCE"
@@ -767,6 +817,12 @@ print_config_summary() {
     printf "  任务持久化:   %s\n" "$([ "$LAUNCH_ENABLE_TASK_STORE" = "yes" ] && echo "启用" || echo "禁用")"
     printf "  说话人分离:   %s\n" "$([ "$LAUNCH_ENABLE_SPEAKER" = "yes" ] && echo "启用" || echo "禁用")"
     printf "  声纹库:       %s\n" "$([ "$LAUNCH_ENABLE_SPEAKER_DB" = "yes" ] && echo "启用" || echo "禁用")"
+    printf "  OpenAI 兼容:  %s\n" "$([ "$LAUNCH_ENABLE_OPENAI" = "yes" ] && echo "启用" || echo "禁用")"
+    printf "  DashScope兼容:%s\n" "$([ "$LAUNCH_ENABLE_DASHSCOPE" = "yes" ] && echo "启用" || echo "禁用")"
+    if [ "$LAUNCH_SERVE_MODE" = "vllm" ]; then
+        printf "  vLLM 对齐设备: %s\n" "$LAUNCH_VLLM_ALIGN_DEVICE"
+        printf "  vLLM 批大小:   %s\n" "$LAUNCH_VLLM_INFER_BATCH"
+    fi
     if [ -n "$LAUNCH_METHOD" ]; then
         printf "  启动方式:     %s\n" "$LAUNCH_METHOD"
     fi
@@ -821,6 +877,26 @@ edit_model_source() {
     esac
 }
 
+edit_serve_mode() {
+    show_menu "选择启动模式（serve-mode）" \
+        "standard（默认 · funasr/OpenVINO · CPU/GPU）" \
+        "vllm（vLLM 原生流式 · GPU 专用 · 独立 venv-vllm/镜像）"
+    case $MENU_RESULT in
+        0) LAUNCH_SERVE_MODE="standard" ;;
+        1) LAUNCH_SERVE_MODE="vllm" ;;
+    esac
+}
+
+edit_vllm_align_device() {
+    show_menu "vLLM 对齐器加载设备" \
+        "cuda（快 · 显存在 gpu_memory_utilization 之外 · 长音频易 OOM）" \
+        "cpu（无 GPU 争用 · float32 · 慢但稳）"
+    case $MENU_RESULT in
+        0) LAUNCH_VLLM_ALIGN_DEVICE="cuda" ;;
+        1) LAUNCH_VLLM_ALIGN_DEVICE="cpu" ;;
+    esac
+}
+
 # 面板行左侧标签（值类项预留对齐空格；start/back 无值不补齐）
 panel_label() {
     case "$1" in
@@ -840,6 +916,11 @@ panel_label() {
         task_store)   printf "任务持久化    " ;;
         speaker)      printf "说话人分离    " ;;
         speaker_db)   printf "声纹库        " ;;
+        serve_mode)   printf "启动模式      " ;;
+        vllm_align_device) printf "vLLM 对齐设备 " ;;
+        vllm_infer_batch)  printf "vLLM 批大小   " ;;
+        openai_api)   printf "OpenAI 兼容   " ;;
+        dashscope_api) printf "DashScope兼容 " ;;
     esac
 }
 
@@ -860,6 +941,11 @@ panel_value() {
         task_store)   yn_label "$LAUNCH_ENABLE_TASK_STORE" ;;
         speaker)      yn_label "$LAUNCH_ENABLE_SPEAKER" ;;
         speaker_db)   yn_label "$LAUNCH_ENABLE_SPEAKER_DB" ;;
+        serve_mode)   printf "%s" "$LAUNCH_SERVE_MODE" ;;
+        vllm_align_device) printf "%s" "$LAUNCH_VLLM_ALIGN_DEVICE" ;;
+        vllm_infer_batch)  printf "%s" "$LAUNCH_VLLM_INFER_BATCH" ;;
+        openai_api)   yn_label "$LAUNCH_ENABLE_OPENAI" ;;
+        dashscope_api) yn_label "$LAUNCH_ENABLE_DASHSCOPE" ;;
     esac
 }
 
@@ -873,7 +959,24 @@ panel_edit() {
         host)         read_input "监听地址" "$LAUNCH_HOST"; LAUNCH_HOST="$INPUT_RESULT" ;;
         port)         read_input "监听端口" "$LAUNCH_PORT"; LAUNCH_PORT="$INPUT_RESULT" ;;
         api_key)      read_input "API 密钥（留空则不启用认证）" "$LAUNCH_API_KEY"; LAUNCH_API_KEY="$INPUT_RESULT" ;;
+        vllm_align_device) edit_vllm_align_device ;;
+        vllm_infer_batch)  read_input "vLLM 一次对齐/ASR 的音频块数（-1=全部一次，长音频易 OOM；小值省显存）" "$LAUNCH_VLLM_INFER_BATCH"; LAUNCH_VLLM_INFER_BATCH="$INPUT_RESULT" ;;
     esac
+}
+
+# 面板项集合（依 serve-mode 动态）：standard 显示 punc/stream；
+# vllm 显示 vllm_align_device/vllm_infer_batch，隐藏 punc（模型原生标点）与 stream（流式恒开）
+panel_keys() {
+    local k=(start serve_mode model_size device model_source align)
+    if [ "$LAUNCH_SERVE_MODE" = "vllm" ]; then
+        k+=(vllm_align_device vllm_infer_batch)
+    else
+        k+=(punc)
+    fi
+    k+=(web max_segment host port api_key)
+    [ "$LAUNCH_SERVE_MODE" != "vllm" ] && k+=(stream)
+    k+=(task_store speaker speaker_db openai_api dashscope_api back)
+    printf '%s\n' "${k[@]}"
 }
 
 # 配置面板：自带按键循环，方向键选行、空格/回车就地切换或编辑，
@@ -886,9 +989,8 @@ config_panel() {
         *)      start_label="▶ 启动服务（按当前配置）" ;;
     esac
 
-    local keys=(start model_size device model_source align punc web \
-                max_segment host port api_key stream task_store \
-                speaker speaker_db back)
+    local keys=() _k
+    while IFS= read -r _k; do keys+=("$_k"); done < <(panel_keys)
     local nrows=${#keys[@]}
     local selected=0 first_draw=1 hint=""
 
@@ -948,6 +1050,18 @@ config_panel() {
                         printf '\033[?25h'
                         return
                         ;;
+                    serve_mode)
+                        printf '\033[?25h'; echo
+                        edit_serve_mode
+                        # serve-mode 改变 → 面板项集合变化，重建 keys 并夹紧光标
+                        keys=(); while IFS= read -r _k; do keys+=("$_k"); done < <(panel_keys)
+                        nrows=${#keys[@]}
+                        [ "$selected" -ge "$nrows" ] && selected=$((nrows - 1))
+                        save_launch_config
+                        printf '\033[?25l'; clear; first_draw=1
+                        ;;
+                    openai_api)    toggle_bool LAUNCH_ENABLE_OPENAI;    save_launch_config ;;
+                    dashscope_api) toggle_bool LAUNCH_ENABLE_DASHSCOPE; save_launch_config ;;
                     align)      toggle_bool LAUNCH_ENABLE_ALIGN;      save_launch_config ;;
                     punc)       toggle_bool LAUNCH_USE_PUNC;          save_launch_config ;;
                     web)        toggle_bool LAUNCH_WEB;               save_launch_config ;;
@@ -993,6 +1107,13 @@ config_panel() {
 
 build_launch_args() {
     local args=""
+    local is_vllm="no"
+    [ "$LAUNCH_SERVE_MODE" = "vllm" ] && is_vllm="yes"
+
+    # serve-mode：vllm 时显式声明（standard 不输出该 flag，保持与既有行为一致）
+    if [ "$is_vllm" = "yes" ]; then
+        args+=" --serve-mode vllm"
+    fi
 
     if [ "$LAUNCH_MODEL_SIZE" != "auto" ]; then
         args+=" --model-size $LAUNCH_MODEL_SIZE"
@@ -1000,14 +1121,25 @@ build_launch_args() {
     args+=" --device $LAUNCH_DEVICE"
     args+=" --model-source $LAUNCH_MODEL_SOURCE"
 
-    if [ "$LAUNCH_ENABLE_ALIGN" = "yes" ]; then
-        args+=" --enable-align"
+    # 对齐模型：standard 与 vllm 用不同 flag 名
+    if [ "$is_vllm" = "yes" ]; then
+        if [ "$LAUNCH_ENABLE_ALIGN" = "yes" ]; then
+            args+=" --vllm-enable-align"
+        else
+            args+=" --no-vllm-align"
+        fi
+        args+=" --vllm-align-device $LAUNCH_VLLM_ALIGN_DEVICE"
+        args+=" --vllm-infer-batch-size $LAUNCH_VLLM_INFER_BATCH"
     else
-        args+=" --no-align"
-    fi
-
-    if [ "$LAUNCH_USE_PUNC" = "yes" ]; then
-        args+=" --use-punc"
+        if [ "$LAUNCH_ENABLE_ALIGN" = "yes" ]; then
+            args+=" --enable-align"
+        else
+            args+=" --no-align"
+        fi
+        # 标点恢复仅 standard（vllm 模型原生标点，无单独开关）
+        if [ "$LAUNCH_USE_PUNC" = "yes" ]; then
+            args+=" --use-punc"
+        fi
     fi
 
     if [ "$LAUNCH_WEB" = "yes" ]; then
@@ -1022,13 +1154,16 @@ build_launch_args() {
         args+=" --api-key $LAUNCH_API_KEY"
     fi
 
-    # v2 功能：显式正/反 flag，覆盖容器内 config.yaml 的默认值
-    if [ "$LAUNCH_ENABLE_STREAM" = "yes" ]; then
-        args+=" --enable-stream"
-    else
-        args+=" --no-stream"
+    # 实时转写：standard 需显式开关；vllm 流式恒开（不输出 --enable-stream/--no-stream）
+    if [ "$is_vllm" != "yes" ]; then
+        if [ "$LAUNCH_ENABLE_STREAM" = "yes" ]; then
+            args+=" --enable-stream"
+        else
+            args+=" --no-stream"
+        fi
     fi
 
+    # v2 功能：显式正/反 flag，覆盖容器内 config.yaml 的默认值（两模式通用）
     if [ "$LAUNCH_ENABLE_TASK_STORE" = "yes" ]; then
         args+=" --enable-task-store"
     else
@@ -1047,6 +1182,19 @@ build_launch_args() {
         args+=" --no-speaker-db"
     fi
 
+    # 兼容接口（两模式通用；vllm 模式实时随其挂载、无需 --enable-stream）
+    if [ "$LAUNCH_ENABLE_OPENAI" = "yes" ]; then
+        args+=" --enable-openai-api"
+    else
+        args+=" --no-openai-api"
+    fi
+
+    if [ "$LAUNCH_ENABLE_DASHSCOPE" = "yes" ]; then
+        args+=" --enable-dashscope-api"
+    else
+        args+=" --no-dashscope-api"
+    fi
+
     echo "$args"
 }
 
@@ -1054,20 +1202,41 @@ launch_via_venv() {
     local args
     args=$(build_launch_args)
 
-    if [ "$HAS_VENV" -eq 0 ]; then
-        error_msg "虚拟环境未创建，请先安装"
-        press_any_key
-        return
+    # serve-mode 决定用哪个虚拟环境：standard→venv，vllm→venv-vllm
+    if [ "$LAUNCH_SERVE_MODE" = "vllm" ]; then
+        if [ "$HAS_VENV_VLLM" -eq 0 ]; then
+            error_msg "vLLM 环境（venv-vllm）未创建，请先在 Venv 菜单安装 vLLM 环境"
+            press_any_key
+            return
+        fi
+        if [ "$HAS_GPU" -eq 0 ]; then
+            warn_msg "未检测到 GPU —— vLLM 模式必须 CUDA，启动可能失败"
+            if ! confirm "仍要继续？"; then return; fi
+        fi
+    else
+        if [ "$HAS_VENV" -eq 0 ]; then
+            error_msg "虚拟环境未创建，请先安装"
+            press_any_key
+            return
+        fi
     fi
 
     echo
     printf "${BOLD}启动命令：${NC}\n"
-    printf "  bash start.sh%s\n" "$args"
+    if [ "$LAUNCH_SERVE_MODE" = "vllm" ]; then
+        printf "  QWEN_VENV=venv-vllm bash start.sh%s\n" "$args"
+    else
+        printf "  bash start.sh%s\n" "$args"
+    fi
     echo
 
     # || true：start.sh 非零退出（Ctrl-C 停服 / 端口占用 / 模型加载失败）不应触发
     # set -e 下的 EXIT trap 终止整个 CLI，应返回菜单（与 docker/install 各路径一致）
-    (cd "$SERVICE_DIR" && bash start.sh $args) || true
+    if [ "$LAUNCH_SERVE_MODE" = "vllm" ]; then
+        (cd "$SERVICE_DIR" && QWEN_VENV=venv-vllm bash start.sh $args) || true
+    else
+        (cd "$SERVICE_DIR" && bash start.sh $args) || true
+    fi
 }
 
 launch_via_docker() {
@@ -1078,6 +1247,16 @@ launch_via_docker() {
         error_msg "Docker 未安装"
         press_any_key
         return
+    fi
+
+    # 镜像 tag 按 serve-mode 选择（vllm 用 -vllm 变体，且对无 GPU 提醒）
+    local image_tag="$IMAGE_TAG"
+    if [ "$LAUNCH_SERVE_MODE" = "vllm" ]; then
+        image_tag="${IMAGE_TAG}-vllm"
+        if [ "$HAS_GPU" -eq 0 ]; then
+            warn_msg "未检测到 GPU —— vLLM 镜像必须 CUDA，启动可能失败"
+            if ! confirm "仍要继续？"; then return; fi
+        fi
     fi
 
     # 检查同名容器是否已存在
@@ -1116,7 +1295,7 @@ launch_via_docker() {
     -v \"${SERVICE_DIR}/logs:/app/logs\" \\
     -v \"${SERVICE_DIR}/data:/app/data\" \\
     --name ${CONTAINER_NAME} \\
-    ${IMAGE_NAME}:${IMAGE_TAG} \\
+    ${IMAGE_NAME}:${image_tag} \\
     ${docker_args}"
 
     echo
@@ -1137,7 +1316,7 @@ launch_via_docker() {
         run_args+=("-e" "ASR_API_KEY=${LAUNCH_API_KEY}")
     fi
     run_args+=("--name" "${CONTAINER_NAME}")
-    run_args+=("${IMAGE_NAME}:${IMAGE_TAG}")
+    run_args+=("${IMAGE_NAME}:${image_tag}")
     # shellcheck disable=SC2086
     run_args+=($docker_args)
 
@@ -1164,9 +1343,10 @@ launch_wizard() {
 }
 
 # venv 方式启动入口（供「Venv 虚拟环境方式」子菜单调用）
+# 具体环境（venv / venv-vllm）由参数面板的 serve-mode 决定，launch_via_venv 内再校验对应环境
 venv_start() {
-    if [ "$HAS_VENV" -eq 0 ]; then
-        error_msg "虚拟环境未创建，请先安装"
+    if [ "$HAS_VENV" -eq 0 ] && [ "$HAS_VENV_VLLM" -eq 0 ]; then
+        error_msg "尚无虚拟环境，请先安装 standard 或 vLLM 环境"
         press_any_key
         return
     fi
