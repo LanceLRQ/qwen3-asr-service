@@ -164,8 +164,8 @@ SPEAKER_STORE_AUDIO = False         # 留存登记样本音频（扩大合规面
 
 # ─── vLLM（路线 A：原生流式）───
 
-VLLM_GPU_MEMORY_UTILIZATION = 0.8   # 显存占用率（×总显存为预算；实占略低）
-VLLM_MAX_MODEL_LEN = None           # None=用模型默认(65536)；下调省 KV cache 显存
+VLLM_GPU_MEMORY_UTILIZATION = 0.6   # 显存占用率（×总显存为预算；实占略低）：单流 ASR 无需 0.8 的大 KV 池
+VLLM_MAX_MODEL_LEN = 32768          # 单序列上下文上限：ASR 单句远小于此；过大(默认65536)会抬高 KV 下限致低占用率起不来
 VLLM_CHUNK_SIZE_SEC = 1.0           # 流式解码块大小（秒）：越小 partial 越细腻（V0 实测定档）
 VLLM_UNFIXED_CHUNK_NUM = 2          # 前 N 块不拿历史当前缀（冷启动稳定）
 VLLM_UNFIXED_TOKEN_NUM = 5          # N 块后回滚末 K token 当前缀（降抖动）

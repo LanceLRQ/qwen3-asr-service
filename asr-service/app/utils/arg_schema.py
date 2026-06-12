@@ -180,8 +180,8 @@ ARG_SPECS = (
     ArgSpec(
         key="vllm_max_model_len", flags=("--vllm-max-model-len",),
         default=None, type=int, group="vLLM",
-        help="vLLM 最大上下文长度，下调省 KV cache 显存 (default: 模型默认)",
-        help_en="vLLM max context length; lower to save KV cache memory (default: model default)",
+        help=f"vLLM 最大上下文长度，下调省 KV cache 显存 (default: {cfg.VLLM_MAX_MODEL_LEN})",
+        help_en=f"vLLM max context length; lower to save KV cache memory (default: {cfg.VLLM_MAX_MODEL_LEN})",
     ),
     ArgSpec(
         key="vllm_chunk_size_sec", flags=("--vllm-chunk-size-sec",),
