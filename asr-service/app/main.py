@@ -712,13 +712,15 @@ def _assemble_vllm(app: FastAPI, args) -> None:
             "speaker_id_margin": cfg.SPEAKER_ID_MARGIN,
         },
         # 兼容接口（Phase 3）：据 --enable-openai-api/--enable-dashscope-api 实挂；vLLM 流式恒开，
-        # 实时兼容随离线开关一并挂（无需 --enable-stream）。realtime_partial=R1 finals-only（不发增量）
+        # 实时兼容随离线开关一并挂（无需 --enable-stream）。realtime_partial=R2 已下发增量
+        # （DashScope 中间 result-generated 干净 / OpenAI delta best-effort，见兼容文档）
         "compat": {
             "openai": getattr(args, "enable_openai_api", False),
             "dashscope": getattr(args, "enable_dashscope_api", False),
             "realtime": getattr(args, "enable_openai_api", False)
             or getattr(args, "enable_dashscope_api", False),
-            "realtime_partial": False,
+            "realtime_partial": getattr(args, "enable_openai_api", False)
+            or getattr(args, "enable_dashscope_api", False),
         },
     }
     service_info = {

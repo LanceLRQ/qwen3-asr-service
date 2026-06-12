@@ -11,13 +11,14 @@ adapter 鸭子接口：
                                          #   configure→cfg dict；audio→PCM bytes（OpenAI 已 base64 解码）
   async on_configured(ws, warnings)      # configure 成功后（OpenAI session.updated；DashScope task-started）
   translate_finals(final) -> list[dict]  # 一条 final → 上游事件（OpenAI completed / DashScope result-generated）
+  translate_partials(p) -> list[dict]    # （可选，R2）一条 partial → 增量事件；未实现 = R1 finals-only
   translate_error(code, message, *, fatal=False) -> dict
   async on_finish(ws)                    # end（HARD_END）冲刷后（DashScope task-finished；OpenAI 不触发）
 
-partial 守卫（R1 finals-only）：route B 只产整句 final；vLLM 路线 A 会产 partial 增量。
-消费循环统一只把 type!="partial" 的事件交 adapter.translate_finals——故两种后端下兼容客户端
-均收到整句 final（与 standard 行为一致），不把 vLLM 的 partial 误当 completed 下发。
-增量转译（OpenAI delta / DashScope 中间 result-generated）为后续 R2 增强，本骨架不涉。
+partial 分发：route B 只产整句 final；vLLM 路线 A 会产 partial 增量。消费循环 _emit 把
+type=="partial" 的事件交 adapter.translate_partials（若实现，R2 增量下发：OpenAI delta /
+DashScope 中间 result-generated），未实现则跳过（R1 finals-only，整句行为同 standard）；
+type!="partial" 一律交 translate_finals。adapter 缺 translate_partials 时行为与 R1 完全一致。
 """
 import asyncio
 import logging
@@ -50,9 +51,14 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
     state = {"backlog": 0}
 
     async def _emit(f):
-        # finals-only 守卫：vLLM 路线 A 的 partial 增量不下发（R1）；仅 final 交 adapter，
-        # 与 route B 行为一致。见模块文档「partial 守卫」。
+        # partial（vLLM 路线 A）：adapter 实现 translate_partials → 下发增量（R2）；未实现 → 跳过
+        # （R1 finals-only）。route B 不产 partial，此分支不触发。final 一律交 translate_finals。
         if f.get("type") == "partial":
+            fn = getattr(adapter, "translate_partials", None)
+            if fn is None:
+                return
+            for ev in fn(f):
+                await ws.send_json(ev)
             return
         for ev in adapter.translate_finals(f):
             await ws.send_json(ev)

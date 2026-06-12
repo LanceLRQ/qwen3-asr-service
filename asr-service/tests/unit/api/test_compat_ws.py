@@ -42,6 +42,14 @@ class FakeSession:
             yield f
 
 
+class FakePartialSession(FakeSession):
+    """模拟 vLLM 路线 A：feed_audio 产 2 个累计 partial，flush 产整句 final（R2 用）。"""
+
+    async def feed_audio(self, pcm):
+        yield {"type": "partial", "seg_id": 0, "text": "你好"}
+        yield {"type": "partial", "seg_id": 0, "text": "你好世界"}
+
+
 class FakeBackend:
     mode = "standard"
     backend = "vad-offline"
@@ -226,3 +234,58 @@ def test_ws_capacity_rejected(ws_app):
         with client.websocket_connect(DASHSCOPE_WS) as ws:
             ws.receive_json()
     assert ei.value.code == 1013
+
+
+# ─── R2：实时增量转译（vLLM 路线 A partial）───
+
+def test_openai_r2_partial_delta(ws_app):
+    """vLLM 累计 partial → OpenAI delta（增量后缀，与 completed 共用 item_id）。"""
+    backend = FakeBackend(session_factory=FakePartialSession)
+    client = ws_app(backend)
+    with client.websocket_connect(OPENAI_WS) as ws:
+        ws.receive_json()                                       # session.created
+        ws.send_json({"type": "session.update", "session": {}})
+        ws.receive_json()                                       # session.updated
+        ws.send_json({"type": "input_audio_buffer.append",
+                      "audio": base64.b64encode(b"\x00\x00" * 100).decode()})
+        d0 = ws.receive_json()
+        d1 = ws.receive_json()
+        assert d0["type"] == "conversation.item.input_audio_transcription.delta"
+        assert d0["delta"] == "你好" and d0["item_id"] == "item_0"
+        assert d1["delta"] == "世界" and d1["item_id"] == "item_0"   # 增量后缀，非累计
+        ws.send_json({"type": "input_audio_buffer.commit"})
+        ev = ws.receive_json()
+        assert ev["type"] == "conversation.item.input_audio_transcription.completed"
+        assert ev["transcript"] == "你好世界" and ev["item_id"] == "item_0"  # delta 与 completed 同 item
+
+
+def test_dashscope_r2_intermediate(ws_app):
+    """vLLM 累计 partial → DashScope 中间 result-generated(sentence_end=false)，干净直发。"""
+    backend = FakeBackend(session_factory=FakePartialSession)
+    client = ws_app(backend)
+    with client.websocket_connect(DASHSCOPE_WS) as ws:
+        ws.send_json({"header": {"action": "run-task", "task_id": "t1"}, "payload": {}})
+        assert ws.receive_json()["header"]["event"] == "task-started"
+        ws.send_bytes(b"\x00\x00" * 100)
+        for txt in ("你好", "你好世界"):
+            r = ws.receive_json()
+            assert r["header"]["event"] == "result-generated"
+            s = r["payload"]["output"]["sentence"]
+            assert s["sentence_end"] is False and s["text"] == txt
+        ws.send_json({"header": {"action": "finish-task"}})
+        fin = ws.receive_json()
+        assert fin["payload"]["output"]["sentence"]["sentence_end"] is True
+        assert ws.receive_json()["header"]["event"] == "task-finished"
+
+
+def test_openai_adapter_partial_revision_best_effort():
+    """OpenAI best-effort：纯追加取后缀；无新增/修订(非追加) → 不发；final 后基准归零+item 递增。"""
+    from app.api.compat.openai_ws_routes import OpenAIRealtimeAdapter
+    a = OpenAIRealtimeAdapter()
+    assert a.translate_partials({"text": "你好"})[0]["delta"] == "你好"
+    assert a.translate_partials({"text": "你好世界"})[0]["delta"] == "世界"
+    assert a.translate_partials({"text": "你好世界"}) == []      # 无新增 → 不发
+    assert a.translate_partials({"text": "你们好"}) == []        # 修订(非纯追加) → best-effort 跳过
+    a.translate_finals({"text": "你们好", "start": 0, "end": 1})  # item_0 → seq 递增 + 基准归零
+    nxt = a.translate_partials({"text": "早"})
+    assert nxt[0]["delta"] == "早" and nxt[0]["item_id"] == "item_1"

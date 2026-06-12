@@ -5,6 +5,8 @@
 from app.api.compat.mappers import (
     final_to_dashscope_result,
     final_to_openai_completed,
+    partial_to_dashscope_result,
+    partial_to_openai_delta,
 )
 
 FINAL = {
@@ -69,3 +71,26 @@ def test_dashscope_result_words_sec_to_ms():
 def test_dashscope_result_no_words():
     ev = final_to_dashscope_result({"text": "x", "start": 0, "end": 500}, "t")
     assert "words" not in ev["payload"]["output"]["sentence"]
+
+
+# ─── R2 增量映射（partial）───
+
+def test_dashscope_partial_intermediate():
+    """partial（累计文本）→ 中间 result-generated(sentence_end=false)，无时间戳/词级。"""
+    ev = partial_to_dashscope_result({"type": "partial", "seg_id": 0, "text": "你好世"}, "task-x")
+    assert ev["header"]["event"] == "result-generated" and ev["header"]["task_id"] == "task-x"
+    sent = ev["payload"]["output"]["sentence"]
+    assert sent["sentence_end"] is False
+    assert sent["text"] == "你好世"
+    assert sent["begin_time"] is None and sent["end_time"] is None
+    assert "words" not in sent
+
+
+def test_openai_partial_delta_structure():
+    ev = partial_to_openai_delta("世界", "item_3")
+    assert ev == {
+        "type": "conversation.item.input_audio_transcription.delta",
+        "item_id": "item_3",
+        "content_index": 0,
+        "delta": "世界",
+    }

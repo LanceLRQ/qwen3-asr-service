@@ -657,7 +657,7 @@ def test_vllm_mode_compat_openai_mounted(isolated_create_app, monkeypatch):
     assert compat["openai"] is True
     assert compat["dashscope"] is False
     assert compat["realtime"] is True             # vLLM 流式恒开 → 实时兼容随挂
-    assert compat["realtime_partial"] is False    # R1 finals-only（不发增量）
+    assert compat["realtime_partial"] is True     # R2 增量已下发（OpenAI delta best-effort）
 
     r = client.get("/compat/openai/v1/models", headers={"Authorization": "Bearer k"})
     assert r.status_code == 200

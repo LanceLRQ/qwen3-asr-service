@@ -244,7 +244,7 @@ api_key: "sk-your-key"
 
 **兼容接口（`/compat/*`）**：vllm 模式同样支持 OpenAI / DashScope 兼容接口，开关与 standard 一致（`--enable-openai-api` / `--enable-dashscope-api`）；接口文档见 [开发文档](development.md)。与 standard 的差异：
 - **离线兼容**（OpenAI `audio/transcriptions`·`models`、DashScope 录音文件识别）复用 vLLM 离线 pipeline，故分段/标点/说话人质量同上节所述；`audio/translations` 维持 501（服务仅 ASR，与 standard 天然对齐）。
-- **实时兼容**（OpenAI `WS /realtime`、DashScope `WS …/inference`）随兼容开关一并挂载（vLLM 流式恒开，**无需** `--enable-stream`）；当前为**整句下发**（finals-only），vLLM 的逐字 partial 增量暂不经兼容协议下发（`capabilities.compat.realtime_partial=false`）。
+- **实时兼容**（OpenAI `WS /realtime`、DashScope `WS …/inference`）随兼容开关一并挂载（vLLM 流式恒开，**无需** `--enable-stream`）；vLLM 的逐字 partial 增量已经兼容协议下发（`capabilities.compat.realtime_partial=true`）：DashScope 走中间 `result-generated`（`sentence_end=false`，与其累计语义天然契合）；OpenAI 走 `…transcription.delta`，因 OpenAI 要增量片段而 vLLM partial 为累计且可修订，故为 **best-effort**（仅纯追加帧取新增后缀作 delta，修订帧跳过；权威全文始终以 `…completed` 为准）。
 - DashScope file_urls 服务端下载需 `httpx`（已含于 requirements-vllm），SSRF 守卫与 `--compat-fetch-*` 参数沿用 standard。
 - `/capabilities` 的 `compat` 段如实反映已挂端点：`{openai, dashscope, realtime, realtime_partial}`。
 
