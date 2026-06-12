@@ -17,6 +17,7 @@
 - [环境变量](#环境变量)
 - [离线任务持久化（tasks.db）](#离线任务持久化tasksdb)
 - [说话人分离与声纹库（speakers.db）](#说话人分离与声纹库speakersdb)
+- [vLLM 原生流式模式](#vllm-原生流式模式)
 - [内置常量（app/config.py）](#内置常量appconfigpy)
 
 ---
@@ -29,7 +30,7 @@
 
 | 参数 | 取值 | 默认值 | 说明 |
 |------|------|--------|------|
-| `--serve-mode` | `standard` / `vllm` | `standard` | 运行模式；`vllm` 为占位，暂未实现（仅提供 /health /capabilities） |
+| `--serve-mode` | `standard` / `vllm` | `standard` | 运行模式；`vllm`=vLLM 原生流式（GPU 专用，partial→final 实时 + 离线 `/v2/asr`） |
 | `--device` | `auto` / `cuda` / `cpu` | `auto` | 运行设备，`auto` 自动检测（≥6GB 显存选 1.7B，4–6GB 选 0.6B，<4GB 关对齐，无 GPU 回退 CPU/OpenVINO） |
 | `--model-size` | `0.6b` / `1.7b` | 按显存自动选择 | ASR 模型大小 |
 | `--enable-align` / `--no-align` | - | 开启 | 对齐模型（单词级时间戳）；CPU 模式强制关闭 |
@@ -96,6 +97,32 @@
 | `--speaker-auto-enroll` / `--no-speaker-auto-enroll` | - | 开启 | 离线识别未命中的说话人自动以「说话人_NN」登记（**开启 = 部署方声明已获数据主体同意**） |
 | `--speaker-auto-enroll-min-sec` | 秒 | `10.0` | 自动登记的簇最短语音总时长（严于手动登记，降低噪声建档） |
 | `--speaker-store-audio` / `--no-speaker-store-audio` | - | 关闭 | 留存登记样本音频到 `data/speaker_audio/`（扩大合规面，默认关） |
+
+### vLLM 原生流式（仅 `--serve-mode vllm`）
+
+仅 vllm 模式生效；要求 CUDA GPU，须独立环境/镜像（见下方 [vLLM 原生流式模式](#vllm-原生流式模式)）。
+
+| 参数 | 取值 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--gpu-memory-utilization` | 0–1 | `0.6` | vLLM 显存占用率（×总显存为预算；单流 ASR 无需 0.8） |
+| `--vllm-max-model-len` | 数字 | `32768` | 最大上下文长度；过大会抬高 KV cache 下限，致低占用率起不来 |
+| `--vllm-chunk-size-sec` | 浮点 | `1.0` | 流式解码块大小（秒），越小 partial 越细腻（范围 0.5–5） |
+| `--vllm-max-utterance-sec` | 数字 | `20` | 单句兜底切分（秒），约束上下文/显存增长 |
+| `--vllm-concurrency` | 数字 | `1` | 同时解码会话数（generate 串行，>1 无吞吐收益） |
+| `--vllm-end-silence-ms` | 毫秒 | `800` | 能量端点尾静音判停阈值 |
+| `--vllm-enable-align` / `--no-vllm-align` | - | 开启 | 离线 `/v2/asr` 词级时间戳：加载对齐模型（关闭省显存、无 words） |
+| `--vllm-align-device` | `cuda` / `cpu` | `cuda` | 对齐器加载设备；其显存**在 `gpu_memory_utilization` 预算之外**，长音频对齐 OOM 时改 `cpu`（float32，慢但无 GPU 争用） |
+| `--vllm-infer-batch-size` | 数字 | `4` | 一次对齐/ASR 的音频块数（块 ≤180s）；`-1`=全部一次（长音频对齐前向激活叠加易 OOM），调小省显存、长音频仍 OOM 可降到 `1` |
+| `--vllm-segment-gap-ms` | 毫秒 | `500` | 离线分段：相邻词间隙 > 此值断句（无 FSMN，以词间隙替代） |
+
+**仅配置文件可设（无对应 CLI，写入 `config.yaml`）：**
+
+| 配置键 | 默认值 | 说明 |
+|--------|--------|------|
+| `vllm_unfixed_chunk_num` | `2` | 流式起始不拿历史当前缀的块数（冷启动稳定） |
+| `vllm_unfixed_token_num` | `5` | 起始块之后回滚末 K token 当前缀（降抖动） |
+| `vllm_energy_floor_dbfs` | `-45.0` | 流式能量端点门限（dBFS），高于此判为语音/句开始 |
+| `vllm_offline_chunk_sec` | `180` | 离线逐块转写切块时长（秒），调小=进度更细、峰值显存更省（详见下方[长音频与进度](#vllm-原生流式模式)） |
 
 ### 配置文件元参数
 
@@ -198,6 +225,62 @@ api_key: "sk-your-key"
 - **数据永不自动清理**：`speakers.db` 无 TTL（与 tasks.db 的 7 天清理不同）——声纹是长期积累资产，越用识别越准；唯一删除途径为 `DELETE /v2/speakers/{id}`（硬删除 + 物理回收）或删除库文件。
 - **自动登记**：开启 `identify_speakers` 的离线转写中，未命中库且语音足量（默认 ≥10s）的说话人自动登记为「说话人_NN」，在 `/web-ui/speakers` 或 `PATCH /v2/speakers/{id}` 改名后，后续转写直接显示真名；实时路径不自动登记（在线聚类漂移易重复建档）；已命中库的说话人也不会自动追加模板（防样本投毒），补充样本需手动调用 `POST /v2/speakers/{id}/templates`。
 - **合规**：登记接口强制 `consent=true` 双保险（接口 + 库约束）；开启自动登记即部署方声明已获数据主体同意；默认不留存音频；审计日志随库落盘。**备份 = 拷贝 `data/speakers.db` 单文件**（建议随常规备份计划），删库即彻底清除全部声纹数据。
+
+## vLLM 原生流式模式
+
+`--serve-mode vllm` 启用 vLLM 原生流式引擎，提供**逐句渐进（partial→final）**的实时转写，并提供与 `standard` 同契约的**离线 `/v2/asr`**；与默认 `standard` 模式（在线 VAD + 离线解码，按句 final）**互斥启动**。
+
+**能力差异**
+
+| 维度 | standard（默认） | vllm |
+|------|-----------------|------|
+| 接口 | 离线 v1/v2 + 实时 WS（`--enable-stream`） | **离线 v1/v2 + 实时 WS `/v2/asr/stream`（恒开）** + `/health` `/capabilities` |
+| 增量结果（实时） | 无（按段 final） | **有 partial→final** |
+| 词级时间戳 | 支持 | **离线支持**（ForcedAligner，默认开）；实时不支持 |
+| 说话人分离/识别 | 支持 | **离线支持**（CAM++，需 `--enable-speaker`；滑窗用能量 VAD）；实时不支持 |
+| 标点 | CT-Transformer（可关） | 模型原生（**不可单独关**） |
+| 离线分段边界 | FSMN-VAD | 标点优先 / 整文兜底（边界较粗） |
+| 设备 | GPU / CPU | **仅 CUDA GPU**（直接禁用 CPU，无 CPU 容器） |
+| 吞吐 | 多会话并发 | 单流串行（generate 串行，吞吐 ≈ standard） |
+| 依赖 / 镜像 | funasr + OpenVINO… | 独立 vLLM 环境（不含 funasr/OpenVINO），独立镜像 |
+
+**为何独立环境**：vLLM 强绑定特定 torch/CUDA（与 standard 的 torch 不可共存），故须独立 `venv-vllm` 或独立镜像（`docker/Dockerfile.vllm`，基于 vLLM 官方镜像派生）。详见[部署文档](deployment.md)。
+
+**离线转写（`/v2/asr`）**：vllm 模式离线复用与 standard **完全一致的异步任务契约**（`POST /v2/asr` 返回 `task_id` → 轮询 `GET /v2/tasks/{id}`、持久化、取消），ASR 走 vLLM 批量 `transcribe`。与 standard 的差异均为**质量差异、不破坏 result 结构**，并以 `result.warnings` 标注：
+- **分段**：模型原生标点优先断句（句末 `。！？；` 切句，超 `--max-segment` 的长句在逗号处细切），词级时间戳仅用于定位 start/end；无对齐器时退化为词间隙（`--vllm-segment-gap-ms`，默认 500ms）/ 整文单段。边界精度低于 FSMN-VAD。
+- **标点**：Qwen3-ASR 模型原生输出（已含标点），无法单独关闭；请求 `with_punc=false` 仅记入 `warnings`。
+- **词级时间戳**：`--vllm-enable-align`（默认开）经 ForcedAligner 产出，与 standard 同款；`--no-vllm-align` 可关以省显存。
+  - ⚠️ **长音频对齐 OOM**：对齐器是主进程内的独立 transformers 模型，其显存**不计入 `gpu_memory_utilization`**（该参数只约束 vLLM EngineCore 子进程）。`transcribe` 内部按 ≤180s 切块，但默认（`max_inference_batch_size=-1`）会把一个文件的**全部块一次性**喂对齐器前向——长音频（如 30 分钟≈10 块）激活叠加即 `CUDA out of memory`（短音频只 1 块、不受影响）。对策（按推荐序）：① **`--vllm-infer-batch-size`**（默认已改为 `4`）逐批对齐，峰值显存随批大小线性下降，仍在 GPU、最快；长音频仍 OOM 则降到 `1`；② `--vllm-align-device cpu` 把对齐器移到 CPU（无 GPU 争用，稳但慢）；③ 降 `--gpu-memory-utilization` 留更多 GPU 余量；④ `--no-vllm-align` 放弃词级时间戳。
+- **长音频与进度**：离线对超过 `vllm_offline_chunk_sec`（默认 180s）的音频按静音边界**逐块转写**，转写进度（0.1→0.85）随块实时更新、并可在块间响应取消（短音频整段直转）。块由 qwen_asr 同款切法产生、拼接=原音频，质量与整段一致；调小 `vllm_offline_chunk_sec` 可让进度更细、峰值显存更省。
+- **说话人分离/识别**：`--enable-speaker`（+ 声纹库 `--enable-speaker-db`）后离线 `segments[].speaker` / `speaker_name` / `speakers` 字段与 standard 一致；引擎为 CAM++（CPU、torch，非 funasr），**滑窗语音区间用能量 VAD 替代 FSMN-VAD**（边界较粗）。未开启时请求 `diarize`/`identify_speakers` 记入 `warnings`。需额外依赖 `scipy`/`scikit-learn`/`modelscope`（或预挂 CAM++ 模型目录），见 [requirements-vllm.txt](../asr-service/requirements-vllm.txt)。实时流式仍无说话人。
+> 需要 FSMN 精分段 / CT-Transformer 标点 / 实时说话人的高保真，请用 `standard` 模式。
+
+**兼容接口（`/compat/*`）**：vllm 模式同样支持 OpenAI / DashScope 兼容接口，开关与 standard 一致（`--enable-openai-api` / `--enable-dashscope-api`）；接口文档见 [开发文档](development.md)。与 standard 的差异：
+- **离线兼容**（OpenAI `audio/transcriptions`·`models`、DashScope 录音文件识别）复用 vLLM 离线 pipeline，故分段/标点/说话人质量同上节所述；`audio/translations` 维持 501（服务仅 ASR，与 standard 天然对齐）。
+- **实时兼容**（OpenAI `WS /realtime`、DashScope `WS …/inference`）随兼容开关一并挂载（vLLM 流式恒开，**无需** `--enable-stream`）；vLLM 的逐字 partial 增量已经兼容协议下发（`capabilities.compat.realtime_partial=true`）：DashScope 走中间 `result-generated`（`sentence_end=false`，与其累计语义天然契合）；OpenAI 走 `…transcription.delta`，因 OpenAI 要增量片段而 vLLM partial 为累计且可修订，故为 **best-effort**（仅纯追加帧取新增后缀作 delta，修订帧跳过；权威全文始终以 `…completed` 为准）。
+- DashScope file_urls 服务端下载需 `httpx`（已含于 requirements-vllm），SSRF 守卫与 `--compat-fetch-*` 参数沿用 standard。
+- `/capabilities` 的 `compat` 段如实反映已挂端点：`{openai, dashscope, realtime, realtime_partial}`。
+
+**启动**
+
+```bash
+# 本地：先装独立 venv-vllm（仅 requirements-vllm.txt，自带 vllm/torch），再启动
+bash asr-service/setup.sh --vllm                                          # 建 venv-vllm 并装依赖
+QWEN_VENV=venv-vllm bash asr-service/start.sh --serve-mode vllm --model-size 0.6b --web
+# 或直接用 venv-vllm 解释器：
+asr-service/venv-vllm/bin/python -m app.main --serve-mode vllm --model-size 0.6b --web
+
+# Docker（独立镜像，独立端口 8766）
+docker compose -f docker/docker-compose.vllm.yml up -d
+
+# 交互式：bash manage.sh → Venv 方式（启动模式选 vllm）/ Compose 方式（切 vLLM 编排）
+```
+
+**注意**
+
+- **进程模型**：vLLM 引擎在独立 EngineCore 子进程持有 GPU；服务**固定单 worker**（uvicorn 默认 workers=1，禁用多 worker，否则各 worker 重复加载模型必爆显存）。
+- **优雅停止**：进程退出时 EngineCore 子进程可能不随父进程立即回收，Docker 中由容器停止统一收割；手动运行建议 `pkill -f "serve-mode vllm"` 后以 `nvidia-smi` 确认显存释放。
+- **模型**：加载 HF 全精度 `models/asr/0.6b` 或 `1.7b`（非 OpenVINO 量化变体）；Web 演示页（`--web` → `/web-ui/stream`）已内置 partial→final 实时渲染。
 
 ## 内置常量（app/config.py）
 

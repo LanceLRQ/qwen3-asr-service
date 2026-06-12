@@ -103,7 +103,7 @@ GET /models
 WS /realtime
 ```
 
-OpenAI Realtime transcription session (needs `--enable-stream`). ws base = `ws://<host>:8765/compat/openai/v1`.
+OpenAI Realtime transcription session (standard mode needs `--enable-stream`; under vLLM mode `--serve-mode vllm` it auto-mounts with `--enable-openai-api`, no `--enable-stream` needed). ws base = `ws://<host>:8765/compat/openai/v1`.
 
 1. Server → `session.created` (sent on connect)
 2. Client → `session.update`: configure language/sample rate (accepts GA `session.audio.input` and beta field paths)
@@ -111,7 +111,7 @@ OpenAI Realtime transcription session (needs `--enable-stream`). ws base = `ws:/
 4. Client → `input_audio_buffer.commit` (or close) flushes the trailing sentence
 5. Server → per sentence `conversation.item.input_audio_transcription.completed`: `{"item_id":"item_0","transcript":"full sentence"}`
 
-> **Capabilities & limits**: the current realtime backend is VAD-offline — it **emits only whole-sentence `…completed`, never per-token `…delta`** (`partial_results=false`). Per-token deltas require a future vLLM streaming backend.
+> **Capabilities & limits**: depends on the serving mode — **standard** (VAD-offline, `partial_results=false`) emits only whole-sentence `…completed`, never per-token `…delta`; **vLLM** (`--serve-mode vllm`, native streaming, `partial_results=true`) streams `…delta` within a sentence, then a final `…completed`. The vLLM `…delta` is **best-effort**: partials are the running cumulative text of the current sentence and may be revised, so only a pure append yields a delta suffix, revision frames are skipped, and the authoritative full text is still the `…completed` event.
 
 ---
 

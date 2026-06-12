@@ -109,6 +109,7 @@ class CapabilitiesResponse(BaseModel):
     speaker_identification: bool = False   # 声纹库真名识别（enroll/identify 可用）
     stream: StreamCapabilities
     defaults: dict = {}                # 可覆盖参数的当前生效默认值（Web UI 占位提示，反映实际配置）
+    compat: dict = {}                  # 兼容接口已挂端点（vLLM Phase 3：openai/dashscope/realtime/realtime_partial）
 
 
 class HealthResponse(BaseModel):

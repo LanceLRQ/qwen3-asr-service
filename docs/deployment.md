@@ -160,6 +160,52 @@ docker compose -f docker/docker-compose.yml down
 
 `docker/docker-compose.yml` 中可配置启动参数、API 密钥、端口映射等，详见文件内注释。CPU 版编排见 `docker/docker-compose.cpu.yml`。
 
+### vLLM 原生流式镜像（独立）
+
+vLLM 模式（路线 A，逐句 partial→final 渐进流式 + 与 standard 同契约的离线 `/v2/asr`）为 **GPU 专用的独立镜像**，基于 vLLM 官方镜像 `vllm/vllm-openai` 派生，不与默认镜像合并——standard 用户不下载 vLLM 重型 CUDA kernels，vllm 用户不下载 OpenVINO/funasr。能力差异（含离线分段/标点/说话人的取舍）与参数见 [配置文档：vLLM 原生流式模式](configuration.md#vllm-原生流式模式路线-a)。
+
+```bash
+# 启动（独立端口 8766，与 standard asr 8765 并存）
+docker compose -f docker/docker-compose.vllm.yml up -d
+
+# 停止
+docker compose -f docker/docker-compose.vllm.yml down
+
+# 本地构建 vLLM 镜像（build.sh 选项 4）
+bash docker/build.sh   # 选择 "4) vLLM"
+```
+
+> vLLM 引擎在独立 EngineCore 子进程持有 GPU，服务固定单 worker（容器内 PID 1 收割子进程）。模型用 HF 全精度 `models/asr/0.6b`/`1.7b`（与 standard 共用 `models/` 挂载）。
+>
+> **离线词级时间戳 / 说话人所需模型**：`--vllm-enable-align`（默认开）需对齐器 `models/asr/aligner`（Qwen3-ForcedAligner，HF 直拉）；`--enable-speaker` 需声纹模型 `models/speaker/campplus`（CAM++，仅 ModelScope 提供）——`requirements-vllm.txt` 已含 `modelscope` 兜底自动下载，生产建议预挂该目录以免运行时联网。说话人聚类依赖 `scipy`/`scikit-learn`（同已含）。
+>
+> ⚠️ **长音频对齐 OOM**：ForcedAligner 在主进程加载，显存**不计入 `--gpu-memory-utilization`**（该参数只约束 vLLM EngineCore 子进程）。`transcribe` 内部按 ≤180s 切块，但默认把一个文件的**全部块一次性**喂对齐器前向——长音频（如 30 分钟）激活叠加报 `CUDA out of memory`（短音频只 1 块、不受影响）。对策（按推荐序）：① `--vllm-infer-batch-size`（默认已改为 4）逐批对齐、峰值显存随批大小下降，长音频仍 OOM 则降到 1；② `--vllm-align-device cpu`（对齐器移 CPU，无 GPU 争用，较慢）；③ 降 `--gpu-memory-utilization` 留更多余量；④ `--no-vllm-align`。详见[配置文档](configuration.md#vllm-原生流式模式路线-a)。
+
+> **兼容接口（OpenAI/DashScope）与离线说话人**：vLLM 模式同样支持 `--enable-openai-api`/`--enable-dashscope-api`（离线 + 实时 WS）与 `--enable-speaker`/`--enable-speaker-db`（离线说话人分离/识别，CAM++，语音区间用能量 VAD，弱于 standard 的 FSMN）。与 standard 的关键差异——vLLM 流式恒开，**实时兼容随兼容开关自动挂载、无需 `--enable-stream`**，且实时支持逐字增量（DashScope 中间结果干净直发 / OpenAI delta best-effort）。本地启动用独立环境（非默认 venv）：`venv-vllm/bin/python -m app.main --serve-mode vllm …`（Docker 已由上面的 compose 封装；vLLM 必 CUDA，非 GPU 设备直接退出）。能力与协议详见[兼容接口文档](api/compat.md)。
+
+#### vLLM 启动日志说明（常见现象，非故障）
+
+vLLM 模式启动/退出时，日志里会出现两条看似报错、实则**无害**的信息，可放心忽略：
+
+1. **`ERROR … repo_utils.py … Error retrieving safetensors: Repo id must be in the form …`（会重试 2 次）**
+   vLLM 推断模型精度时，对**本地模型目录**有一处上游怪癖：未先判本地路径，就把绝对路径当成 HF 仓库名去查 safetensors 元数据，被仓库名格式校验拒绝。该异常被 vLLM 内部捕获后即回落到从模型配置读取精度，**模型仍按 bfloat16 正常加载**，对功能与显存均无影响。`HF_HUB_OFFLINE=1` 也压不掉这条日志（格式校验发生在离线判断之前），无需理会。
+
+2. **退出（`Ctrl+C` / `docker stop`）时 `Engine core proc EngineCore_DP0 died unexpectedly`**
+   vLLM 把 CUDA 上下文放在独立 `EngineCore` 子进程，关闭时子进程随主进程退出，client 监控线程据此打印此行——是**正常的关闭现象**，不是崩溃。
+
+**判断服务是否真正就绪**，以下面两个信号为准（而非有无上述 ERROR）：
+
+```
+INFO: Application startup complete.
+INFO: Uvicorn running on http://<host>:<port>
+```
+
+```bash
+curl http://127.0.0.1:8765/v2/health   # 返回 {"status":"ready","mode":"vllm",...} 即就绪
+```
+
+> 模型加载（torch.compile + 权重）约需数十秒，请等到上述 `Uvicorn running` 再判断，勿在加载途中误判失败。本地（非容器）`Ctrl+C` 退出后，若 `nvidia-smi` 显存未回落，说明 `EngineCore` 子进程残留，执行 `pkill -KILL -f EngineCore` 清理即可（容器部署由 PID 1 自动收割，无需手动处理）。
+
 ### 本地构建镜像
 
 ```bash
@@ -180,10 +226,10 @@ bash manage.sh
 
 管理脚本支持：
 
-- **Docker Compose 启动（config.yaml 驱动，推荐）**：首次使用自动从 `config.example.yaml` 生成 `config.yaml`，可直接编辑配置后启动/停止/重启容器、查看日志、切换 GPU/CPU 编排
-- Docker 管理（拉取/构建镜像、参数向导启动/停止容器、查看日志）
-- 虚拟环境管理（安装/卸载/查看信息）
-- 启动服务（交互式配置参数，支持保存配置）
+- **Docker Compose 启动（config.yaml 驱动，推荐）**：首次使用自动从 `config.example.yaml` 生成 `config.yaml`，可直接编辑配置后启动/停止/重启容器、查看日志、切换 GPU/CPU/**vLLM** 编排
+- Docker 管理（拉取镜像支持 GPU/CPU/**vLLM** 变体、构建镜像、参数向导启动/停止容器、查看日志）
+- 虚拟环境管理（standard `venv` 与 **vLLM `venv-vllm`** 双环境的安装/卸载/查看信息）
+- 启动服务（交互式配置参数，含 **`serve-mode` 选择 standard/vllm**，vLLM 自动用 venv-vllm 环境/`-vllm` 镜像，支持保存配置）
 
 ## 验证服务
 

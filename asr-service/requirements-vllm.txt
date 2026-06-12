@@ -1,0 +1,47 @@
+# vLLM 流式模式依赖（独立于 standard requirements.txt；方案 B：去 funasr，最瘦自洽）
+#
+# 适用：本地独立环境 asr-service/venv-vllm，及 docker/Dockerfile.vllm（基于 vllm/vllm-openai:v0.14.0 派生）。
+# 版本由 V0 预研真机实测锁定（2026-06-12，RTX 3090 / torch 2.9.1+cu128）。
+#
+# 不包含（与 standard 划清边界，独立精简镜像）：
+#   torch / torchaudio / torchvision —— 由 qwen-asr[vllm] 锚定的 vllm 0.14.0 拉入（cu128 构建）；
+#                                       Docker 镜像由 vllm/vllm-openai 基底自带，均不在此重复 pin
+#   funasr / onnxruntime / openvino  —— standard 专属；vllm 模式端点用能量端点器（noise_gate.rms_dbfs，零额外依赖）
+
+# 核心：ASR + vLLM 原生流式（锚点，精确锁定 → vllm 0.14.0 + torch 2.9.1+cu128 + transformers 4.57.6 整条栈）
+qwen-asr[vllm]==0.0.6
+
+# Web 框架（vllm 模式：共性接口 + WS /v2/asr/stream + 离线 /v2/asr 文件上传）
+fastapi==0.136.3
+uvicorn[standard]==0.49.0
+websockets==16.0
+pydantic==2.13.4
+python-multipart==0.0.32        # 离线 /v2/asr multipart 文件上传（FastAPI Form/UploadFile 必需）
+
+# 配置文件（--config）
+PyYAML==6.0.3
+
+# 兼容接口（Phase 3，可选 --enable-openai-api/--enable-dashscope-api）：DashScope file_urls
+# 服务端下载（compat/fetch.py，SSRF 防护）。注：vllm 基础镜像通常已传递携带 httpx，此处显式声明。
+httpx==0.28.1
+
+# 音频处理（流式 PCM / 端点能量计算 / 内存重采样回退）
+numpy==2.2.6
+librosa==0.11.0
+soundfile==0.14.0
+
+# 模型管理（本地权重加载元信息）
+huggingface_hub==0.36.2
+
+# 说话人分离/声纹识别（Phase 2，可选能力 --enable-speaker；均 torch 无关，无 funasr 冲突）：
+#   scipy / scikit-learn —— 离线聚类（AHC/谱聚类），speaker_cluster 惰性 import
+#   modelscope           —— CAM++ 声纹模型（iic/，仅 ModelScope 提供）自动下载兜底；
+#                           生产建议预挂模型目录（models/speaker/campplus），预挂后本依赖不触发
+# 版本按 Docker vLLM 镜像实测锁定（2026-06-12，vllm/vllm-openai:v0.14.0 内 pip 解析结果）：
+# 均不约束 torch，与 torch 2.9.1+cu128 / numpy 2.2.6 兼容。
+scipy==1.17.1
+scikit-learn==1.9.0
+modelscope==1.33.0
+
+# 文档中心 / Web 演示页（仅 --web 挂载；非 vllm 传递依赖，独立声明）
+markdown==3.10.2

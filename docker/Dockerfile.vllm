@@ -1,0 +1,36 @@
+# docker/Dockerfile.vllm —— GPU 专用，serve-mode=vllm（路线 A 原生流式）
+#
+# 基于 vLLM 官方镜像派生：已内置匹配的 torch 2.9.1+cu128 + vllm 0.14.0 + CUDA 运行时，
+# 故只 pip 装 qwen-asr 与服务依赖，绝不重装 torch（根除版本冲突）。
+# 版本矩阵由 V0 预研真机锁定；VLLM_TAG 与 requirements-vllm.txt 的 qwen-asr[vllm] 对应。
+ARG VLLM_TAG=v0.14.0
+FROM vllm/vllm-openai:${VLLM_TAG}
+
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+
+# 仅补 qwen-asr 与服务依赖（不含 torch/funasr/openvino/onnxruntime）；
+# requirements-vllm.txt 变更时重建此层。
+# 先以 --ignore-installed 覆盖基底镜像中系统(distutils)装的 blinker——qwen-asr→flask
+# 要求 blinker>=1.9，而 pip 无法卸载系统装的 blinker 1.4；预装 pip 托管版即可让主安装
+# 满足依赖、规避 uninstall-distutils-installed-package 失败（不触及 torch/vllm）。
+COPY asr-service/requirements-vllm.txt /app/requirements-vllm.txt
+RUN pip install --no-cache-dir --ignore-installed blinker \
+    && pip install --no-cache-dir -r /app/requirements-vllm.txt
+
+# 镜像版本号（CI 按 git tag 注入，本地默认 dev）；置于依赖层后，避免版本变更使 pip 缓存失效
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
+
+# 应用代码 + 文档（/web-ui/docs 文档中心，--web 时挂载）
+COPY asr-service/ /app
+COPY docs/ /docs/
+COPY README.md README_zh.md /
+
+# 模型 / 日志挂载目录（vllm 模式无离线任务/声纹库，无需 data/）
+RUN mkdir -p /app/models /app/logs
+
+EXPOSE 8765
+
+# 进程内同步 vLLM，须单进程（uvicorn 默认 workers=1）；覆盖基底镜像的 openai server 入口
+ENTRYPOINT ["python3", "-m", "app.main", "--host", "0.0.0.0", "--serve-mode", "vllm"]

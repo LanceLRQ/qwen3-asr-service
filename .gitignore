@@ -147,6 +147,7 @@ docs/plan/*
 asr-service/models
 asr-service/bin
 asr-service/venv
+asr-service/venv-vllm
 asr-service/scripts/e2e/.venv
 asr-service/logs
 

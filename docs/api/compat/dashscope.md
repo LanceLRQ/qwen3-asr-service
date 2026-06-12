@@ -86,7 +86,7 @@ print(result.output)
 WS /inference
 ```
 
-Paraformer realtime（需 `--enable-stream`）。ws base = `ws://<host>:8765/compat/dashscope/api-ws/v1`。`header/payload` 信封：
+Paraformer realtime（standard 模式需 `--enable-stream`；vLLM 模式 `--serve-mode vllm` 下随 `--enable-dashscope-api` 自动挂载，无需 `--enable-stream`）。ws base = `ws://<host>:8765/compat/dashscope/api-ws/v1`。`header/payload` 信封：
 
 1. 客户端 → `run-task`：`{"header":{"action":"run-task","task_id":"<uuid>","streaming":"duplex"},"payload":{"parameters":{"format":"pcm","sample_rate":16000,"language_hints":["zh"]}}}`
 2. 服务端 → `task-started`
@@ -95,7 +95,7 @@ Paraformer realtime（需 `--enable-stream`）。ws base = `ws://<host>:8765/com
 5. 客户端 → `finish-task` → 服务端 → `task-finished`
 6. 同一连接可再发 `run-task` 起新任务（连接复用）
 
-> **能力与限制**：同 OpenAI 实时——VAD-offline 只产整句（`sentence_end:true`），**不产中间结果**（`sentence_end:false`）。完整中间结果需后续 vLLM 流式后端。
+> **能力与限制**：取决于运行模式——**standard**（VAD-offline）只产整句 `result-generated`（`sentence_end:true`），不产中间结果（`sentence_end:false`）；**vLLM**（`--serve-mode vllm`，原生流式）在句内逐步下发中间 `result-generated`（`sentence_end:false`，累计文本，`begin_time`/`end_time`=null、不带 `words`），句末再发 `sentence_end:true` 整句。DashScope 中间结果语义本就累计，与 vLLM partial 天然契合、干净直发（非 best-effort）。
 
 ---
 

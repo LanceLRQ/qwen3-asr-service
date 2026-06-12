@@ -57,26 +57,93 @@ def isolated_create_app(tmp_path, monkeypatch):
         setattr(cfg, k, v)
 
 
-def test_vllm_mode_mounts_common_only(isolated_create_app):
-    from app.main import create_app
+def _mock_vllm_engine(monkeypatch):
+    """mock vllm 引擎/设备/离线任务层，避免真实 GPU / vLLM 加载 / worker 线程。"""
+    import app.main as main
+    monkeypatch.setattr(main, "detect_device",
+                        lambda: {"type": "cuda", "vram_gb": 24.0, "name": "FakeGPU"})
+    monkeypatch.setattr(main, "resolve_device", lambda req, device_info=None: "cuda")
 
-    app = create_app(_args(serve_mode="vllm", device="cpu"))
+    class FakeVLLMEngine:
+        def __init__(self, *a, **k): pass
+        def load(self): pass
+        @property
+        def align_enabled(self): return True       # Phase 1：离线 transcribe 出词级时间戳
+
+    monkeypatch.setattr("app.engines.vllm_asr_engine.VLLMASREngine", FakeVLLMEngine)
+
+    # 离线任务层在 _assemble_vllm 内惰性导入（venv-vllm 顶层为 None）；patch 真实路径
+    # 拦截，避免真实 TaskManager worker 线程
+    class FakeTM:
+        def __init__(self, *a, **k): pass
+        def set_processor(self, fn): pass
+        def start(self): pass
+        def shutdown(self): pass
+        def list_tasks(self, status=None): return []
+        def get_task(self, task_id): return None
+
+    monkeypatch.setattr("app.runtime.task_manager.TaskManager", FakeTM)
+
+
+def test_vllm_mode_mounts_stream_and_common(isolated_create_app, monkeypatch):
+    import app.main as main
+    _mock_vllm_engine(monkeypatch)
+
+    app = main.create_app(_args(serve_mode="vllm", device="auto"))
     client = TestClient(app)
 
-    # health 反映 vllm 模式
+    # health 反映 vllm 模式 + 流式已启用（路线 A，含 partial）+ 离线已挂（Phase 1）
     health = client.get("/v1/health").json()
     assert health["mode"] == "vllm"
-    assert health["capabilities"]["offline_api"] is False
-    assert health["capabilities"]["stream"]["backend"] == "vllm-native"
+    assert health["capabilities"]["offline_api"] is True       # Phase 1：离线已接入
+    assert health["align_enabled"] is True                     # 对齐器（词级时间戳）
+    assert health["punc_enabled"] is True                      # 模型原生标点
+    stream = health["capabilities"]["stream"]
+    assert stream["backend"] == "vllm-native"
+    assert stream["enabled"] is True
+    assert stream["partial_results"] is True
+    assert stream["word_timestamps"] is False
+    assert stream["path"] == "/v2/asr/stream"
 
     # capabilities 在 v1/v2 都可用
     assert client.get("/v1/capabilities").json()["mode"] == "vllm"
     assert client.get("/v2/capabilities").json()["mode"] == "vllm"
 
-    # vllm 模式不挂离线接口
-    assert client.get("/v1/tasks").status_code == 404
-    assert client.get("/v2/tasks").status_code == 404
-    assert client.post("/v1/asr", files={"file": ("a.wav", b"x", "audio/wav")}).status_code == 404
+    # vllm 模式现挂离线接口（与 standard 同一套契约）：/tasks 可达（非 404）
+    assert client.get("/v1/tasks").status_code == 200
+    assert client.get("/v2/tasks").status_code == 200
+
+    # 实时端点已挂载：连接即收到 session.created（vllm-native，含 partial）
+    with client.websocket_connect("/v2/asr/stream") as ws:
+        created = ws.receive_json()
+        assert created["type"] == "session.created"
+        assert created["mode"] == "vllm"
+        assert created["backend"] == "vllm-native"
+        assert created["capabilities"]["partial_results"] is True
+
+
+def test_vllm_mode_requires_cuda(isolated_create_app, monkeypatch):
+    """vllm 模式非 CUDA 设备明确退出（不静默降级到 CPU）。"""
+    import app.main as main
+    monkeypatch.setattr(main, "detect_device", lambda: {"type": "cpu", "vram_gb": None, "name": "cpu"})
+    monkeypatch.setattr(main, "resolve_device", lambda req, device_info=None: "cpu")
+    with pytest.raises(SystemExit):
+        main.create_app(_args(serve_mode="vllm", device="cpu"))
+
+
+def test_vllm_mode_web_mounts_demo(isolated_create_app, monkeypatch):
+    """vllm + --web：挂载 Web UI，实时演示页（内置 partial 渲染）可达。"""
+    import app.config as cfg
+    import app.main as main
+    _mock_vllm_engine(monkeypatch)
+    saved_web = cfg.ENABLE_WEB
+    try:
+        app = main.create_app(_args(serve_mode="vllm", device="auto", web=True))
+        client = TestClient(app)
+        assert client.get("/web-ui/stream").status_code == 200
+        assert cfg.ENABLE_WEB is True
+    finally:
+        cfg.ENABLE_WEB = saved_web
 
 
 # ─── T09: 实时配置与启动参数 ───
@@ -183,15 +250,78 @@ def test_parse_args_stream_flags(monkeypatch):
 
 
 def test_health_echoes_config_file(isolated_create_app, monkeypatch):
-    """/health 回显本次生效的配置文件名（防"幽灵配置"，vllm 占位分支即可覆盖）。"""
+    """/health 回显本次生效的配置文件名（防"幽灵配置"，vllm 分支即可覆盖）。"""
     import app.config as cfg
-    from app.main import create_app
+    import app.main as main
 
+    _mock_vllm_engine(monkeypatch)
     monkeypatch.setattr(cfg, "CONFIG_FILE", "config.yaml")
-    app = create_app(_args(serve_mode="vllm", device="cpu"))
+    app = main.create_app(_args(serve_mode="vllm", device="auto"))
     client = TestClient(app)
     assert client.get("/v1/health").json()["config_file"] == "config.yaml"
     assert client.get("/v2/health").json()["config_file"] == "config.yaml"
+
+
+def test_config_vllm_defaults():
+    import app.config as cfg
+    assert cfg.VLLM_GPU_MEMORY_UTILIZATION == 0.6   # 单流 ASR 调优（原 0.8 过大）
+    assert cfg.VLLM_MAX_MODEL_LEN == 32768          # 压低 KV 下限，使低占用率可启动
+    assert cfg.VLLM_CHUNK_SIZE_SEC == 1.0       # V0 实测定档（细腻 partial）
+    assert cfg.VLLM_CONCURRENCY == 1            # generate 串行，>1 无吞吐收益
+    assert cfg.VLLM_MAX_UTTERANCE_SEC == 20
+    assert cfg.VLLM_ENERGY_FLOOR_DBFS == -45.0
+    assert cfg.VLLM_END_SILENCE_MS == 800
+    assert cfg.VLLM_ENABLE_ALIGN is True            # 离线词级时间戳默认开
+    assert cfg.VLLM_ALIGN_DEVICE == "cuda"          # 对齐器默认 GPU（长音频 OOM 时可改 cpu）
+    assert cfg.VLLM_INFER_BATCH_SIZE == 4           # 对齐/ASR 批大小有界（非 -1，防长音频对齐 OOM）
+    assert cfg.VLLM_OFFLINE_CHUNK_SEC == 180        # 离线逐块转写切块时长（长音频进度/显存/取消粒度）
+    assert cfg.VLLM_SEGMENT_GAP_MS == 500           # 离线分段词间隙阈值
+
+
+def test_parse_and_apply_vllm_args(monkeypatch):
+    import app.config as cfg
+    from app.main import _apply_cli_config, parse_args
+    monkeypatch.setattr("sys.argv", [
+        "prog", "--no-config", "--serve-mode", "vllm",
+        "--gpu-memory-utilization", "0.7", "--vllm-chunk-size-sec", "1.5",
+        "--vllm-max-utterance-sec", "30", "--vllm-concurrency", "2",
+        "--vllm-end-silence-ms", "600",
+    ])
+    saved = {k: getattr(cfg, k) for k in (
+        "VLLM_GPU_MEMORY_UTILIZATION", "VLLM_CHUNK_SIZE_SEC", "VLLM_MAX_UTTERANCE_SEC",
+        "VLLM_CONCURRENCY", "VLLM_END_SILENCE_MS", "MODEL_SOURCE", "MAX_SEGMENT_DURATION",
+        "SERVE_MODE", "ENABLE_STREAM")}
+    try:
+        ns = parse_args()
+        assert ns.serve_mode == "vllm"
+        _apply_cli_config(ns)
+        assert cfg.VLLM_GPU_MEMORY_UTILIZATION == 0.7
+        assert cfg.VLLM_CHUNK_SIZE_SEC == 1.5
+        assert cfg.VLLM_MAX_UTTERANCE_SEC == 30
+        assert cfg.VLLM_CONCURRENCY == 2
+        assert cfg.VLLM_END_SILENCE_MS == 600
+    finally:
+        for k, v in saved.items():
+            setattr(cfg, k, v)
+
+
+def test_parse_and_apply_vllm_align_device(monkeypatch):
+    """--vllm-align-device cpu 解析并写入 cfg（OOM 逃生：对齐器移出 GPU）。"""
+    import app.config as cfg
+    from app.main import _apply_cli_config, parse_args
+    monkeypatch.setattr("sys.argv", [
+        "prog", "--no-config", "--serve-mode", "vllm", "--vllm-align-device", "cpu"])
+    saved = {k: getattr(cfg, k) for k in (
+        "VLLM_ALIGN_DEVICE", "MODEL_SOURCE", "MAX_SEGMENT_DURATION",
+        "SERVE_MODE", "ENABLE_STREAM")}
+    try:
+        ns = parse_args()
+        assert ns.vllm_align_device == "cpu"
+        _apply_cli_config(ns)
+        assert cfg.VLLM_ALIGN_DEVICE == "cpu"
+    finally:
+        for k, v in saved.items():
+            setattr(cfg, k, v)
 
 
 def test_apply_cli_config_writes_stream(monkeypatch):
@@ -457,3 +587,128 @@ def test_speaker_db_degrades_on_store_failure(isolated_create_app, monkeypatch, 
     assert health["status"] == "ready"
     assert health["speaker_db_enabled"] is False
     assert client.get("/v2/speakers", headers=auth).status_code == 503
+
+
+# ─── vLLM 模式 Phase 2：说话人分离 / 声纹库装配 ───
+
+def test_vllm_mode_speaker_enabled(isolated_create_app, monkeypatch):
+    """vllm + --enable-speaker：离线说话人分离装配，capabilities/health 置位；流式说话人仍无。"""
+    import app.main as main
+    _mock_vllm_engine(monkeypatch)
+
+    class FakeSpeaker:
+        def __init__(self, *a, **k): pass
+        def load(self): pass
+
+    monkeypatch.setattr(
+        "app.engines.speaker_embedding_engine.SpeakerEmbeddingEngine", FakeSpeaker)
+
+    app = main.create_app(_args(serve_mode="vllm", device="auto", enable_speaker=True))
+    client = TestClient(app)
+
+    caps = client.get("/v2/capabilities").json()
+    assert caps["speaker_labels"] is True              # 离线分离
+    assert caps["stream"]["speaker_labels"] is False   # 流式说话人仍无（仅离线）
+    assert client.get("/v2/health").json()["speaker_enabled"] is True
+
+
+def test_vllm_mode_speaker_load_failure_degrades(isolated_create_app, monkeypatch):
+    """vllm 说话人引擎加载失败：降级关闭、不影响服务（容错对齐 standard）。"""
+    import app.main as main
+    _mock_vllm_engine(monkeypatch)
+
+    class BoomSpeaker:
+        def __init__(self, *a, **k): pass
+        def load(self): raise RuntimeError("weights missing")
+
+    monkeypatch.setattr(
+        "app.engines.speaker_embedding_engine.SpeakerEmbeddingEngine", BoomSpeaker)
+
+    app = main.create_app(_args(serve_mode="vllm", device="auto", enable_speaker=True))
+    client = TestClient(app)
+    health = client.get("/v2/health").json()
+    assert health["status"] == "ready"
+    assert health["speaker_enabled"] is False
+    assert client.get("/v2/capabilities").json()["speaker_labels"] is False
+
+
+def test_vllm_mode_speaker_db_full_path(isolated_create_app, monkeypatch, tmp_path):
+    """vllm 声纹库全通：speaker_identification 置位、/v2/speakers 可列（真实 SpeakerStore）。"""
+    import app.main as main
+    _mock_vllm_engine(monkeypatch)
+    monkeypatch.setattr(
+        "app.engines.speaker_embedding_engine.SpeakerEmbeddingEngine", _OkSpeaker)
+
+    app = main.create_app(_args(serve_mode="vllm", device="auto", enable_speaker=True,
+                                api_key="k", enable_speaker_db=True,
+                                speaker_db_path=str(tmp_path / "spk.db")))
+    client = TestClient(app)
+    auth = {"Authorization": "Bearer k"}
+    assert client.get("/v2/health", headers=auth).json()["speaker_db_enabled"] is True
+    assert client.get("/v2/capabilities", headers=auth).json()["speaker_identification"] is True
+    assert client.get("/v2/speakers", headers=auth).json() == {"total": 0, "speakers": []}
+
+
+def test_vllm_mode_speaker_db_degrades_without_api_key(isolated_create_app, monkeypatch, tmp_path):
+    """vllm 声纹库合规硬约束：无 api_key → 降级关闭、端点 503（生物识别须鉴权）。"""
+    import app.main as main
+    _mock_vllm_engine(monkeypatch)
+    monkeypatch.setattr(
+        "app.engines.speaker_embedding_engine.SpeakerEmbeddingEngine", _OkSpeaker)
+
+    app = main.create_app(_args(serve_mode="vllm", device="auto", enable_speaker=True,
+                                enable_speaker_db=True,
+                                speaker_db_path=str(tmp_path / "spk.db")))
+    client = TestClient(app)
+    assert client.get("/v2/health").json()["speaker_db_enabled"] is False
+    assert client.get("/v2/speakers").status_code == 503
+
+
+# ─── vLLM 模式 Phase 3：兼容接口装配 ───
+
+def test_vllm_mode_compat_openai_mounted(isolated_create_app, monkeypatch):
+    """vllm + --enable-openai-api：/compat/openai/v1/models 可达；capabilities.compat 置位。
+    实时随离线开关挂（vLLM 流式恒开，无需 --enable-stream），R1 finals-only。"""
+    import app.main as main
+    _mock_vllm_engine(monkeypatch)
+    app = main.create_app(_args(serve_mode="vllm", device="auto",
+                                api_key="k", enable_openai_api=True))
+    client = TestClient(app)
+
+    compat = client.get("/v2/capabilities").json()["compat"]
+    assert compat["openai"] is True
+    assert compat["dashscope"] is False
+    assert compat["realtime"] is True             # vLLM 流式恒开 → 实时兼容随挂
+    assert compat["realtime_partial"] is True     # R2 增量已下发（OpenAI delta best-effort）
+
+    r = client.get("/compat/openai/v1/models", headers={"Authorization": "Bearer k"})
+    assert r.status_code == 200
+    assert r.json()["data"][0]["id"].startswith("qwen3-asr-")
+
+
+def test_vllm_mode_compat_dashscope_mounted(isolated_create_app, monkeypatch):
+    """vllm + --enable-dashscope-api：DashScope 路由挂载、capabilities.compat.dashscope 置位。"""
+    import app.main as main
+    _mock_vllm_engine(monkeypatch)
+    app = main.create_app(_args(serve_mode="vllm", device="auto",
+                                api_key="k", enable_dashscope_api=True))
+    client = TestClient(app)
+
+    compat = client.get("/v2/capabilities").json()["compat"]
+    assert compat["dashscope"] is True and compat["openai"] is False
+    assert compat["realtime"] is True
+    # 提交端点已挂载（无 body/auth → 401/422，非 404）
+    r = client.post("/compat/dashscope/api/v1/services/audio/asr/transcription")
+    assert r.status_code != 404
+
+
+def test_vllm_mode_compat_disabled_by_default(isolated_create_app, monkeypatch):
+    """未开启兼容接口：compat 全 false，/compat 路由不挂（404）。"""
+    import app.main as main
+    _mock_vllm_engine(monkeypatch)
+    app = main.create_app(_args(serve_mode="vllm", device="auto"))
+    client = TestClient(app)
+
+    assert client.get("/v2/capabilities").json()["compat"] == {
+        "openai": False, "dashscope": False, "realtime": False, "realtime_partial": False}
+    assert client.get("/compat/openai/v1/models").status_code == 404

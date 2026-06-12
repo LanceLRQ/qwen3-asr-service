@@ -17,6 +17,7 @@ Higher layers override lower ones for the same parameter; **explicitly passed** 
 - [Environment Variables](#environment-variables)
 - [Offline Task Persistence (tasks.db)](#offline-task-persistence-tasksdb)
 - [Speaker Diarization & Voiceprint Database (speakers.db)](#speaker-diarization--voiceprint-database-speakersdb)
+- [vLLM Native Streaming Mode](#vllm-native-streaming-mode)
 - [Built-in Constants (app/config.py)](#built-in-constants-appconfigpy)
 
 ---
@@ -29,7 +30,7 @@ All parameters are passed through `bash start.sh <args>`. Config-file key = long
 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
-| `--serve-mode` | `standard` / `vllm` | `standard` | Serving mode; `vllm` is a placeholder, not implemented yet (only /health and /capabilities) |
+| `--serve-mode` | `standard` / `vllm` | `standard` | Serving mode; `vllm` = vLLM native streaming (GPU-only, partial→final realtime + offline `/v2/asr`) |
 | `--device` | `auto` / `cuda` / `cpu` | `auto` | Device; `auto` detects (≥6GB VRAM → 1.7B, 4–6GB → 0.6B, <4GB disables alignment, no GPU falls back to CPU/OpenVINO) |
 | `--model-size` | `0.6b` / `1.7b` | Auto by VRAM | ASR model size |
 | `--enable-align` / `--no-align` | - | Enabled | Alignment model (word-level timestamps); force-disabled in CPU mode |
@@ -96,6 +97,32 @@ Reduces false triggers from far-field sounds and ambient noise. `--vad-speech-no
 | `--speaker-auto-enroll` / `--no-speaker-auto-enroll` | - | Enabled | Auto-enroll unmatched speakers from offline identification as `Speaker_NN` (**enabling auto-enroll = the deployer declares data-subject consent has been obtained**) |
 | `--speaker-auto-enroll-min-sec` | Seconds | `10.0` | Minimum total speech duration of a cluster for auto-enrollment (stricter than manual enrollment, to reduce noisy records) |
 | `--speaker-store-audio` / `--no-speaker-store-audio` | - | Disabled | Retain enrollment sample audio in `data/speaker_audio/` (widens the compliance surface, off by default) |
+
+### vLLM Native Streaming (only `--serve-mode vllm`)
+
+Effective only in vllm mode; requires a CUDA GPU and an isolated environment/image (see [vLLM Native Streaming Mode](#vllm-native-streaming-mode) below).
+
+| Parameter | Value | Default | Description |
+|------|------|--------|------|
+| `--gpu-memory-utilization` | 0–1 | `0.6` | vLLM GPU memory utilization (×total VRAM as budget; single-stream ASR needs no 0.8) |
+| `--vllm-max-model-len` | number | `32768` | Max context length; too large raises the KV cache floor and prevents low-utilization startup |
+| `--vllm-chunk-size-sec` | float | `1.0` | Streaming decode chunk size (sec); smaller = finer partials (range 0.5–5) |
+| `--vllm-max-utterance-sec` | number | `20` | Per-utterance hard cut (sec); bounds context/memory growth |
+| `--vllm-concurrency` | number | `1` | Concurrent decoding sessions (generate is serial; >1 yields no throughput) |
+| `--vllm-end-silence-ms` | ms | `800` | Energy endpointer end-silence threshold |
+| `--vllm-enable-align` / `--no-vllm-align` | - | on | Offline `/v2/asr` word timestamps: load the aligner (off saves VRAM, no words) |
+| `--vllm-align-device` | `cuda` / `cpu` | `cuda` | Aligner device; its VRAM is **outside the `gpu_memory_utilization` budget** — switch to `cpu` (float32, slower, no GPU contention) if the aligner OOMs on long audio |
+| `--vllm-infer-batch-size` | number | `4` | Audio chunks per alignment/ASR batch (chunks ≤180s); `-1`=all at once (long-audio aligner OOM from stacked activations), lower to save VRAM, drop to `1` if long audio still OOMs |
+| `--vllm-segment-gap-ms` | ms | `500` | Offline segmentation: split when the inter-word gap exceeds this (no FSMN; word-gap proxy) |
+
+**Config-file only (no CLI; set in `config.yaml`):**
+
+| Config key | Default | Description |
+|------------|---------|-------------|
+| `vllm_unfixed_chunk_num` | `2` | Number of leading streaming chunks that don't take history as prefix (cold-start stability) |
+| `vllm_unfixed_token_num` | `5` | After the leading chunks, roll back the last K tokens as prefix (reduces jitter) |
+| `vllm_energy_floor_dbfs` | `-45.0` | Streaming energy-endpoint gate (dBFS); above this counts as speech / sentence start |
+| `vllm_offline_chunk_sec` | `180` | Offline chunk-by-chunk transcription chunk length (sec); lower = finer progress, lower peak VRAM (see [Long audio & progress](#vllm-native-streaming-mode) below) |
 
 ### Config-file Meta Parameters
 
@@ -198,6 +225,62 @@ api_key: "sk-your-key"
 - **Data is never auto-cleaned**: `speakers.db` has no TTL (unlike tasks.db's 7-day cleanup) — voiceprints are a long-term accumulating asset, and identification gets more accurate the more they are used; the only way to delete is `DELETE /v2/speakers/{id}` (hard delete + physical reclamation) or deleting the database file.
 - **Auto-enrollment**: during offline transcription with `identify_speakers` enabled, speakers that miss the database and have sufficient speech (default ≥10s) are auto-enrolled as `说话人_NN` (Chinese for "Speaker_NN"); after renaming via `/web-ui/speakers` or `PATCH /v2/speakers/{id}`, subsequent transcriptions display the real name directly; the real-time path does not auto-enroll (online clustering drift easily causes duplicate records); matched speakers never get templates auto-appended either (to prevent sample poisoning) — add samples manually via `POST /v2/speakers/{id}/templates`.
 - **Compliance**: the enrollment endpoint enforces `consent=true` as double-insurance (endpoint + database constraint); enabling auto-enrollment means the deployer declares data-subject consent has been obtained; audio is not retained by default; the audit log is persisted alongside the database. **Backup = copy the single `data/speakers.db` file** (recommend including it in your regular backup plan); deleting the database completely erases all voiceprint data.
+
+## vLLM Native Streaming Mode
+
+`--serve-mode vllm` enables the vLLM native streaming engine, providing **incremental (partial→final)** real-time transcription, plus an **offline `/v2/asr`** with the same contract as `standard`; it is **mutually exclusive** with the default `standard` mode (online VAD + offline decode, per-segment final).
+
+**Capability differences**
+
+| Aspect | standard (default) | vllm |
+|------|-----------------|------|
+| Endpoints | offline v1/v2 + realtime WS (`--enable-stream`) | **offline v1/v2 + realtime WS `/v2/asr/stream` (always on)** + `/health` `/capabilities` |
+| Incremental results (realtime) | none (per-segment final) | **partial→final** |
+| Word timestamps | supported | **offline supported** (ForcedAligner, on by default); not in realtime |
+| Speaker diarization/ID | supported | **offline supported** (CAM++, requires `--enable-speaker`; energy-VAD windowing); not in realtime |
+| Punctuation | CT-Transformer (toggleable) | model-native (**cannot be turned off**) |
+| Offline segment boundaries | FSMN-VAD | punctuation-first / whole-text fallback (coarser) |
+| Device | GPU / CPU | **CUDA GPU only** (CPU disabled by design, no CPU image) |
+| Throughput | concurrent sessions | single-stream serial (generate is serial; ≈ standard) |
+| Deps / image | funasr + OpenVINO… | isolated vLLM env (no funasr/OpenVINO), separate image |
+
+**Why an isolated environment**: vLLM pins a specific torch/CUDA (incompatible with standard's torch), so it requires an isolated `venv-vllm` or a separate image (`docker/Dockerfile.vllm`, derived from the official vLLM image). See the [deployment guide](deployment_EN.md).
+
+**Offline transcription (`/v2/asr`)**: vllm mode reuses the **exact same async task contract** as standard (`POST /v2/asr` → `task_id` → poll `GET /v2/tasks/{id}`, persistence, cancel), with ASR via vLLM batched `transcribe`. All differences from standard are **quality differences that do not break the result structure**, and are flagged in `result.warnings`:
+- **Segmentation**: punctuation-first splitting on model-native sentence punctuation (`。！？；`, with comma sub-split for sentences exceeding `--max-segment`); word timestamps only locate start/end. Falls back to inter-word gap (`--vllm-segment-gap-ms`, default 500ms) / a single whole-text segment when the aligner is off. Boundary precision is lower than FSMN-VAD.
+- **Punctuation**: produced natively by Qwen3-ASR (already punctuated); cannot be turned off — `with_punc=false` is recorded in `warnings`.
+- **Word timestamps**: `--vllm-enable-align` (on by default) via ForcedAligner, same as standard; `--no-vllm-align` disables it to save VRAM.
+  - ⚠️ **Long-audio alignment OOM**: the aligner is a standalone transformers model in the main process and its VRAM is **not counted in `gpu_memory_utilization`** (which only bounds the vLLM EngineCore subprocess). `transcribe` chunks internally at ≤180s, but by default (`max_inference_batch_size=-1`) it feeds **all** of a file's chunks into the aligner forward at once — long audio (e.g. 30 min ≈ 10 chunks) stacks activations and hits `CUDA out of memory` (short audio is a single chunk and is unaffected). Remedies (recommended order): ① **`--vllm-infer-batch-size`** (now defaults to `4`) aligns batch-by-batch, peak VRAM drops linearly with batch size, stays on GPU and is fastest — drop to `1` if long audio still OOMs; ② `--vllm-align-device cpu` to run the aligner on CPU (no GPU contention, slower but safe); ③ lower `--gpu-memory-utilization` to leave more GPU headroom; ④ `--no-vllm-align` to drop word timestamps.
+- **Long audio & progress**: offline audio longer than `vllm_offline_chunk_sec` (default 180s) is transcribed **chunk by chunk** at silence boundaries, so transcription progress (0.1→0.85) updates per chunk and cancellation is honored between chunks (short audio is transcribed in one pass). Chunks use qwen_asr's own splitting (concatenation reproduces the original), so quality matches whole-file transcription; lowering `vllm_offline_chunk_sec` gives finer progress and lower peak VRAM.
+- **Speaker diarization/ID**: with `--enable-speaker` (plus `--enable-speaker-db` for the voiceprint DB), offline `segments[].speaker` / `speaker_name` / `speakers` match standard; the engine is CAM++ (CPU, torch, not funasr), and **windowing uses an energy VAD instead of FSMN-VAD** (coarser boundaries). When disabled, `diarize`/`identify_speakers` are recorded in `warnings`. Requires extra deps `scipy`/`scikit-learn`/`modelscope` (or a pre-mounted CAM++ model dir); see [requirements-vllm.txt](../asr-service/requirements-vllm.txt). Realtime streaming still has no speaker labels.
+> For high-fidelity with FSMN segmentation / CT-Transformer punctuation / realtime speakers, use `standard` mode.
+
+**Compatibility APIs (`/compat/*`)**: vllm mode also supports the OpenAI / DashScope compatibility APIs, with the same switches as standard (`--enable-openai-api` / `--enable-dashscope-api`); endpoint docs are in the [development guide](development_EN.md). Differences from standard:
+- **Offline compat** (OpenAI `audio/transcriptions`·`models`, DashScope file transcription) reuses the vLLM offline pipeline, so segmentation/punctuation/speaker quality is as described above; `audio/translations` stays 501 (ASR-only, naturally aligned with standard).
+- **Realtime compat** (OpenAI `WS /realtime`, DashScope `WS …/inference`) is mounted alongside the compat switches (vLLM streaming is always on, **no** `--enable-stream` needed); vLLM's incremental partials are forwarded over the compat protocols (`capabilities.compat.realtime_partial=true`): DashScope uses intermediate `result-generated` (`sentence_end=false`, a natural fit for its cumulative semantics); OpenAI uses `…transcription.delta`, which is **best-effort** — OpenAI expects incremental chunks while vLLM partials are cumulative and may be revised, so only append-only frames emit the new suffix as a delta (revision frames are skipped) and the authoritative full transcript is always the `…completed` event.
+- DashScope server-side `file_urls` download needs `httpx` (bundled in requirements-vllm); the SSRF guard and `--compat-fetch-*` options are inherited from standard.
+- The `compat` section of `/capabilities` reflects the mounted endpoints: `{openai, dashscope, realtime, realtime_partial}`.
+
+**Start**
+
+```bash
+# Local: first install the isolated venv-vllm (requirements-vllm.txt brings vllm/torch), then start
+bash asr-service/setup.sh --vllm                                          # create venv-vllm + install deps
+QWEN_VENV=venv-vllm bash asr-service/start.sh --serve-mode vllm --model-size 0.6b --web
+# Or call the venv-vllm interpreter directly:
+asr-service/venv-vllm/bin/python -m app.main --serve-mode vllm --model-size 0.6b --web
+
+# Docker (separate image, separate port 8766)
+docker compose -f docker/docker-compose.vllm.yml up -d
+
+# Interactive: bash manage.sh → venv mode (pick serve-mode vllm) / compose mode (switch to vLLM)
+```
+
+**Notes**
+
+- **Process model**: the vLLM engine holds the GPU in a separate EngineCore subprocess; the service runs a **single worker** (uvicorn default workers=1; multiple workers would each load the model and exhaust VRAM).
+- **Graceful stop**: on exit the EngineCore subprocess may not be reaped immediately with the parent; in Docker the container stop reaps it. For manual runs, `pkill -f "serve-mode vllm"` then verify VRAM is freed via `nvidia-smi`.
+- **Model**: loads HF full-precision `models/asr/0.6b` or `1.7b` (not the OpenVINO quantized variants); the web demo (`--web` → `/web-ui/stream`) already renders partial→final live.
 
 ## Built-in Constants (app/config.py)
 

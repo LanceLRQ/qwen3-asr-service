@@ -6,8 +6,10 @@ Drop-in compatibility shims for clients already built against the **OpenAI** or 
 
 > Compat APIs are **off by default**; enable them explicitly at startup:
 > ```bash
-> # offline + realtime (realtime also needs --enable-stream)
+> # standard mode: offline + realtime (realtime also needs --enable-stream)
 > python -m app.main --enable-openai-api --enable-dashscope-api --enable-stream --api-key sk-xxx
+> # vLLM mode (--serve-mode vllm): streaming always on, realtime compat auto-mounts — no --enable-stream
+> python -m app.main --serve-mode vllm --enable-openai-api --enable-dashscope-api --api-key sk-xxx
 > ```
 
 **Design principle**: honest degradation — capabilities this service lacks (translation, temperature, prompt, hotwords, per-token deltas, etc.) are **explicitly ignored/warned or rejected, never silently faked**.
@@ -50,10 +52,12 @@ When the service is started with `--api-key`, all compat endpoints require `Auth
 | Speaker diarization | ➖ (no OpenAI field) | ✅ diarization_enabled |
 | Translation | ❌ 501 | ➖ n/a |
 | HTTP streaming | ✅ stream=true (SSE) | ➖ n/a |
-| Realtime whole-sentence | ✅ completed (needs --enable-stream) | ✅ result-generated (needs --enable-stream) |
-| Realtime per-token delta | ❌ needs vLLM | ❌ needs vLLM |
+| Realtime whole-sentence | ✅ completed | ✅ result-generated |
+| Realtime per-token delta | ✅ delta (vLLM mode only, best-effort) | ✅ intermediate results (vLLM mode only) |
 | Confidence/logprob | ➖ placeholder | ➖ not provided |
 | Prompt/temperature/hotwords/disfluency | ❌ ignored | ❌ ignored |
+
+> The realtime rows (last two above) differ by serving mode: **standard** (VAD-offline) needs `--enable-stream` and emits only whole-sentence finals, no per-token increments; **vLLM** (`--serve-mode vllm`, native streaming) has streaming always on, mounts realtime compat with the compat switches (**no `--enable-stream` needed**), and emits per-token increments — DashScope intermediate `result-generated` (`sentence_end:false`) is naturally cumulative and forwarded cleanly; OpenAI `…delta` is **best-effort** (partials are cumulative and may be revised, so only a pure append yields a delta suffix, revision frames are skipped, and the authoritative full text is still the `…completed` event).
 
 ## Compat vs native v2
 

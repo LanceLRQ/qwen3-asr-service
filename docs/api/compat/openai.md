@@ -103,7 +103,7 @@ GET /models
 WS /realtime
 ```
 
-OpenAI Realtime transcription 会话（需 `--enable-stream`）。ws base = `ws://<host>:8765/compat/openai/v1`。
+OpenAI Realtime transcription 会话（standard 模式需 `--enable-stream`；vLLM 模式 `--serve-mode vllm` 下随 `--enable-openai-api` 自动挂载，无需 `--enable-stream`）。ws base = `ws://<host>:8765/compat/openai/v1`。
 
 1. 服务端 → `session.created`（连接即下发）
 2. 客户端 → `session.update`：配置语言/采样率（兼容 GA `session.audio.input` 与 beta 字段路径）
@@ -111,7 +111,7 @@ OpenAI Realtime transcription 会话（需 `--enable-stream`）。ws base = `ws:
 4. 客户端 → `input_audio_buffer.commit`（或关闭连接）触发末句冲刷
 5. 服务端 → 每句 `conversation.item.input_audio_transcription.completed`：`{"item_id":"item_0","transcript":"识别整句"}`
 
-> **能力与限制**：当前实时后端为 VAD-offline，**只产整句 `…completed`，不产逐字 `…delta`**（`partial_results=false`）。逐字增量需后续 vLLM 流式后端。
+> **能力与限制**：取决于运行模式——**standard**（VAD-offline，`partial_results=false`）只产整句 `…completed`，不产逐字 `…delta`；**vLLM**（`--serve-mode vllm`，原生流式，`partial_results=true`）在句内逐步下发 `…delta`，句末再发 `…completed` 整句。vLLM 的 `…delta` 为 **best-effort**：partial 是当前句累计文本且可能修订，仅纯追加时取新增后缀作 delta、修订帧跳过，权威全文仍以 `…completed` 为准。
 
 ---
 

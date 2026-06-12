@@ -1,0 +1,38 @@
+services:
+  asr-vllm:
+    image: lancelrq/qwen3-asr-service:latest-vllm
+    container_name: qwen3-asr-vllm
+    # build:                                  # 本文件在 docker/ 下，上下文需指向仓库根
+    #   context: ..
+    #   dockerfile: docker/Dockerfile.vllm
+    #   args:
+    #     VLLM_TAG: v0.14.0
+    #   tags:
+    #     - lancelrq/qwen3-asr-service:latest-vllm
+    ports:
+      - "8766:8765"                      # 独立端口，避免与 standard asr(8765) 冲突
+    # environment:
+    #   - ASR_API_KEY=sk-your-key-here    # 设置后启用 Bearer token 认证
+    volumes:
+      # config.yaml 须先存在（用根目录 manage.sh 引导，或从 config.example.yaml 拷贝）；
+      # 缺失时 bind 挂载会创建空目录。也可改用 command 传 --no-config 走纯 CLI。
+      - ../asr-service/config.yaml:/app/config.yaml
+      # vLLM 加载 HF 全精度模型（models/asr/0.6b 或 1.7b）；与 standard 共用同一 models 目录
+      - ../asr-service/models:/app/models
+      - ../asr-service/logs:/app/logs
+      # SQLite（任务持久化 data/tasks.db、声纹库 data/speakers.db）：vLLM 模式同样支持，挂出以跨重建保留
+      - ../asr-service/data:/app/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # ENTRYPOINT 已含 --serve-mode vllm；如需覆盖参数（优先级高于配置文件）取消注释：
+    # command:
+    #   - --model-size=0.6b                # 模型大小：0.6b / 1.7b（HF 全精度）
+    #   - --gpu-memory-utilization=0.8     # 显存占用率
+    #   - --vllm-chunk-size-sec=1.0        # 流式解码块（越小 partial 越细腻）
+    #   - --web                            # 启用 Web UI（演示页支持 partial→final）
+    restart: unless-stopped

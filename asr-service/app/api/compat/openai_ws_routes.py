@@ -13,7 +13,11 @@ from uuid import uuid4
 
 from fastapi import APIRouter, WebSocket
 
-from app.api.compat.mappers import final_to_openai_completed, to_engine_language
+from app.api.compat.mappers import (
+    final_to_openai_completed,
+    partial_to_openai_delta,
+    to_engine_language,
+)
 from app.api.compat.ws_bridge import run_compat_ws
 
 logger = logging.getLogger(__name__)
@@ -46,6 +50,7 @@ class OpenAIRealtimeAdapter:
     def __init__(self):
         self._item_seq = 0
         self._audio_fs = None      # 上次 configure 采用的采样率（session.updated 回显）
+        self._last_partial = ""    # 当前句已下发的累计 partial 文本（R2 delta diff 基准）
 
     async def on_open(self, ws: WebSocket, backend):
         await ws.send_json({
@@ -100,9 +105,24 @@ class OpenAIRealtimeAdapter:
             },
         })
 
+    def translate_partials(self, partial: dict):
+        # R2 best-effort：vLLM partial 是累计且可修订，OpenAI delta 要增量片段。仅纯追加时取
+        # 新增后缀作 delta（与即将到来的 completed 共用同一 item_id）；修订帧跳过 delta，
+        # 权威全文以 completed 为准。route B 不产 partial 故不触发。
+        new = partial.get("text", "")
+        old = self._last_partial
+        self._last_partial = new
+        if not new.startswith(old):
+            return []                        # 非纯追加（修订）→ 不发误导性增量
+        delta = new[len(old):]
+        if not delta:
+            return []
+        return [partial_to_openai_delta(delta, f"item_{self._item_seq}")]
+
     def translate_finals(self, final: dict):
         item_id = f"item_{self._item_seq}"
         self._item_seq += 1
+        self._last_partial = ""              # 本句结束 → 下一句 delta 基准归零
         return [final_to_openai_completed(final, item_id)]
 
     def translate_error(self, code: str, message: str, *, fatal: bool = False):

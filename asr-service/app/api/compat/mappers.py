@@ -279,3 +279,38 @@ def final_to_dashscope_result(final: dict, task_id: str) -> dict:
         "header": {"task_id": task_id, "event": "result-generated", "attributes": {}},
         "payload": {"output": {"sentence": sentence}, "usage": None},
     }
+
+
+# ─── 实时增量（R2，仅 vLLM 路线 A 产 partial；route B 不触发）───
+#
+# vLLM partial.text 是**当前句累计全文**（非 delta，且可能修订），无词级/时间戳。
+
+def partial_to_dashscope_result(partial: dict, task_id: str) -> dict:
+    """实时 partial（累计文本）→ DashScope 中间 `result-generated`（sentence_end=false）。
+
+    DashScope 中间结果语义本就是累计句文本，与 vLLM partial 天然契合（干净）。
+    partial 无时间戳/词级 → begin_time/end_time=None、不带 words。
+    """
+    return {
+        "header": {"task_id": task_id, "event": "result-generated", "attributes": {}},
+        "payload": {"output": {"sentence": {
+            "begin_time": None,
+            "end_time": None,
+            "text": partial.get("text", ""),
+            "sentence_end": False,
+        }}, "usage": None},
+    }
+
+
+def partial_to_openai_delta(delta_text: str, item_id: str) -> dict:
+    """增量文本 → OpenAI `conversation.item.input_audio_transcription.delta`。
+
+    best-effort：OpenAI delta 协议要求**增量片段**，而 vLLM partial 是累计且可修订；
+    调用方仅在 partial 为纯追加时取新增后缀作 delta，修订帧跳过——权威全文以 completed 为准。
+    """
+    return {
+        "type": "conversation.item.input_audio_transcription.delta",
+        "item_id": item_id,
+        "content_index": 0,
+        "delta": delta_text,
+    }

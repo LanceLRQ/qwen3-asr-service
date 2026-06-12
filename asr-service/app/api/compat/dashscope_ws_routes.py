@@ -10,7 +10,11 @@ from uuid import uuid4
 
 from fastapi import APIRouter, WebSocket
 
-from app.api.compat.mappers import final_to_dashscope_result, to_engine_language
+from app.api.compat.mappers import (
+    final_to_dashscope_result,
+    partial_to_dashscope_result,
+    to_engine_language,
+)
 from app.api.compat.ws_bridge import run_compat_ws
 
 logger = logging.getLogger(__name__)
@@ -66,6 +70,11 @@ class DashScopeRealtimeAdapter:
             "header": {"task_id": self._task_id, "event": "task-started", "attributes": {}},
             "payload": {},
         })
+
+    def translate_partials(self, partial: dict):
+        # R2：vLLM 路线 A 的累计 partial → 中间 result-generated(sentence_end=false)。
+        # DashScope 中间结果本就累计，无需 diff，干净直发。route B 不产 partial 故不触发。
+        return [partial_to_dashscope_result(partial, self._task_id)]
 
     def translate_finals(self, final: dict):
         return [final_to_dashscope_result(final, self._task_id)]

@@ -126,7 +126,7 @@ venv/bin/python -m app.main --web --enable-stream \
 ```
 
 - `--web` 开 `/web-ui`（含 `/web-ui/docs` 文档中心、`stream.html` 实时测试页）。
-- 兼容实时 WS 需 `--enable-stream`；DashScope 离线需 `--compat-fetch-allow-private`（允许下载本地音频 URL）。
+- 兼容实时 WS 在 standard 模式需 `--enable-stream`（vLLM 模式 `--serve-mode vllm` 下随兼容开关自动挂载，无需 `--enable-stream`）；DashScope 离线需 `--compat-fetch-allow-private`（允许下载本地音频 URL）。
 
 > ⚠️ **HTTP 代理坑**：若环境设了 `http_proxy`/`all_proxy`，客户端访问 `127.0.0.1` 会被代理拦截（表现为 503 / WebSocket 握手失败）。本地连本地服务务必绕过：`export NO_PROXY=127.0.0.1,localhost`（E2E 工具已内置绕过）。
 

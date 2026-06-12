@@ -1,5 +1,6 @@
 # 运行时依赖目录（构建时安装/运行时挂载，不进镜像）
 asr-service/venv/
+asr-service/venv-vllm/
 asr-service/models/
 asr-service/cache/
 asr-service/logs/

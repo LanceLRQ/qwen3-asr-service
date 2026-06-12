@@ -126,7 +126,7 @@ venv/bin/python -m app.main --web --enable-stream \
 ```
 
 - `--web` enables `/web-ui` (incl. `/web-ui/docs` doc center and the `stream.html` realtime test page).
-- Compat realtime WS needs `--enable-stream`; DashScope offline needs `--compat-fetch-allow-private` (allow downloading local audio URLs).
+- Compat realtime WS needs `--enable-stream` in standard mode (under vLLM mode `--serve-mode vllm` it auto-mounts with the compat switches, no `--enable-stream`); DashScope offline needs `--compat-fetch-allow-private` (allow downloading local audio URLs).
 
 > ⚠️ **HTTP proxy gotcha**: if the environment sets `http_proxy`/`all_proxy`, clients reaching `127.0.0.1` get intercepted by the proxy (shows up as 503 / WebSocket handshake failure). When connecting to a local service, bypass it: `export NO_PROXY=127.0.0.1,localhost` (the E2E tool does this automatically).
 

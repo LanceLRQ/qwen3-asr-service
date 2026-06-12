@@ -5,7 +5,7 @@
 # 优先级：命令行显式参数 > 本文件 > 环境变量 > 内置默认值；--no-config 可完全跳过本文件。
 # 注意：真实配置 config.yaml 可能含 api_key，已加入 .gitignore 请勿提交，建议 chmod 600 config.yaml。
 
-serve_mode: standard        # standard | vllm（vllm 为 Phase 3 占位，暂未实现，仅提供 /health /capabilities）
+serve_mode: standard        # standard | vllm（vllm=vLLM 原生流式，GPU 专用，含 partial→final；调优见下方 vLLM 段）
 device: auto                # auto | cuda | cpu（auto 自动检测：有 GPU 用 cuda，否则回退 cpu）
 model_size: 0.6b            # 0.6b | 1.7b（删除本行 = 按显存自动选择）
 enable_align: false         # 词级时间戳对齐模型（需要时打开；CPU 模式不支持）
@@ -30,6 +30,19 @@ enable_stream: true         # WS /v2/asr/stream（standard 模式）
 # stream_noise_filter: true       # 段级能量/SNR 门控总开关
 # stream_energy_floor_dbfs: -50.0 # 绝对能量门（dBFS，满量程参考）：段响度低于此丢弃
 # stream_snr_min_db: 6.0          # 自适应信噪比门（dB）：段相对环境底噪不足此值丢弃；<=0 关闭该门
+
+# ── vLLM 原生流式（serve_mode: vllm 时生效；GPU 专用，与 standard 实时互斥）──
+# gpu_memory_utilization: 0.6   # 显存占用率（×总显存为预算，实占略低）；单流 ASR 无需 0.8，调低省显存
+# vllm_max_model_len: 32768     # 单序列上下文上限；ASR 单句远小于此，过大(模型默认65536)会抬高 KV 下限、致低占用率起不来
+# vllm_chunk_size_sec: 1.0      # 流式解码块大小（秒）：越小 partial 越细腻
+# vllm_max_utterance_sec: 20    # 单句兜底切分（秒）：约束上下文/显存增长
+# vllm_concurrency: 1           # 同时解码会话数（generate 串行，>1 无吞吐收益）
+# vllm_end_silence_ms: 800      # 能量端点尾静音判停（毫秒）
+# vllm_enable_align: true       # 离线 /v2/asr 词级时间戳：加载对齐模型（false 省显存、无 words）
+# vllm_align_device: cuda       # 对齐器设备；cuda 快但显存在 gpu_memory_utilization 预算外，长音频易 OOM 时改 cpu（float32，慢但无 GPU 争用）
+# vllm_infer_batch_size: 4      # 一次对齐/ASR 的音频块数（块≤180s）；-1=全部一次（长音频对齐 OOM），小值省显存
+# vllm_offline_chunk_sec: 180   # 离线逐块转写切块时长（秒）：长音频按静音切块、块间报进度+查取消+压显存；调小=进度更细、显存更省
+# vllm_segment_gap_ms: 500      # 离线分段：相邻词间隙 > 此值断句（无 FSMN，以词间隙替代）
 
 # ── 离线任务持久化 ──
 enable_task_store: true     # 任务结果跨重启可查（data/tasks.db）；重启时未完成任务标记为失败

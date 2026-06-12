@@ -57,6 +57,17 @@ LEGACY_DEFAULTS = {
     "compat_fetch_timeout": 120,
     "compat_fetch_allow_private": False,
     "compat_external_base_url": None,
+    # ── vLLM（路线 A 原生流式）新增，非重构前遗留 ──
+    "gpu_memory_utilization": None,
+    "vllm_max_model_len": None,
+    "vllm_chunk_size_sec": None,
+    "vllm_max_utterance_sec": None,
+    "vllm_concurrency": None,
+    "vllm_end_silence_ms": None,
+    "vllm_enable_align": None,
+    "vllm_align_device": None,
+    "vllm_infer_batch_size": None,
+    "vllm_segment_gap_ms": None,
 }
 
 

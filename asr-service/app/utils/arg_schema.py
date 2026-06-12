@@ -172,6 +172,76 @@ ARG_SPECS = (
                 "noise floor; <=0 disables (default: 6.0)",
     ),
     ArgSpec(
+        key="gpu_memory_utilization", flags=("--gpu-memory-utilization",),
+        default=None, type=float, group="vLLM",
+        help=f"vLLM 显存占用率 (default: {cfg.VLLM_GPU_MEMORY_UTILIZATION})",
+        help_en=f"vLLM GPU memory utilization (default: {cfg.VLLM_GPU_MEMORY_UTILIZATION})",
+    ),
+    ArgSpec(
+        key="vllm_max_model_len", flags=("--vllm-max-model-len",),
+        default=None, type=int, group="vLLM",
+        help=f"vLLM 最大上下文长度，下调省 KV cache 显存 (default: {cfg.VLLM_MAX_MODEL_LEN})",
+        help_en=f"vLLM max context length; lower to save KV cache memory (default: {cfg.VLLM_MAX_MODEL_LEN})",
+    ),
+    ArgSpec(
+        key="vllm_chunk_size_sec", flags=("--vllm-chunk-size-sec",),
+        default=None, type=float, group="vLLM",
+        help=f"流式解码块大小（秒），越小 partial 越细腻 (default: {cfg.VLLM_CHUNK_SIZE_SEC})",
+        help_en=f"Streaming decode chunk size (sec); smaller = finer partials "
+                f"(default: {cfg.VLLM_CHUNK_SIZE_SEC})",
+    ),
+    ArgSpec(
+        key="vllm_max_utterance_sec", flags=("--vllm-max-utterance-sec",),
+        default=None, type=int, group="vLLM",
+        help=f"单句兜底切分（秒），约束上下文/显存增长 (default: {cfg.VLLM_MAX_UTTERANCE_SEC})",
+        help_en=f"Per-utterance hard cut (sec); bounds context/memory growth "
+                f"(default: {cfg.VLLM_MAX_UTTERANCE_SEC})",
+    ),
+    ArgSpec(
+        key="vllm_concurrency", flags=("--vllm-concurrency",),
+        default=None, type=int, group="vLLM",
+        help=f"同时解码会话数（generate 串行，>1 无吞吐收益）(default: {cfg.VLLM_CONCURRENCY})",
+        help_en=f"Concurrent decoding sessions (generate is serial; >1 yields no throughput) "
+                f"(default: {cfg.VLLM_CONCURRENCY})",
+    ),
+    ArgSpec(
+        key="vllm_end_silence_ms", flags=("--vllm-end-silence-ms",),
+        default=None, type=int, group="vLLM",
+        help=f"能量端点尾静音判停（ms）(default: {cfg.VLLM_END_SILENCE_MS})",
+        help_en=f"Energy endpointer end-silence threshold (ms) (default: {cfg.VLLM_END_SILENCE_MS})",
+    ),
+    ArgSpec(
+        key="vllm_enable_align", flags=("--vllm-enable-align",),
+        default=None, type=bool, group="vLLM",
+        help=f"vLLM 离线加载对齐模型出词级时间戳 (default: {cfg.VLLM_ENABLE_ALIGN})",
+        help_en=f"vLLM offline: load aligner for word-level timestamps (default: {cfg.VLLM_ENABLE_ALIGN})",
+        negative_flags=("--no-vllm-align",),
+        negative_help="vLLM 离线不加载对齐模型（省显存，无词级时间戳）",
+        negative_help_en="vLLM offline: do not load the aligner (save VRAM, no word timestamps)",
+    ),
+    ArgSpec(
+        key="vllm_align_device", flags=("--vllm-align-device",),
+        default=None, choices=("cuda", "cpu"), group="vLLM",
+        help=f"对齐器加载设备；cuda 快但显存在 gpu_memory_utilization 预算外，OOM 时改 cpu "
+             f"(default: {cfg.VLLM_ALIGN_DEVICE})",
+        help_en=f"Aligner device; cuda is fast but its VRAM is outside gpu_memory_utilization, "
+                f"switch to cpu on OOM (default: {cfg.VLLM_ALIGN_DEVICE})",
+    ),
+    ArgSpec(
+        key="vllm_infer_batch_size", flags=("--vllm-infer-batch-size",),
+        default=None, type=int, group="vLLM",
+        help=f"一次对齐/ASR 的音频块数（块≤180s）；-1=全部一次（长音频对齐易 OOM），"
+             f"小值省显存 (default: {cfg.VLLM_INFER_BATCH_SIZE})",
+        help_en=f"Audio chunks per alignment/ASR batch (chunks ≤180s); -1=all at once "
+                f"(long audio aligner OOM), smaller saves VRAM (default: {cfg.VLLM_INFER_BATCH_SIZE})",
+    ),
+    ArgSpec(
+        key="vllm_segment_gap_ms", flags=("--vllm-segment-gap-ms",),
+        default=None, type=int, group="vLLM",
+        help=f"vLLM 离线分段词间隙阈值（ms），相邻词间隙超此断句 (default: {cfg.VLLM_SEGMENT_GAP_MS})",
+        help_en=f"vLLM offline segmentation word-gap threshold (ms) (default: {cfg.VLLM_SEGMENT_GAP_MS})",
+    ),
+    ArgSpec(
         key="enable_task_store", flags=("--enable-task-store",), default=False, type=bool,
         group="离线任务",
         help="离线任务持久化（data/tasks.db）：结果跨重启可查",

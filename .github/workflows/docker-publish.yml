@@ -12,6 +12,9 @@ name: Docker Publish
 #   - CPU  (amd64+arm64 多架构) -> :X.Y.Z-cpu    / :latest-cpu
 #     CPU 变体为多架构 manifest：amd64 与 arm64 共用 Dockerfile.cpu，
 #     拉取时 Docker 按本机架构自动选择（amd64→OpenVINO INT8，arm64→OpenVINO FP32，运行时自选）。
+#   - vLLM (amd64)            -> :X.Y.Z-vllm   / :latest-vllm
+#     vLLM 变体为 GPU 原生流式独立镜像（基底 vllm/vllm-openai），独立 build + merge-vllm，
+#     构建失败不阻塞 GPU/CPU 发布。
 on:
   push:
     tags:
@@ -154,6 +157,51 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  vllm:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      # vLLM 镜像（基底 vllm/vllm-openai 约 9GB 压缩）解压后很大，先清理腾出磁盘
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push by digest (vLLM, amd64)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.vllm
+          platforms: linux/amd64
+          build-args: |
+            APP_VERSION=${{ needs.setup.outputs.version }}
+            VLLM_TAG=v0.14.0
+          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          provenance: false
+
+      - name: Export digest
+        run: |
+          mkdir -p "${RUNNER_TEMP}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${RUNNER_TEMP}/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-vllm
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
   # 全部构建完成后统一挂 tag：GPU 单架构、CPU 合并 amd64+arm64 为多架构 manifest
   merge:
     needs: [setup, gpu, cpu-amd64, cpu-arm64]
@@ -205,3 +253,40 @@ jobs:
         run: |
           docker buildx imagetools inspect "${IMAGE_NAME}:${VERSION}"
           docker buildx imagetools inspect "${IMAGE_NAME}:${VERSION}-cpu"
+
+  # vLLM 独立挂 tag：仅依赖 vllm 构建，与 gpu/cpu 的 merge 解耦，
+  # vLLM 构建失败不影响 GPU/CPU 镜像发布
+  merge-vllm:
+    needs: [setup, vllm]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.setup.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-vllm
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Resolve digest
+        id: digests
+        run: |
+          vllm=$(ls "${RUNNER_TEMP}/digests/digests-vllm")
+          echo "vllm_src=${IMAGE_NAME}@sha256:${vllm}" >> "$GITHUB_OUTPUT"
+
+      - name: Push vllm tags
+        run: |
+          docker buildx imagetools create -t "${IMAGE_NAME}:${VERSION}-vllm" \
+            "${{ steps.digests.outputs.vllm_src }}"
+          docker buildx imagetools create -t "${IMAGE_NAME}:latest-vllm" \
+            "${{ steps.digests.outputs.vllm_src }}"
+
+      - name: Inspect published tag
+        run: |
+          docker buildx imagetools inspect "${IMAGE_NAME}:${VERSION}-vllm"

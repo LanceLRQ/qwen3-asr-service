@@ -160,6 +160,52 @@ docker compose -f docker/docker-compose.yml down
 
 Startup parameters, API keys, port mappings, etc. can be configured in `docker/docker-compose.yml`. See comments in the file. The CPU variant lives in `docker/docker-compose.cpu.yml`.
 
+### vLLM Native Streaming Image (standalone)
+
+The vLLM mode (Route A, incremental partial→final streaming plus an offline `/v2/asr` with the same contract as standard) ships as a **standalone GPU-only image** derived from the official `vllm/vllm-openai` image — not merged with the default image, so standard users don't download vLLM's heavy CUDA kernels and vllm users don't download OpenVINO/funasr. For capability differences (including the offline segmentation/punctuation/speaker trade-offs) and parameters see [Configuration: vLLM Native Streaming Mode](configuration_EN.md#vllm-native-streaming-mode-route-a).
+
+```bash
+# Start (separate port 8766, coexists with standard asr on 8765)
+docker compose -f docker/docker-compose.vllm.yml up -d
+
+# Stop
+docker compose -f docker/docker-compose.vllm.yml down
+
+# Build the vLLM image locally (build.sh option 4)
+bash docker/build.sh   # choose "4) vLLM"
+```
+
+> The vLLM engine holds the GPU in a separate EngineCore subprocess and the service runs a single worker (PID 1 reaps the subprocess in the container). It loads HF full-precision `models/asr/0.6b`/`1.7b` (shares the `models/` mount with standard).
+>
+> **Models for offline word timestamps / speakers**: `--vllm-enable-align` (on by default) needs the aligner `models/asr/aligner` (Qwen3-ForcedAligner, pulled from HF); `--enable-speaker` needs the voiceprint model `models/speaker/campplus` (CAM++, ModelScope-only) — `requirements-vllm.txt` bundles `modelscope` as a download fallback, but pre-mounting this directory is recommended in production to avoid runtime network access. Speaker clustering depends on `scipy`/`scikit-learn` (also bundled).
+>
+> ⚠️ **Long-audio alignment OOM**: the ForcedAligner loads in the main process and its VRAM is **not counted in `--gpu-memory-utilization`** (which only bounds the vLLM EngineCore subprocess). `transcribe` chunks internally at ≤180s but by default feeds **all** of a file's chunks into the aligner forward at once — long audio (e.g. 30 min) stacks activations and raises `CUDA out of memory` (short audio is a single chunk, unaffected). Remedies (recommended order): ① `--vllm-infer-batch-size` (now defaults to 4) aligns batch-by-batch, peak VRAM drops with batch size — drop to 1 if long audio still OOMs; ② `--vllm-align-device cpu` (aligner on CPU, no GPU contention, slower); ③ lower `--gpu-memory-utilization`; ④ `--no-vllm-align`. See the [configuration guide](configuration_EN.md).
+
+> **Compatibility APIs (OpenAI/DashScope) & offline speakers**: vLLM mode also supports `--enable-openai-api`/`--enable-dashscope-api` (offline + realtime WS) and `--enable-speaker`/`--enable-speaker-db` (offline speaker diarization/identification, CAM++; speech regions come from an energy VAD, weaker than standard's FSMN). Key difference vs standard — vLLM streaming is always on, so **realtime compat auto-mounts with the compat switches and needs no `--enable-stream`**, and realtime supports per-token increments (DashScope intermediate results forwarded cleanly / OpenAI delta best-effort). Local launch uses the isolated env (not the default venv): `venv-vllm/bin/python -m app.main --serve-mode vllm …` (Docker is wrapped by the compose above; vLLM requires CUDA and exits on non-GPU devices). See the [compatibility API docs](api/compat_EN.md) for capabilities and protocol.
+
+#### vLLM Startup Logs (expected, not failures)
+
+On startup/shutdown the vLLM service prints two lines that look like errors but are **harmless** — safe to ignore:
+
+1. **`ERROR … repo_utils.py … Error retrieving safetensors: Repo id must be in the form …` (retries twice)**
+   While inferring the model dtype, vLLM has an upstream quirk for **local model directories**: instead of detecting the local path first, it passes the absolute path to the HF Hub as a repo id, which the repo-id format validator rejects. The exception is caught internally and the dtype falls back to the model config, so the **model still loads as bfloat16** — no impact on functionality or VRAM. `HF_HUB_OFFLINE=1` does not suppress this line (the format check runs before the offline check). Ignore it.
+
+2. **On exit (`Ctrl+C` / `docker stop`): `Engine core proc EngineCore_DP0 died unexpectedly`**
+   vLLM keeps the CUDA context in a separate `EngineCore` subprocess; on shutdown it exits together with the main process, and the client's monitor thread prints this line — a **normal shutdown event**, not a crash.
+
+**To confirm the service is actually ready**, rely on these two signals (not on the presence/absence of the ERROR above):
+
+```
+INFO: Application startup complete.
+INFO: Uvicorn running on http://<host>:<port>
+```
+
+```bash
+curl http://127.0.0.1:8765/v2/health   # ready when it returns {"status":"ready","mode":"vllm",...}
+```
+
+> Model loading (torch.compile + weights) takes tens of seconds; wait for `Uvicorn running` before judging — don't mistake the loading phase for a failure. For local (non-container) runs, if VRAM doesn't drop after `Ctrl+C`, an `EngineCore` subprocess lingers — clear it with `pkill -KILL -f EngineCore` (container deployments reap it automatically via PID 1).
+
 ### Build Image Locally
 
 ```bash
@@ -180,10 +226,10 @@ bash manage.sh
 
 Management script features:
 
-- **Docker Compose start (config.yaml-driven, recommended)**: on first use, auto-generates `config.yaml` from `config.example.yaml`; edit the config then start/stop/restart the container, view logs, switch GPU/CPU compose
-- Docker management (pull/build images, parameter-wizard start/stop containers, view logs)
-- Virtual environment management (install/uninstall/view info)
-- Start service (interactive parameter configuration with config saving)
+- **Docker Compose start (config.yaml-driven, recommended)**: on first use, auto-generates `config.yaml` from `config.example.yaml`; edit the config then start/stop/restart the container, view logs, switch GPU/CPU/**vLLM** compose
+- Docker management (pull images in GPU/CPU/**vLLM** variants, build images, parameter-wizard start/stop containers, view logs)
+- Virtual environment management (install/uninstall/view info for both standard `venv` and **vLLM `venv-vllm`**)
+- Start service (interactive parameter configuration including **`serve-mode` standard/vllm**; vLLM auto-uses the venv-vllm env / `-vllm` image; config saving supported)
 
 ## Verify the Service
 
