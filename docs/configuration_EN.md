@@ -30,7 +30,7 @@ All parameters are passed through `bash start.sh <args>`. Config-file key = long
 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
-| `--serve-mode` | `standard` / `vllm` | `standard` | Serving mode; `vllm` is a placeholder, not implemented yet (only /health and /capabilities) |
+| `--serve-mode` | `standard` / `vllm` | `standard` | Serving mode; `vllm` = vLLM native streaming (GPU-only, partial→final realtime + offline `/v2/asr`) |
 | `--device` | `auto` / `cuda` / `cpu` | `auto` | Device; `auto` detects (≥6GB VRAM → 1.7B, 4–6GB → 0.6B, <4GB disables alignment, no GPU falls back to CPU/OpenVINO) |
 | `--model-size` | `0.6b` / `1.7b` | Auto by VRAM | ASR model size |
 | `--enable-align` / `--no-align` | - | Enabled | Alignment model (word-level timestamps); force-disabled in CPU mode |
@@ -104,12 +104,14 @@ Effective only in vllm mode; requires a CUDA GPU and an isolated environment/ima
 
 | Parameter | Value | Default | Description |
 |------|------|--------|------|
-| `--gpu-memory-utilization` | 0–1 | `0.8` | vLLM GPU memory utilization (×total VRAM as budget) |
-| `--vllm-max-model-len` | number | model default (65536) | Max context length; lower to save KV cache memory |
+| `--gpu-memory-utilization` | 0–1 | `0.6` | vLLM GPU memory utilization (×total VRAM as budget; single-stream ASR needs no 0.8) |
+| `--vllm-max-model-len` | number | `32768` | Max context length; too large raises the KV cache floor and prevents low-utilization startup |
 | `--vllm-chunk-size-sec` | float | `1.0` | Streaming decode chunk size (sec); smaller = finer partials (range 0.5–5) |
 | `--vllm-max-utterance-sec` | number | `20` | Per-utterance hard cut (sec); bounds context/memory growth |
 | `--vllm-concurrency` | number | `1` | Concurrent decoding sessions (generate is serial; >1 yields no throughput) |
 | `--vllm-end-silence-ms` | ms | `800` | Energy endpointer end-silence threshold |
+| `--vllm-enable-align` / `--no-vllm-align` | - | on | Offline `/v2/asr` word timestamps: load the aligner (off saves VRAM, no words) |
+| `--vllm-segment-gap-ms` | ms | `500` | Offline segmentation: split when the inter-word gap exceeds this (no FSMN; word-gap proxy) |
 
 ### Config-file Meta Parameters
 
@@ -215,20 +217,30 @@ api_key: "sk-your-key"
 
 ## vLLM Native Streaming Mode (Route A)
 
-`--serve-mode vllm` enables the vLLM native streaming engine, providing **incremental (partial→final)** real-time transcription; it is **mutually exclusive** with the default `standard` mode (Route B: online VAD + offline decode, per-segment final).
+`--serve-mode vllm` enables the vLLM native streaming engine, providing **incremental (partial→final)** real-time transcription, plus an **offline `/v2/asr`** with the same contract as `standard`; it is **mutually exclusive** with the default `standard` mode (Route B: online VAD + offline decode, per-segment final).
 
 **Capability differences**
 
 | Aspect | standard (default) | vllm |
 |------|-----------------|------|
-| Endpoints | offline v1/v2 + realtime WS (`--enable-stream`) | **realtime WS `/v2/asr/stream` only** + `/health` + `/capabilities` |
-| Incremental results | none (per-segment final) | **partial→final** |
-| Word timestamps / speaker | supported | not supported |
-| Device | GPU / CPU | **CUDA GPU only** |
+| Endpoints | offline v1/v2 + realtime WS (`--enable-stream`) | **offline v1/v2 + realtime WS `/v2/asr/stream` (always on)** + `/health` `/capabilities` |
+| Incremental results (realtime) | none (per-segment final) | **partial→final** |
+| Word timestamps | supported | **offline supported** (ForcedAligner, on by default); not in realtime |
+| Speaker diarization/ID | supported | not supported (neither offline nor realtime; see below) |
+| Punctuation | CT-Transformer (toggleable) | model-native (**cannot be turned off**) |
+| Offline segment boundaries | FSMN-VAD | word-gap / whole-text fallback (coarser) |
+| Device | GPU / CPU | **CUDA GPU only** (CPU disabled by design, no CPU image) |
 | Throughput | concurrent sessions | single-stream serial (generate is serial; ≈ standard) |
 | Deps / image | funasr + OpenVINO… | isolated vLLM env (no funasr/OpenVINO), separate image |
 
 **Why an isolated environment**: vLLM pins a specific torch/CUDA (incompatible with standard's torch), so it requires an isolated `venv-vllm` or a separate image (`docker/Dockerfile.vllm`, derived from the official vLLM image). See the [deployment guide](deployment_EN.md).
+
+**Offline transcription (`/v2/asr`)**: vllm mode reuses the **exact same async task contract** as standard (`POST /v2/asr` → `task_id` → poll `GET /v2/tasks/{id}`, persistence, cancel), with ASR via vLLM batched `transcribe`. All differences from standard are **quality differences that do not break the result structure**, and are flagged in `result.warnings`:
+- **Segmentation**: word-gap splitting using word timestamps (`--vllm-segment-gap-ms`, default 500ms) + `--max-segment` re-split; falls back to a single whole-text segment when the aligner is off. Boundary precision is lower than FSMN-VAD.
+- **Punctuation**: produced natively by Qwen3-ASR (already punctuated); cannot be turned off — `with_punc=false` is recorded in `warnings`.
+- **Word timestamps**: `--vllm-enable-align` (on by default) via ForcedAligner, same as standard; `--no-vllm-align` disables it to save VRAM.
+- **Speaker**: not supported this phase; `diarize`/`identify_speakers` are recorded in `warnings`.
+> For high-fidelity offline with FSMN segmentation / CT-Transformer punctuation / speakers, use `standard` mode.
 
 **Start**
 

@@ -162,7 +162,7 @@ Startup parameters, API keys, port mappings, etc. can be configured in `docker/d
 
 ### vLLM Native Streaming Image (standalone)
 
-The vLLM mode (Route A, incremental partial→final streaming) ships as a **standalone GPU-only image** derived from the official `vllm/vllm-openai` image — not merged with the default image, so standard users don't download vLLM's heavy CUDA kernels and vllm users don't download OpenVINO/funasr. For capability differences and parameters see [Configuration: vLLM Native Streaming Mode](configuration_EN.md#vllm-native-streaming-mode-route-a).
+The vLLM mode (Route A, incremental partial→final streaming plus an offline `/v2/asr` with the same contract as standard) ships as a **standalone GPU-only image** derived from the official `vllm/vllm-openai` image — not merged with the default image, so standard users don't download vLLM's heavy CUDA kernels and vllm users don't download OpenVINO/funasr. For capability differences (including the offline segmentation/punctuation/speaker trade-offs) and parameters see [Configuration: vLLM Native Streaming Mode](configuration_EN.md#vllm-native-streaming-mode-route-a).
 
 ```bash
 # Start (separate port 8766, coexists with standard asr on 8765)

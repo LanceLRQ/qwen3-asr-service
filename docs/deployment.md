@@ -162,7 +162,7 @@ docker compose -f docker/docker-compose.yml down
 
 ### vLLM 原生流式镜像（独立）
 
-vLLM 模式（路线 A，逐句 partial→final 渐进流式）为 **GPU 专用的独立镜像**，基于 vLLM 官方镜像 `vllm/vllm-openai` 派生，不与默认镜像合并——standard 用户不下载 vLLM 重型 CUDA kernels，vllm 用户不下载 OpenVINO/funasr。能力差异与参数见 [配置文档：vLLM 原生流式模式](configuration.md#vllm-原生流式模式路线-a)。
+vLLM 模式（路线 A，逐句 partial→final 渐进流式 + 与 standard 同契约的离线 `/v2/asr`）为 **GPU 专用的独立镜像**，基于 vLLM 官方镜像 `vllm/vllm-openai` 派生，不与默认镜像合并——standard 用户不下载 vLLM 重型 CUDA kernels，vllm 用户不下载 OpenVINO/funasr。能力差异（含离线分段/标点/说话人的取舍）与参数见 [配置文档：vLLM 原生流式模式](configuration.md#vllm-原生流式模式路线-a)。
 
 ```bash
 # 启动（独立端口 8766，与 standard asr 8765 并存）
