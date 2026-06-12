@@ -57,7 +57,7 @@ When the service is started with `--api-key`, all compat endpoints require `Auth
 | Confidence/logprob | ➖ placeholder | ➖ not provided |
 | Prompt/temperature/hotwords/disfluency | ❌ ignored | ❌ ignored |
 
-> The realtime rows (last two above) differ by serving mode: **standard** (route B / VAD-offline) needs `--enable-stream` and emits only whole-sentence finals, no per-token increments; **vLLM** (`--serve-mode vllm`, route A native streaming) has streaming always on, mounts realtime compat with the compat switches (**no `--enable-stream` needed**), and emits per-token increments — DashScope intermediate `result-generated` (`sentence_end:false`) is naturally cumulative and forwarded cleanly; OpenAI `…delta` is **best-effort** (partials are cumulative and may be revised, so only a pure append yields a delta suffix, revision frames are skipped, and the authoritative full text is still the `…completed` event).
+> The realtime rows (last two above) differ by serving mode: **standard** (VAD-offline) needs `--enable-stream` and emits only whole-sentence finals, no per-token increments; **vLLM** (`--serve-mode vllm`, native streaming) has streaming always on, mounts realtime compat with the compat switches (**no `--enable-stream` needed**), and emits per-token increments — DashScope intermediate `result-generated` (`sentence_end:false`) is naturally cumulative and forwarded cleanly; OpenAI `…delta` is **best-effort** (partials are cumulative and may be revised, so only a pure append yields a delta suffix, revision frames are skipped, and the authoritative full text is still the `…completed` event).
 
 ## Compat vs native v2
 

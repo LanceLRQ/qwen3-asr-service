@@ -80,6 +80,7 @@ docker run -d --gpus all -p 8765:8765 \
 |------|------|
 | [部署指南](docs/deployment.md) | 系统要求、Linux / Windows / Docker 部署、三种运行模式、Web UI、安全终止 |
 | [配置文档](docs/configuration.md) | 启动参数全表、config.yaml 配置文件、环境变量、任务持久化、内置常量 |
+| [vLLM 与 standard 差异](docs/vllm-vs-standard.md) | vLLM 引擎相对默认 standard 模式的功能差异（选型与升级参考） |
 | [API 文档 v2（默认）](docs/api/v2.md) | 离线批处理、健康检查 / 能力查询、实时转写 WebSocket 协议 |
 | [API 文档 v1（兼容）](docs/api/v1.md) | 旧客户端兼容说明与版本演进约定 |
 | [兼容接口](docs/api/compat.md) | OpenAI / 阿里云 DashScope drop-in 兼容（离线 + 实时），改 base_url 即接入 |

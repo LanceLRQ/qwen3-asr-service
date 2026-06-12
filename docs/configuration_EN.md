@@ -17,7 +17,7 @@ Higher layers override lower ones for the same parameter; **explicitly passed** 
 - [Environment Variables](#environment-variables)
 - [Offline Task Persistence (tasks.db)](#offline-task-persistence-tasksdb)
 - [Speaker Diarization & Voiceprint Database (speakers.db)](#speaker-diarization--voiceprint-database-speakersdb)
-- [vLLM Native Streaming Mode (Route A)](#vllm-native-streaming-mode-route-a)
+- [vLLM Native Streaming Mode](#vllm-native-streaming-mode)
 - [Built-in Constants (app/config.py)](#built-in-constants-appconfigpy)
 
 ---
@@ -100,7 +100,7 @@ Reduces false triggers from far-field sounds and ambient noise. `--vad-speech-no
 
 ### vLLM Native Streaming (only `--serve-mode vllm`)
 
-Effective only in vllm mode; requires a CUDA GPU and an isolated environment/image (see [vLLM Native Streaming Mode](#vllm-native-streaming-mode-route-a) below).
+Effective only in vllm mode; requires a CUDA GPU and an isolated environment/image (see [vLLM Native Streaming Mode](#vllm-native-streaming-mode) below).
 
 | Parameter | Value | Default | Description |
 |------|------|--------|------|
@@ -122,7 +122,7 @@ Effective only in vllm mode; requires a CUDA GPU and an isolated environment/ima
 | `vllm_unfixed_chunk_num` | `2` | Number of leading streaming chunks that don't take history as prefix (cold-start stability) |
 | `vllm_unfixed_token_num` | `5` | After the leading chunks, roll back the last K tokens as prefix (reduces jitter) |
 | `vllm_energy_floor_dbfs` | `-45.0` | Streaming energy-endpoint gate (dBFS); above this counts as speech / sentence start |
-| `vllm_offline_chunk_sec` | `180` | Offline chunk-by-chunk transcription chunk length (sec); lower = finer progress, lower peak VRAM (see [Long audio & progress](#vllm-native-streaming-mode-route-a) below) |
+| `vllm_offline_chunk_sec` | `180` | Offline chunk-by-chunk transcription chunk length (sec); lower = finer progress, lower peak VRAM (see [Long audio & progress](#vllm-native-streaming-mode) below) |
 
 ### Config-file Meta Parameters
 
@@ -226,9 +226,9 @@ api_key: "sk-your-key"
 - **Auto-enrollment**: during offline transcription with `identify_speakers` enabled, speakers that miss the database and have sufficient speech (default ≥10s) are auto-enrolled as `说话人_NN` (Chinese for "Speaker_NN"); after renaming via `/web-ui/speakers` or `PATCH /v2/speakers/{id}`, subsequent transcriptions display the real name directly; the real-time path does not auto-enroll (online clustering drift easily causes duplicate records); matched speakers never get templates auto-appended either (to prevent sample poisoning) — add samples manually via `POST /v2/speakers/{id}/templates`.
 - **Compliance**: the enrollment endpoint enforces `consent=true` as double-insurance (endpoint + database constraint); enabling auto-enrollment means the deployer declares data-subject consent has been obtained; audio is not retained by default; the audit log is persisted alongside the database. **Backup = copy the single `data/speakers.db` file** (recommend including it in your regular backup plan); deleting the database completely erases all voiceprint data.
 
-## vLLM Native Streaming Mode (Route A)
+## vLLM Native Streaming Mode
 
-`--serve-mode vllm` enables the vLLM native streaming engine, providing **incremental (partial→final)** real-time transcription, plus an **offline `/v2/asr`** with the same contract as `standard`; it is **mutually exclusive** with the default `standard` mode (Route B: online VAD + offline decode, per-segment final).
+`--serve-mode vllm` enables the vLLM native streaming engine, providing **incremental (partial→final)** real-time transcription, plus an **offline `/v2/asr`** with the same contract as `standard`; it is **mutually exclusive** with the default `standard` mode (online VAD + offline decode, per-segment final).
 
 **Capability differences**
 

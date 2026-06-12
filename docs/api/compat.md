@@ -57,7 +57,7 @@
 | 置信度/logprob | ➖ 占位 | ➖ 不提供 |
 | 引导/温度/热词/顺滑 | ❌ 忽略 | ❌ 忽略 |
 
-> 实时（上表最后两行）的挂载与增量能力因模式而异：**standard**（route B / VAD-offline）需 `--enable-stream`，仅产整句 final、无逐字增量；**vLLM**（`--serve-mode vllm`，route A 原生流式）流式恒开、实时随兼容开关自动挂载（**无需 `--enable-stream`**），并产逐字增量——DashScope 中间 `result-generated`（`sentence_end:false`）天然累计、干净直发；OpenAI `…delta` 为 **best-effort**（partial 累计且可修订，仅纯追加时取新增后缀作 delta、修订帧跳过，权威全文仍以 `…completed` 为准）。
+> 实时（上表最后两行）的挂载与增量能力因模式而异：**standard**（VAD-offline）需 `--enable-stream`，仅产整句 final、无逐字增量；**vLLM**（`--serve-mode vllm`，原生流式）流式恒开、实时随兼容开关自动挂载（**无需 `--enable-stream`**），并产逐字增量——DashScope 中间 `result-generated`（`sentence_end:false`）天然累计、干净直发；OpenAI `…delta` 为 **best-effort**（partial 累计且可修订，仅纯追加时取新增后缀作 delta、修订帧跳过，权威全文仍以 `…completed` 为准）。
 
 ## 与原生 v2 的取舍
 

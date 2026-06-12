@@ -111,7 +111,7 @@ OpenAI Realtime transcription 会话（standard 模式需 `--enable-stream`；vL
 4. 客户端 → `input_audio_buffer.commit`（或关闭连接）触发末句冲刷
 5. 服务端 → 每句 `conversation.item.input_audio_transcription.completed`：`{"item_id":"item_0","transcript":"识别整句"}`
 
-> **能力与限制**：取决于运行模式——**standard**（route B / VAD-offline，`partial_results=false`）只产整句 `…completed`，不产逐字 `…delta`；**vLLM**（`--serve-mode vllm`，route A 原生流式，`partial_results=true`）在句内逐步下发 `…delta`，句末再发 `…completed` 整句。vLLM 的 `…delta` 为 **best-effort**：partial 是当前句累计文本且可能修订，仅纯追加时取新增后缀作 delta、修订帧跳过，权威全文仍以 `…completed` 为准。
+> **能力与限制**：取决于运行模式——**standard**（VAD-offline，`partial_results=false`）只产整句 `…completed`，不产逐字 `…delta`；**vLLM**（`--serve-mode vllm`，原生流式，`partial_results=true`）在句内逐步下发 `…delta`，句末再发 `…completed` 整句。vLLM 的 `…delta` 为 **best-effort**：partial 是当前句累计文本且可能修订，仅纯追加时取新增后缀作 delta、修订帧跳过，权威全文仍以 `…completed` 为准。
 
 ---
 

@@ -95,7 +95,7 @@ Paraformer realtime（standard 模式需 `--enable-stream`；vLLM 模式 `--serv
 5. 客户端 → `finish-task` → 服务端 → `task-finished`
 6. 同一连接可再发 `run-task` 起新任务（连接复用）
 
-> **能力与限制**：取决于运行模式——**standard**（route B / VAD-offline）只产整句 `result-generated`（`sentence_end:true`），不产中间结果（`sentence_end:false`）；**vLLM**（`--serve-mode vllm`，route A 原生流式）在句内逐步下发中间 `result-generated`（`sentence_end:false`，累计文本，`begin_time`/`end_time`=null、不带 `words`），句末再发 `sentence_end:true` 整句。DashScope 中间结果语义本就累计，与 vLLM partial 天然契合、干净直发（非 best-effort）。
+> **能力与限制**：取决于运行模式——**standard**（VAD-offline）只产整句 `result-generated`（`sentence_end:true`），不产中间结果（`sentence_end:false`）；**vLLM**（`--serve-mode vllm`，原生流式）在句内逐步下发中间 `result-generated`（`sentence_end:false`，累计文本，`begin_time`/`end_time`=null、不带 `words`），句末再发 `sentence_end:true` 整句。DashScope 中间结果语义本就累计，与 vLLM partial 天然契合、干净直发（非 best-effort）。
 
 ---
 

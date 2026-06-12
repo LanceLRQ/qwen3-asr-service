@@ -111,7 +111,7 @@ OpenAI Realtime transcription session (standard mode needs `--enable-stream`; un
 4. Client → `input_audio_buffer.commit` (or close) flushes the trailing sentence
 5. Server → per sentence `conversation.item.input_audio_transcription.completed`: `{"item_id":"item_0","transcript":"full sentence"}`
 
-> **Capabilities & limits**: depends on the serving mode — **standard** (route B / VAD-offline, `partial_results=false`) emits only whole-sentence `…completed`, never per-token `…delta`; **vLLM** (`--serve-mode vllm`, route A native streaming, `partial_results=true`) streams `…delta` within a sentence, then a final `…completed`. The vLLM `…delta` is **best-effort**: partials are the running cumulative text of the current sentence and may be revised, so only a pure append yields a delta suffix, revision frames are skipped, and the authoritative full text is still the `…completed` event.
+> **Capabilities & limits**: depends on the serving mode — **standard** (VAD-offline, `partial_results=false`) emits only whole-sentence `…completed`, never per-token `…delta`; **vLLM** (`--serve-mode vllm`, native streaming, `partial_results=true`) streams `…delta` within a sentence, then a final `…completed`. The vLLM `…delta` is **best-effort**: partials are the running cumulative text of the current sentence and may be revised, so only a pure append yields a delta suffix, revision frames are skipped, and the authoritative full text is still the `…completed` event.
 
 ---
 

@@ -17,7 +17,7 @@
 - [环境变量](#环境变量)
 - [离线任务持久化（tasks.db）](#离线任务持久化tasksdb)
 - [说话人分离与声纹库（speakers.db）](#说话人分离与声纹库speakersdb)
-- [vLLM 原生流式模式（路线 A）](#vllm-原生流式模式路线-a)
+- [vLLM 原生流式模式](#vllm-原生流式模式)
 - [内置常量（app/config.py）](#内置常量appconfigpy)
 
 ---
@@ -100,7 +100,7 @@
 
 ### vLLM 原生流式（仅 `--serve-mode vllm`）
 
-仅 vllm 模式生效；要求 CUDA GPU，须独立环境/镜像（见下方 [vLLM 原生流式模式](#vllm-原生流式模式路线-a)）。
+仅 vllm 模式生效；要求 CUDA GPU，须独立环境/镜像（见下方 [vLLM 原生流式模式](#vllm-原生流式模式)）。
 
 | 参数 | 取值 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -122,7 +122,7 @@
 | `vllm_unfixed_chunk_num` | `2` | 流式起始不拿历史当前缀的块数（冷启动稳定） |
 | `vllm_unfixed_token_num` | `5` | 起始块之后回滚末 K token 当前缀（降抖动） |
 | `vllm_energy_floor_dbfs` | `-45.0` | 流式能量端点门限（dBFS），高于此判为语音/句开始 |
-| `vllm_offline_chunk_sec` | `180` | 离线逐块转写切块时长（秒），调小=进度更细、峰值显存更省（详见下方[长音频与进度](#vllm-原生流式模式路线-a)） |
+| `vllm_offline_chunk_sec` | `180` | 离线逐块转写切块时长（秒），调小=进度更细、峰值显存更省（详见下方[长音频与进度](#vllm-原生流式模式)） |
 
 ### 配置文件元参数
 
@@ -226,9 +226,9 @@ api_key: "sk-your-key"
 - **自动登记**：开启 `identify_speakers` 的离线转写中，未命中库且语音足量（默认 ≥10s）的说话人自动登记为「说话人_NN」，在 `/web-ui/speakers` 或 `PATCH /v2/speakers/{id}` 改名后，后续转写直接显示真名；实时路径不自动登记（在线聚类漂移易重复建档）；已命中库的说话人也不会自动追加模板（防样本投毒），补充样本需手动调用 `POST /v2/speakers/{id}/templates`。
 - **合规**：登记接口强制 `consent=true` 双保险（接口 + 库约束）；开启自动登记即部署方声明已获数据主体同意；默认不留存音频；审计日志随库落盘。**备份 = 拷贝 `data/speakers.db` 单文件**（建议随常规备份计划），删库即彻底清除全部声纹数据。
 
-## vLLM 原生流式模式（路线 A）
+## vLLM 原生流式模式
 
-`--serve-mode vllm` 启用 vLLM 原生流式引擎，提供**逐句渐进（partial→final）**的实时转写，并提供与 `standard` 同契约的**离线 `/v2/asr`**；与默认 `standard` 模式（路线 B：在线 VAD + 离线解码，按句 final）**互斥启动**。
+`--serve-mode vllm` 启用 vLLM 原生流式引擎，提供**逐句渐进（partial→final）**的实时转写，并提供与 `standard` 同契约的**离线 `/v2/asr`**；与默认 `standard` 模式（在线 VAD + 离线解码，按句 final）**互斥启动**。
 
 **能力差异**
 

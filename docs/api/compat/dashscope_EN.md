@@ -95,7 +95,7 @@ Paraformer realtime (standard mode needs `--enable-stream`; under vLLM mode `--s
 5. Client → `finish-task` → Server → `task-finished`
 6. The same connection can issue another `run-task` (connection reuse)
 
-> **Capabilities & limits**: depends on the serving mode — **standard** (route B / VAD-offline) emits only whole sentences `result-generated` (`sentence_end:true`), no intermediate results (`sentence_end:false`); **vLLM** (`--serve-mode vllm`, route A native streaming) streams intermediate `result-generated` within a sentence (`sentence_end:false`, cumulative text, `begin_time`/`end_time`=null, no `words`), then a final `sentence_end:true`. DashScope's intermediate-result semantics are inherently cumulative and align naturally with vLLM partials — forwarded cleanly (not best-effort).
+> **Capabilities & limits**: depends on the serving mode — **standard** (VAD-offline) emits only whole sentences `result-generated` (`sentence_end:true`), no intermediate results (`sentence_end:false`); **vLLM** (`--serve-mode vllm`, native streaming) streams intermediate `result-generated` within a sentence (`sentence_end:false`, cumulative text, `begin_time`/`end_time`=null, no `words`), then a final `sentence_end:true`. DashScope's intermediate-result semantics are inherently cumulative and align naturally with vLLM partials — forwarded cleanly (not best-effort).
 
 ---
 
