@@ -125,18 +125,29 @@ class VLLMASREngine:
         return state.text, state.language
 
     # ── 离线一次性转写（同步；与流式共用同一 vllm.LLM 与 _infer_lock，故串行）──
-    def transcribe(self, audio_path: str, language=None, with_words: bool = False):
-        """对整段音频做离线转写，返回 [ASRTranscription, ...]（单文件即长度 1）。
+    def transcribe(self, audio, language=None, with_words: bool = False):
+        """对一段音频做离线转写，返回 [ASRTranscription, ...]（单输入即长度 1）。
 
-        with_words 且对齐器已加载时产词级时间戳（state 内部已加 chunk offset = 绝对时间）。
-        长音频由 qwen_asr 内部按 MAX_*_INPUT_SECONDS 切块后合并回单结果。
+        audio 可为文件路径或 (np.ndarray, sr) / np.ndarray（qwen_asr 内部归一化），便于离线
+        逐块转写时直接传切块数组、免临时文件。with_words 且对齐器已加载时产词级时间戳。
+        长音频由 qwen_asr 内部按 MAX_*_INPUT_SECONDS 再切块后合并回单结果。
         """
         if self._model is None:
             raise RuntimeError("vLLM ASR 引擎未加载，请先调用 load()")
         want_ts = bool(with_words) and self._enable_align
         with self._infer_lock:
             return self._model.transcribe(
-                audio=audio_path, language=language, return_time_stamps=want_ts)
+                audio=audio, language=language, return_time_stamps=want_ts)
+
+    def split_chunks(self, wav, sr, chunk_sec):
+        """按低能量（静音）边界把长音频切块，返回 [(chunk_wav, offset_sec)]。
+
+        复用 qwen_asr 的 split_audio_into_chunks（与其 transcribe 内部对齐切块同一函数，
+        保证块拼接=原音频）。供离线逐块转写：进度反馈 / 峰值显存 / 取消粒度。惰性 import
+        使本依赖只在 vLLM 环境触发。
+        """
+        from qwen_asr.inference.utils import split_audio_into_chunks
+        return split_audio_into_chunks(wav, sr, max_chunk_sec=float(chunk_sec))
 
     @property
     def is_loaded(self) -> bool:

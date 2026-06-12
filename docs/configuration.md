@@ -242,6 +242,7 @@ api_key: "sk-your-key"
 - **标点**：Qwen3-ASR 模型原生输出（已含标点），无法单独关闭；请求 `with_punc=false` 仅记入 `warnings`。
 - **词级时间戳**：`--vllm-enable-align`（默认开）经 ForcedAligner 产出，与 standard 同款；`--no-vllm-align` 可关以省显存。
   - ⚠️ **长音频对齐 OOM**：对齐器是主进程内的独立 transformers 模型，其显存**不计入 `gpu_memory_utilization`**（该参数只约束 vLLM EngineCore 子进程）。`transcribe` 内部按 ≤180s 切块，但默认（`max_inference_batch_size=-1`）会把一个文件的**全部块一次性**喂对齐器前向——长音频（如 30 分钟≈10 块）激活叠加即 `CUDA out of memory`（短音频只 1 块、不受影响）。对策（按推荐序）：① **`--vllm-infer-batch-size`**（默认已改为 `4`）逐批对齐，峰值显存随批大小线性下降，仍在 GPU、最快；长音频仍 OOM 则降到 `1`；② `--vllm-align-device cpu` 把对齐器移到 CPU（无 GPU 争用，稳但慢）；③ 降 `--gpu-memory-utilization` 留更多 GPU 余量；④ `--no-vllm-align` 放弃词级时间戳。
+- **长音频与进度**：离线对超过 `vllm_offline_chunk_sec`（默认 180s）的音频按静音边界**逐块转写**，转写进度（0.1→0.85）随块实时更新、并可在块间响应取消（短音频整段直转）。块由 qwen_asr 同款切法产生、拼接=原音频，质量与整段一致；调小 `vllm_offline_chunk_sec` 可让进度更细、峰值显存更省。
 - **说话人分离/识别**：`--enable-speaker`（+ 声纹库 `--enable-speaker-db`）后离线 `segments[].speaker` / `speaker_name` / `speakers` 字段与 standard 一致；引擎为 CAM++（CPU、torch，非 funasr），**滑窗语音区间用能量 VAD 替代 FSMN-VAD**（边界较粗）。未开启时请求 `diarize`/`identify_speakers` 记入 `warnings`。需额外依赖 `scipy`/`scikit-learn`/`modelscope`（或预挂 CAM++ 模型目录），见 [requirements-vllm.txt](../asr-service/requirements-vllm.txt)。实时流式仍无说话人。
 > 需要 FSMN 精分段 / CT-Transformer 标点 / 实时说话人的高保真，请用 `standard` 模式。
 

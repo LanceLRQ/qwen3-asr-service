@@ -14,19 +14,33 @@ from app import config as cfg
 
 
 class _Engine:
-    """最小 mock 引擎：align_enabled 属性 + transcribe 记录调用并回放预置结果。"""
+    """最小 mock 引擎：align_enabled + split_chunks（等分）+ transcribe 记录调用并回放结果。
 
-    def __init__(self, align=True, result=None):
+    chunk_results 给定则按其数量切块、逐块回放对应结果（验证逐块转写/进度/合并）；
+    否则每次 transcribe 回放同一 result（单块/短音频路径）。
+    """
+
+    def __init__(self, align=True, result=None, chunk_results=None):
         self._align = align
         self._result = result or []
+        self._chunk_results = chunk_results
+        self._n_chunks = len(chunk_results) if chunk_results else 1
         self.transcribe_calls = []
 
     @property
     def align_enabled(self):
         return self._align
 
-    def transcribe(self, audio_path, language=None, with_words=False):
-        self.transcribe_calls.append((audio_path, language, with_words))
+    def split_chunks(self, wav, sr, chunk_sec):
+        n = self._n_chunks
+        L = max(1, len(wav) // n)
+        return [(wav[i * L:(i + 1) * L] if i < n - 1 else wav[i * L:], round(i * L / sr, 3))
+                for i in range(n)]
+
+    def transcribe(self, audio, language=None, with_words=False):
+        self.transcribe_calls.append((audio, language, with_words))
+        if self._chunk_results is not None:
+            return self._chunk_results[len(self.transcribe_calls) - 1]
         return self._result
 
 
@@ -249,8 +263,11 @@ def test_run_no_speaker_engine_warns_diarize(patched_spk):
 # ── run_vllm_offline 端到端 ────────────────────────────────
 @pytest.fixture
 def patched(monkeypatch, tmp_path):
+    """写真实 5s wav（_transcribe_progressive 需 sf.read）；默认时长 5s ≤ 切块阈值=单块直转。"""
+    import soundfile as sf
     monkeypatch.setattr(cfg, "UPLOADS_DIR", str(tmp_path))
-    monkeypatch.setattr(vo, "convert_to_wav", lambda i, o: open(o, "wb").close())
+    monkeypatch.setattr(vo, "convert_to_wav",
+                        lambda i, o: sf.write(o, np.zeros(16000 * 5, dtype="float32"), 16000))
     monkeypatch.setattr(vo, "get_audio_duration", lambda p: 5.0)
     return monkeypatch
 
@@ -291,3 +308,64 @@ def test_run_cancelled_before_transcribe(patched):
 
     assert r["segments"] == [] and r["full_text"] == ""
     assert eng.transcribe_calls == []                  # 取消 → 未触发推理
+
+
+# ── 长音频逐块转写（进度 / 合并 / 取消粒度）──
+def _prog_patch(monkeypatch, tmp_path, duration):
+    import soundfile as sf
+    monkeypatch.setattr(cfg, "UPLOADS_DIR", str(tmp_path))
+    monkeypatch.setattr(vo, "convert_to_wav",
+                        lambda i, o: sf.write(o, np.zeros(16000 * 6, dtype="float32"), 16000))
+    monkeypatch.setattr(vo, "get_audio_duration", lambda p: duration)
+
+
+def test_run_transcribe_progressive(monkeypatch, tmp_path):
+    """长音频(>切块阈值)逐块转写：N 次 transcribe、转写阶段多点递增进度、文本按块合并。"""
+    _prog_patch(monkeypatch, tmp_path, duration=600.0)            # >180 → 切块
+    eng = _Engine(align=False, chunk_results=[
+        [_trans("第一段。")], [_trans("第二段。")], [_trans("第三段。")]])
+    prog = []
+    task = {"task_id": "p1", "file_path": "/x.wav", "options": {"with_words": False}}
+    r = vo.run_vllm_offline(eng, task, progress_callback=prog.append)
+
+    assert len(eng.transcribe_calls) == 3                        # 逐块
+    assert r["full_text"] == "第一段。第二段。第三段。"               # 按块合并（""join）
+    mid = [p for p in prog if 0.1 < p < 0.85]
+    assert len(mid) >= 2 and mid == sorted(mid)                  # 转写阶段多点递增
+    assert prog[-1] == 1.0
+
+
+def test_run_transcribe_progressive_words_offset(monkeypatch, tmp_path):
+    """逐块词级时间戳按块 offset 归到绝对时间（第二块 +~3s）。"""
+    _prog_patch(monkeypatch, tmp_path, duration=400.0)           # >180 → 2 块（6s 等分→offset≈3s）
+    eng = _Engine(align=True, chunk_results=[
+        [_trans("你好。", [("你", 0.0, 0.2), ("好", 0.2, 0.4)])],
+        [_trans("世界。", [("世", 0.0, 0.2), ("界", 0.2, 0.4)])]])
+    task = {"task_id": "p2", "file_path": "/x.wav", "options": {"with_words": True}}
+    r = vo.run_vllm_offline(eng, task)
+
+    assert len(eng.transcribe_calls) == 2
+    assert r["full_text"] == "你好。世界。"
+    all_words = [w for s in r["segments"] for w in s.get("words", [])]
+    assert any(w["start"] >= 3.0 for w in all_words)             # 第2块 offset(~3s)+词时间
+
+
+def test_run_transcribe_progressive_cancel_midway(monkeypatch, tmp_path):
+    """逐块转写途中取消：已转写块后即停，结果为空、未跑完所有块。"""
+    _prog_patch(monkeypatch, tmp_path, duration=600.0)
+    eng = _Engine(align=False, chunk_results=[[_trans("一")], [_trans("二")], [_trans("三")]])
+
+    class _CancelAfter:
+        def __init__(self, n):
+            self.calls, self.n = 0, n
+
+        def __call__(self):
+            self.calls += 1
+            return self.calls > self.n
+
+    # 调用序：pre-check(1,False) → chunk0 前(2,False)→转写 → chunk1 前(3,True)→停
+    task = {"task_id": "p3", "file_path": "/x.wav", "options": {"with_words": False}}
+    r = vo.run_vllm_offline(eng, task, cancelled=_CancelAfter(2))
+
+    assert r["full_text"] == "" and r["segments"] == []
+    assert len(eng.transcribe_calls) == 1                        # 只转写首块即被取消

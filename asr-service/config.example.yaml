@@ -41,6 +41,7 @@ enable_stream: true         # WS /v2/asr/stream（standard 模式）
 # vllm_enable_align: true       # 离线 /v2/asr 词级时间戳：加载对齐模型（false 省显存、无 words）
 # vllm_align_device: cuda       # 对齐器设备；cuda 快但显存在 gpu_memory_utilization 预算外，长音频易 OOM 时改 cpu（float32，慢但无 GPU 争用）
 # vllm_infer_batch_size: 4      # 一次对齐/ASR 的音频块数（块≤180s）；-1=全部一次（长音频对齐 OOM），小值省显存
+# vllm_offline_chunk_sec: 180   # 离线逐块转写切块时长（秒）：长音频按静音切块、块间报进度+查取消+压显存；调小=进度更细、显存更省
 # vllm_segment_gap_ms: 500      # 离线分段：相邻词间隙 > 此值断句（无 FSMN，以词间隙替代）
 
 # ── 离线任务持久化 ──
