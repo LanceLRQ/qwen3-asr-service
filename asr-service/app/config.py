@@ -81,10 +81,16 @@ ASR_BATCH_SIZE = 32             # 批量推理每批 chunk 数（与 Qwen3 max_i
 
 # ─── 音频处理 ───
 
-MAX_SEGMENT_DURATION = 5        # 超长片段二次切分阈值（秒）
+MAX_SEGMENT_DURATION = 5        # ASR 处理切块时长阈值（秒）：仅约束送入 ASR/对齐器的音频块大小，
+                               # 不再等同于最终句子边界（最终分句见下方"分句"参数）
 MAX_AUDIO_DURATION = 14400      # 最大音频时长 4 小时（秒）
 MAX_AUDIO_FILE_SIZE = 1024      # 最大文件大小（MB）
 MIN_AUDIO_DURATION = 1.0        # 最短音频时长（秒）
+
+# ─── 分句（句子级分段，evolution.md §二.4）───
+# 处理用切块时长与最终句子边界解耦：默认只按标点/停顿/说话人切换分句，不按时长切。
+SENTENCE_LONG_PAUSE_MS = 800   # 强切停顿：词/块间静音 >= 此值视为句末（与 VAD_MAX_SILENCE 对齐）
+SENTENCE_SHORT_PAUSE_MS = 400  # 弱切停顿：块末标点是否为真句末的判据 / 超长句二次切的细切点
 
 # ─── 缓存路径 ───
 

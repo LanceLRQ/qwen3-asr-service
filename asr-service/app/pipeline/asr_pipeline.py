@@ -6,6 +6,7 @@ import soundfile as sf
 from app.engines.vad_engine import VADEngine
 from app.engines.punc_engine import PuncEngine
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
+from app.pipeline.sentence_segmenter import segment_sentences
 from app.utils.result_parser import extract_text, extract_words
 from app.config import (
     UPLOADS_DIR,
@@ -48,11 +49,13 @@ class ASRPipeline:
 
         流程：
         0. ffmpeg 格式转换 → 16kHz WAV
-        1. VAD 切片 → segments
+        1. VAD 切片 → 处理用音频块（受 MAX_SEGMENT_DURATION 约束）
         2. 超长 segment 二次切分
         3. ASR 识别
         4. 标点恢复（可选）
-        4.5 说话人分离（可选，进度 0.90→0.95）
+        4.5 说话人分离（可选）：全局 VAD 时间轴聚类，先给 ASR 块打 speaker
+        4.6 分句：把 ASR 处理块重组为句子（标点/停顿/说话人切换；max_segment 仅显式上限）
+        4.7 句子级说话人标签精修 + 声纹识别（可选，进度 0.90→0.95）
         5. 合并结果，回算绝对时间戳
         6. 清理临时文件
         """
@@ -162,28 +165,43 @@ class ASRPipeline:
                             logger.warning(f"标点恢复失败，使用原始文本: {e}")
                 logger.info(f"[Pipeline] 标点恢复完成: {punc_count}/{len(segments)} 个段落有变化")
 
-            # 4.5 说话人分离（可选；容错对齐标点：失败只丢标签，不破坏转写）
+            # 4.5 说话人分离（可选；容错：失败只丢标签，不破坏转写）。
+            #     先在全局 VAD 时间轴聚类，给每个 ASR 处理块打 speaker——供 4.6 分句
+            #     判定说话人切换；最终句子边界确定后（4.7）再按句精修标签。
+            diar = None
             speakers_result = None
-            if self.speaker is not None and diarize and segments and not (cancelled and cancelled()):
+            speaker_active = (self.speaker is not None and diarize and segments
+                              and not (cancelled and cancelled()))
+            if speaker_active:
                 if progress_callback:
                     progress_callback(0.90)
-                diar = None
                 try:
                     diar = self._run_diarization(wav_path, vad_segments)
                     for seg in segments:
                         label = diar.label_for(seg["start"], seg["end"])
                         if label is not None:
                             seg["speaker"] = label
-                    speakers_result = diar.labels_in_order
-                    logger.info(
-                        f"[Pipeline] 说话人分离完成: {len(speakers_result)} 人 "
-                        f"{speakers_result}"
-                    )
                 except Exception as e:
                     logger.warning(f"说话人分离失败，跳过: {e}")
-                # 4.6 声纹识别 + 自动登记（可选）：speakers 升级为带 speaker_id/name 的
-                # 映射表；map_and_enroll_clusters 永不抛错（失败退回匿名）
-                if identify_speakers and self.speaker_service is not None and diar is not None:
+                    diar = None
+
+            # 4.6 分句：把 ASR 处理块重组为句子（标点/停顿/说话人切换）。
+            #     max_segment 仅在调用方显式给定时作为输出句长上限，缺省不按时长切。
+            segments = segment_sentences(segments, max_segment=max_segment)
+
+            # 4.7 句子级说话人标签精修 + 声纹识别/自动登记（可选）
+            if diar is not None:
+                for seg in segments:
+                    label = diar.label_for(seg["start"], seg["end"])
+                    if label is not None:
+                        seg["speaker"] = label
+                speakers_result = diar.labels_in_order
+                logger.info(
+                    f"[Pipeline] 说话人分离完成: {len(speakers_result)} 人 {speakers_result}"
+                )
+                # 声纹识别 + 自动登记：speakers 升级为带 speaker_id/name 的映射表；
+                # map_and_enroll_clusters 永不抛错（失败退回匿名）
+                if identify_speakers and self.speaker_service is not None:
                     mapping = self.speaker_service.map_and_enroll_clusters(
                         diar.clusters, id_threshold=id_threshold, id_margin=id_margin)
                     name_of = {m["label"]: m for m in mapping}
@@ -194,8 +212,8 @@ class ASRPipeline:
                     speakers_result = mapping
                     named = sum(1 for m in mapping if m.get("name"))
                     logger.info(f"[Pipeline] 声纹识别完成: {named}/{len(mapping)} 簇有名")
-                if progress_callback:
-                    progress_callback(0.95)
+            if speaker_active and progress_callback:
+                progress_callback(0.95)
 
             # 5. 合并全文
             full_text = "".join(
