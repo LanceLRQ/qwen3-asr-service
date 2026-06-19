@@ -1,11 +1,13 @@
 import os
 import shutil
 import logging
+import numpy as np
 import soundfile as sf
 
 from app.engines.vad_engine import VADEngine
 from app.engines.punc_engine import PuncEngine
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
+from app.pipeline.sentence_segmenter import segment_sentences
 from app.utils.result_parser import extract_text, extract_words
 from app.config import (
     UPLOADS_DIR,
@@ -48,11 +50,13 @@ class ASRPipeline:
 
         流程：
         0. ffmpeg 格式转换 → 16kHz WAV
-        1. VAD 切片 → segments
+        1. VAD 切片 → 处理用音频块（受 MAX_SEGMENT_DURATION 约束）
         2. 超长 segment 二次切分
         3. ASR 识别
         4. 标点恢复（可选）
-        4.5 说话人分离（可选，进度 0.90→0.95）
+        4.5 说话人分离（可选）：全局 VAD 时间轴聚类，先给 ASR 块打 speaker
+        4.6 分句：把 ASR 处理块重组为句子（标点/停顿/说话人切换；max_segment 仅显式上限）
+        4.7 句子级说话人标签精修 + 声纹识别（可选，进度 0.90→0.95）
         5. 合并结果，回算绝对时间戳
         6. 清理临时文件
         """
@@ -162,28 +166,43 @@ class ASRPipeline:
                             logger.warning(f"标点恢复失败，使用原始文本: {e}")
                 logger.info(f"[Pipeline] 标点恢复完成: {punc_count}/{len(segments)} 个段落有变化")
 
-            # 4.5 说话人分离（可选；容错对齐标点：失败只丢标签，不破坏转写）
+            # 4.5 说话人分离（可选；容错：失败只丢标签，不破坏转写）。
+            #     先在全局 VAD 时间轴聚类，给每个 ASR 处理块打 speaker——供 4.6 分句
+            #     判定说话人切换；最终句子边界确定后（4.7）再按句精修标签。
+            diar = None
             speakers_result = None
-            if self.speaker is not None and diarize and segments and not (cancelled and cancelled()):
+            speaker_active = (self.speaker is not None and diarize and segments
+                              and not (cancelled and cancelled()))
+            if speaker_active:
                 if progress_callback:
                     progress_callback(0.90)
-                diar = None
                 try:
                     diar = self._run_diarization(wav_path, vad_segments)
                     for seg in segments:
                         label = diar.label_for(seg["start"], seg["end"])
                         if label is not None:
                             seg["speaker"] = label
-                    speakers_result = diar.labels_in_order
-                    logger.info(
-                        f"[Pipeline] 说话人分离完成: {len(speakers_result)} 人 "
-                        f"{speakers_result}"
-                    )
                 except Exception as e:
                     logger.warning(f"说话人分离失败，跳过: {e}")
-                # 4.6 声纹识别 + 自动登记（可选）：speakers 升级为带 speaker_id/name 的
-                # 映射表；map_and_enroll_clusters 永不抛错（失败退回匿名）
-                if identify_speakers and self.speaker_service is not None and diar is not None:
+                    diar = None
+
+            # 4.6 分句：把 ASR 处理块重组为句子（标点/停顿/说话人切换）。
+            #     max_segment 仅在调用方显式给定时作为输出句长上限，缺省不按时长切。
+            segments = segment_sentences(segments, max_segment=max_segment)
+
+            # 4.7 句子级说话人标签精修 + 声纹识别/自动登记（可选）
+            if diar is not None:
+                for seg in segments:
+                    label = diar.label_for(seg["start"], seg["end"])
+                    if label is not None:
+                        seg["speaker"] = label
+                speakers_result = diar.labels_in_order
+                logger.info(
+                    f"[Pipeline] 说话人分离完成: {len(speakers_result)} 人 {speakers_result}"
+                )
+                # 声纹识别 + 自动登记：speakers 升级为带 speaker_id/name 的映射表；
+                # map_and_enroll_clusters 永不抛错（失败退回匿名）
+                if identify_speakers and self.speaker_service is not None:
                     mapping = self.speaker_service.map_and_enroll_clusters(
                         diar.clusters, id_threshold=id_threshold, id_margin=id_margin)
                     name_of = {m["label"]: m for m in mapping}
@@ -194,8 +213,8 @@ class ASRPipeline:
                     speakers_result = mapping
                     named = sum(1 for m in mapping if m.get("name"))
                     logger.info(f"[Pipeline] 声纹识别完成: {named}/{len(mapping)} 簇有名")
-                if progress_callback:
-                    progress_callback(0.95)
+            if speaker_active and progress_callback:
+                progress_callback(0.95)
 
             # 5. 合并全文
             full_text = "".join(
@@ -293,6 +312,8 @@ class ASRPipeline:
                 }
                 if self.asr.align_enabled and words:
                     segment["words"] = words
+                if chunk_info.get("split_after"):
+                    segment["split_after"] = True
                 if text.strip():
                     segments.append(segment)
 
@@ -340,6 +361,8 @@ class ASRPipeline:
                 }
                 if self.asr.align_enabled and words:
                     segment["words"] = words
+                if chunk_info.get("split_after"):
+                    segment["split_after"] = True
 
                 if text.strip():
                     segments.append(segment)
@@ -409,6 +432,34 @@ class ASRPipeline:
         merged.append((group_start, group_end))
         return merged
 
+    @staticmethod
+    def _find_quiet_cut(data, sr, target, window, frame_ms=20, dip_ratio=0.5):
+        """在 [target-window, target+window] 内找最安静帧作为切点（落在停顿中点）。
+
+        无明显停顿（区域能量平坦/静音）时回退到名义切点 target，保持确定性。
+        返回样本下标。
+        """
+        lo = max(0, int(target - window))
+        hi = min(len(data), int(target + window))
+        if hi - lo < int(0.1 * sr):
+            return target
+        fr = max(1, int(frame_ms / 1000 * sr))
+        region = data[lo:hi]
+        n = (len(region) - fr) // fr + 1
+        if n <= 0:
+            return target
+        rms = np.empty(n, dtype=np.float64)
+        for i in range(n):
+            f = region[i * fr:i * fr + fr]
+            rms[i] = float(np.sqrt(np.mean(np.square(f, dtype=np.float64)))) if len(f) else 0.0
+        med = float(np.median(rms))
+        if med <= 1e-6:                       # 平坦/静音 → 名义切点（确定性，单测可控）
+            return target
+        k = int(np.argmin(rms))
+        if rms[k] < dip_ratio * med:          # 存在明显能量低谷（停顿）→ 谷中点下刀
+            return lo + k * fr + fr // 2
+        return target
+
     def _split_segments_to_chunks(
         self,
         wav_path: str,
@@ -417,18 +468,30 @@ class ASRPipeline:
         max_segment_sec: float | None = None,
     ) -> list[dict]:
         """
-        合并相邻 VAD 段后切分音频，超长段二次切分。max_segment_sec 缺省=cfg。
+        合并相邻 VAD 段后切分音频，超长「连续语音段」在最安静处二次切分。
+
+        两个阈值解耦（关键）：
+        - 合并跨度上限 merge_max（=max_segment_sec 或 MAX_SEGMENT_DURATION）：相邻 VAD 段
+          的合并发生在静音间隙处，安全。
+        - 强制二次切分阈值 force_max（恒为 MAX_ASR_CHUNK_DURATION，显存/质量旋钮）：仅当
+          「单个连续语音段」超过此值才切，且切在最安静处（停顿），避免把连续语句切在词中
+          间导致边界词重复识别/漏字。force_max 远大于 merge_max，故大多数连续语句整段送 ASR。
+          注意 force_max 不随显式 max_segment 变动——max_segment 只作句子输出上限（见
+          sentence_segmenter），若令其压低 force_max 会重新引入词中切分。
 
         返回:
-            [{"path": str, "offset_sec": float, "duration_sec": float}, ...]
+            [{"path": str, "offset_sec": float, "duration_sec": float, "split_after"?: bool}, ...]
+            split_after=True 标记 force-split 产生的人为切点（供边界去重精准定位）。
         """
         data, sr = sf.read(wav_path)
-        eff_max = max_segment_sec or cfg.MAX_SEGMENT_DURATION
+        merge_max = max_segment_sec if max_segment_sec is not None else cfg.MAX_SEGMENT_DURATION
+        force_max = cfg.MAX_ASR_CHUNK_DURATION
 
-        # 先合并碎片段
-        merged = self._merge_vad_segments(vad_segments, eff_max)
+        # 先合并碎片段（仅在静音间隙处合并）
+        merged = self._merge_vad_segments(vad_segments, merge_max)
         logger.info(
-            f"VAD 段合并: {len(vad_segments)} -> {len(merged)} (阈值={eff_max}s)"
+            f"VAD 段合并: {len(vad_segments)} -> {len(merged)} "
+            f"(合并阈值={merge_max}s, 强制切分阈值={force_max}s)"
         )
 
         chunks = []
@@ -440,7 +503,7 @@ class ASRPipeline:
             segment_data = data[start_sample:end_sample]
             segment_duration = len(segment_data) / sr
 
-            if segment_duration <= eff_max:
+            if segment_duration <= force_max:
                 chunk_path = os.path.join(chunk_dir, f"chunk_{idx:04d}.wav")
                 sf.write(chunk_path, segment_data, sr)
                 chunks.append({
@@ -450,11 +513,18 @@ class ASRPipeline:
                 })
                 idx += 1
             else:
-                # 单段超长（理论上合并后不会出现，但作为兜底）
-                sub_samples = int(eff_max * sr)
+                # 单段连续语音超长：在最安静处下刀（无明显停顿则回退到名义切点）
+                sub_samples = int(force_max * sr)
+                window = int(min(force_max * 0.5, 2.5) * sr)
                 offset = 0
                 while offset < len(segment_data):
-                    end = min(offset + sub_samples, len(segment_data))
+                    if len(segment_data) - offset <= sub_samples + window:
+                        end = len(segment_data)              # 末块到结尾，免切出过短尾巴
+                    else:
+                        end = self._find_quiet_cut(
+                            segment_data, sr, offset + sub_samples, window)
+                        if end <= offset:
+                            end = min(offset + sub_samples, len(segment_data))
                     sub_data = segment_data[offset:end]
                     chunk_path = os.path.join(chunk_dir, f"chunk_{idx:04d}.wav")
                     sf.write(chunk_path, sub_data, sr)
@@ -463,6 +533,7 @@ class ASRPipeline:
                         "path": chunk_path,
                         "offset_sec": chunk_offset_sec,
                         "duration_sec": len(sub_data) / sr,
+                        "split_after": end < len(segment_data),   # 非末子块=force-split 人为切点
                     })
                     offset = end
                     idx += 1

@@ -89,6 +89,14 @@ def test_segment_empty_text():
     assert vo._segment("", None, 1.0, None) == []
 
 
+def test_segment_clamps_corrupt_timestamp_by_default():
+    # 修复 #3：max_segment 缺省时仍把损坏的词级 end 钳制到整段时长（不再跑飞到 999s）
+    words = [{"text": "你", "start": 0.0, "end": 0.2}, {"text": "好", "start": 0.2, "end": 0.4},
+             {"text": "世", "start": 0.4, "end": 0.6}, {"text": "界", "start": 0.6, "end": 999.0}]
+    segs = vo._segment("你好世界。", words, 1.0, None)
+    assert all(s["end"] <= 1.0 for s in segs)
+
+
 def test_segment_max_segment_cap(monkeypatch):
     monkeypatch.setattr(cfg, "VLLM_SEGMENT_GAP_MS", 2000)   # 间隙阈值很大 → 不靠间隙断
     words = [{"text": str(i), "start": i * 0.3, "end": i * 0.3 + 0.2} for i in range(10)]  # 跨度 ~2.9s
