@@ -42,7 +42,9 @@ async def verify_api_key(
 
 
 # 支持的音频文件扩展名
-ALLOWED_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wma", ".amr", ".opus"}
+ALLOWED_EXTENSIONS = {
+    ".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wma", ".amr", ".opus", ".webm",
+}
 
 # 流式写入磁盘的分块大小
 UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1MB

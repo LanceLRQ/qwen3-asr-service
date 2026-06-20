@@ -37,6 +37,20 @@ def test_submit_ok(make_client):
     assert tm.submit.call_args.kwargs["language"] == "zh"
 
 
+def test_submit_webm_ok(make_client):
+    tm = MagicMock()
+    tm.submit.return_value = "tid-webm"
+    client = make_client(task_manager=tm)
+    resp = client.post(
+        "/v1/asr",
+        files={"file": ("browser.webm", b"abcdef", "audio/webm")},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"task_id": "tid-webm"}
+    assert tm.submit.call_args.kwargs["file_path"].endswith(".webm")
+    assert tm.submit.call_args.kwargs["wav_name"] == "browser.webm"
+
+
 def test_submit_with_options_passthrough(make_client):
     tm = MagicMock()
     tm.submit.return_value = "tid-1"

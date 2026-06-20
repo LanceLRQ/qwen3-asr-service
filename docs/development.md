@@ -138,20 +138,21 @@ venv/bin/python -m app.main --web --enable-stream \
 
 ## 8. 发布与镜像构建
 
-镜像发布由 GitHub Actions 自动完成：推送 `vX.Y.Z` 形式的 git tag 即触发 `.github/workflows/docker-publish.yml`，并行构建并推送三种变体到 Docker Hub。
+镜像发布由 GitHub Actions 自动完成：推送 `vX.Y.Z` 形式的 git tag 即触发 `.github/workflows/docker-publish.yml`，并行构建并推送镜像到阿里云容器镜像服务。
 
 ```bash
 git tag v2.0.1
 git push origin v2.0.1
-# → lancelrq/qwen3-asr-service:2.0.1 / 2.0.1-cpu / 2.0.1-arm64 + 对应 latest 系列
+# → registry.cn-hangzhou.aliyuncs.com/ripper/qwen3-asr-service:2.0.1
+# → registry.cn-hangzhou.aliyuncs.com/ripper/qwen3-asr-service:2.0.1-cpu / 2.0.1-vllm + 对应 latest 系列
 ```
 
 | 变体 | Dockerfile | 平台 | 产出 tag |
 |------|-----------|------|---------|
 | GPU | `docker/Dockerfile` | linux/amd64 | `X.Y.Z` + `latest` |
 | CPU | `docker/Dockerfile.cpu` | linux/amd64 | `X.Y.Z-cpu` + `latest-cpu` |
-| ARM64 | `docker/Dockerfile.cpu` | linux/arm64（QEMU） | `X.Y.Z-arm64` + `latest-arm64` |
+| vLLM | `docker/Dockerfile.vllm` | linux/amd64 | `X.Y.Z-vllm` + `latest-vllm` |
 
 - **版本号注入**：tag 的版本号（去掉 `v` 前缀）经 `--build-arg APP_VERSION` 写入镜像，`main.py` 通过 `os.environ.get("APP_VERSION")` 读取，体现在 FastAPI `/openapi.json` 的 `info.version`。未注入时回退 `dev`（本地手工构建）/ `2.0.0`（源码直跑）。
-- **首次发版前置**：需在仓库 **Settings → Secrets and variables → Actions** 配置 `DOCKERHUB_USERNAME` 与 `DOCKERHUB_TOKEN`（Docker Hub Access Token，权限 Read & Write），否则登录步骤失败。
+- **首次发版前置**：需在仓库 **Settings → Secrets and variables → Actions** 配置 `ALIYUN_REGISTRY_USERNAME` 与 `ALIYUN_REGISTRY_PASSWORD`（阿里云容器镜像服务登录账号与密码/访问凭证），否则登录步骤失败。
 - **本地手工构建**：仍可用 `bash docker/build.sh` 交互式构建单个变体（已同步注入 `APP_VERSION`）；CI 无 GPU，GPU 镜像的运行验证需本地有卡环境。

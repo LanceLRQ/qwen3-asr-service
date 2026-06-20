@@ -86,6 +86,19 @@ def test_json_default(openai_client):
     assert r.json() == {"text": "你好世界"}
 
 
+def test_webm_upload_allowed(openai_client):
+    tm = FakeTM()
+    client = openai_client(task_manager=tm)
+    r = client.post(
+        "/compat/openai/v1/audio/transcriptions",
+        files={"file": ("browser.webm", b"abcdef", "audio/webm")},
+        data={"model": "whisper-1"},
+    )
+    assert r.status_code == 200
+    assert tm.submitted["file_path"].endswith(".webm")
+    assert tm.submitted["wav_name"] == "browser.webm"
+
+
 def test_text_format(openai_client):
     client = openai_client(task_manager=FakeTM())
     r = _post(client, fmt="text")

@@ -138,20 +138,21 @@ venv/bin/python -m app.main --web --enable-stream \
 
 ## 8. Release & image build
 
-Image publishing is automated via GitHub Actions: pushing a `vX.Y.Z` git tag triggers `.github/workflows/docker-publish.yml`, which builds and pushes three variants to Docker Hub in parallel.
+Image publishing is automated via GitHub Actions: pushing a `vX.Y.Z` git tag triggers `.github/workflows/docker-publish.yml`, which builds and pushes images to Alibaba Cloud Container Registry.
 
 ```bash
 git tag v2.0.1
 git push origin v2.0.1
-# → lancelrq/qwen3-asr-service:2.0.1 / 2.0.1-cpu / 2.0.1-arm64 + matching latest tags
+# → registry.cn-hangzhou.aliyuncs.com/ripper/qwen3-asr-service:2.0.1
+# → registry.cn-hangzhou.aliyuncs.com/ripper/qwen3-asr-service:2.0.1-cpu / 2.0.1-vllm + matching latest tags
 ```
 
 | Variant | Dockerfile | Platform | Tags produced |
 |---------|-----------|----------|---------------|
 | GPU | `docker/Dockerfile` | linux/amd64 | `X.Y.Z` + `latest` |
 | CPU | `docker/Dockerfile.cpu` | linux/amd64 | `X.Y.Z-cpu` + `latest-cpu` |
-| ARM64 | `docker/Dockerfile.cpu` | linux/arm64 (QEMU) | `X.Y.Z-arm64` + `latest-arm64` |
+| vLLM | `docker/Dockerfile.vllm` | linux/amd64 | `X.Y.Z-vllm` + `latest-vllm` |
 
 - **Version injection**: the tag's version (with the `v` prefix stripped) is passed via `--build-arg APP_VERSION` into the image; `main.py` reads it through `os.environ.get("APP_VERSION")`, surfacing as `info.version` in FastAPI `/openapi.json`. Falls back to `dev` (local manual build) / `2.0.0` (running source directly) when unset.
-- **First-release prerequisite**: configure `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (a Docker Hub Access Token with Read & Write) under repo **Settings → Secrets and variables → Actions**, otherwise the login step fails.
+- **First-release prerequisite**: configure `ALIYUN_REGISTRY_USERNAME` and `ALIYUN_REGISTRY_PASSWORD` (Alibaba Cloud Container Registry username and password/access credential) under repo **Settings → Secrets and variables → Actions**, otherwise the login step fails.
 - **Local manual build**: `bash docker/build.sh` still builds a single variant interactively (now also injects `APP_VERSION`); CI has no GPU, so runtime verification of the GPU image requires a local machine with a card.

@@ -19,7 +19,7 @@
       'spk.similarity': '声纹相似度 {0}',
       // 上传
       'upload.title': '上传音频', 'upload.hint': '点击或拖拽上传音频文件',
-      'upload.formats': 'wav / mp3 / flac / m4a / aac / ogg / wma / amr / opus',
+      'upload.formats': 'wav / mp3 / flac / m4a / aac / ogg / wma / amr / opus / webm',
       'upload.identify': '声纹识别（标注真名，未知说话人自动登记）',
       // 高级设置（可选按请求覆盖）
       'adv.title': '高级设置（可选覆盖）',
@@ -71,7 +71,7 @@
       'spk.anonymous': 'Anonymous speaker', 'spk.autoEnrolled': 'Auto-enrolled (rename on the Speakers page)',
       'spk.similarity': 'Voiceprint similarity {0}',
       'upload.title': 'Upload audio', 'upload.hint': 'Click or drag to upload an audio file',
-      'upload.formats': 'wav / mp3 / flac / m4a / aac / ogg / wma / amr / opus',
+      'upload.formats': 'wav / mp3 / flac / m4a / aac / ogg / wma / amr / opus / webm',
       'upload.identify': 'Speaker identification (label real names, auto-enroll unknowns)',
       'adv.title': 'Advanced (optional overrides)',
       'adv.hint': 'Empty = server default; turning a switch off skips that step for this request.',
@@ -508,7 +508,7 @@
               <!-- 不设 :max="1"：达到 max 后 n-upload 会禁用触发器导致无法换文件；
                    替换语义由 onUploadChange 取末项实现（列表恒 ≤1） -->
               <n-upload :file-list="uploadFileList" :default-upload="false" :show-file-list="false"
-                        accept=".wav,.mp3,.flac,.m4a,.aac,.ogg,.wma,.amr,.opus" @change="onUploadChange">
+                        accept=".wav,.mp3,.flac,.m4a,.aac,.ogg,.wma,.amr,.opus,.webm" @change="onUploadChange">
                 <n-upload-dragger>
                   <div style="color:#14b8a6;margin-bottom:8px;"><a-icon name="upload" size="30"></a-icon></div>
                   <n-text style="font-size:.92em;font-weight:600;">{{ t('upload.hint') }}</n-text>

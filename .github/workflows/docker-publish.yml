@@ -1,17 +1,15 @@
 name: Docker Publish
 
-# 推送 vX.Y.Z 形式的 git tag 时触发，自动构建并推送镜像到 Docker Hub。
+# 推送 vX.Y.Z 形式的 git tag 时触发，自动构建并推送镜像到阿里云容器镜像服务。
 #
 # 构建与打 tag 分离（方案 B）：
 #   1. 各构建 job 并行执行，仅按 digest 推送 blob（push-by-digest，不挂人类可见 tag）；
 #   2. 收尾 merge job 等全部构建完成后，用 imagetools 一次性挂上所有 tag，
-#      使 Docker Hub 上各 tag 同时出现、顺序一致，且发布接近原子（任一构建失败则不挂 tag）。
+#      使阿里云镜像仓库上各 tag 同时出现、顺序一致，且发布接近原子（任一构建失败则不挂 tag）。
 #
 # 镜像变体：
 #   - GPU  (amd64)            -> :X.Y.Z        / :latest
-#   - CPU  (amd64+arm64 多架构) -> :X.Y.Z-cpu    / :latest-cpu
-#     CPU 变体为多架构 manifest：amd64 与 arm64 共用 Dockerfile.cpu，
-#     拉取时 Docker 按本机架构自动选择（amd64→OpenVINO INT8，arm64→OpenVINO FP32，运行时自选）。
+#   - CPU  (amd64)            -> :X.Y.Z-cpu    / :latest-cpu
 #   - vLLM (amd64)            -> :X.Y.Z-vllm   / :latest-vllm
 #     vLLM 变体为 GPU 原生流式独立镜像（基底 vllm/vllm-openai），独立 build + merge-vllm，
 #     构建失败不阻塞 GPU/CPU 发布。
@@ -21,7 +19,8 @@ on:
       - 'v*.*.*'
 
 env:
-  IMAGE_NAME: lancelrq/qwen3-asr-service
+  REGISTRY: registry.cn-hangzhou.aliyuncs.com
+  IMAGE_NAME: registry.cn-hangzhou.aliyuncs.com/ripper/qwen3-asr-service
 
 jobs:
   # 从 tag 派生纯版本号（v2.0.1 -> 2.0.1），供各构建 job 复用
@@ -49,8 +48,9 @@ jobs:
 
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ALIYUN_REGISTRY_USERNAME }}
+          password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
 
       - name: Build and push by digest (GPU, amd64)
         id: build
@@ -88,8 +88,9 @@ jobs:
 
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ALIYUN_REGISTRY_USERNAME }}
+          password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
 
       - name: Build and push by digest (CPU, amd64)
         id: build
@@ -116,47 +117,6 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  cpu-arm64:
-    needs: setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # arm64 在 amd64 runner 上通过 QEMU 模拟构建
-      - uses: docker/setup-qemu-action@v3
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push by digest (CPU, arm64)
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/Dockerfile.cpu
-          platforms: linux/arm64
-          build-args: |
-            APP_VERSION=${{ needs.setup.outputs.version }}
-          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          provenance: false
-
-      - name: Export digest
-        run: |
-          mkdir -p "${RUNNER_TEMP}/digests"
-          digest="${{ steps.build.outputs.digest }}"
-          touch "${RUNNER_TEMP}/digests/${digest#sha256:}"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: digests-cpu-arm64
-          path: ${{ runner.temp }}/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
   vllm:
     needs: setup
     runs-on: ubuntu-latest
@@ -173,8 +133,9 @@ jobs:
 
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ALIYUN_REGISTRY_USERNAME }}
+          password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
 
       - name: Build and push by digest (vLLM, amd64)
         id: build
@@ -202,9 +163,9 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # 全部构建完成后统一挂 tag：GPU 单架构、CPU 合并 amd64+arm64 为多架构 manifest
+  # 全部构建完成后统一挂 tag：GPU 与 CPU 均为 amd64 单架构
   merge:
-    needs: [setup, gpu, cpu-amd64, cpu-arm64]
+    needs: [setup, gpu, cpu-amd64]
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.setup.outputs.version }}
@@ -218,20 +179,19 @@ jobs:
 
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ALIYUN_REGISTRY_USERNAME }}
+          password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
 
-      # 解析各构建产物的 digest，组装多架构源引用
+      # 解析各构建产物的 digest，组装源引用
       - name: Resolve digests
         id: digests
         run: |
           gpu=$(ls "${RUNNER_TEMP}/digests/digests-gpu")
           amd64=$(ls "${RUNNER_TEMP}/digests/digests-cpu-amd64")
-          arm64=$(ls "${RUNNER_TEMP}/digests/digests-cpu-arm64")
           {
             echo "gpu_src=${IMAGE_NAME}@sha256:${gpu}"
-            echo "cpu_src_amd64=${IMAGE_NAME}@sha256:${amd64}"
-            echo "cpu_src_arm64=${IMAGE_NAME}@sha256:${arm64}"
+            echo "cpu_src=${IMAGE_NAME}@sha256:${amd64}"
           } >> "$GITHUB_OUTPUT"
 
       # 推送顺序：版本号 -> 版本号-cpu -> latest -> latest-cpu（latest 最后推，时间戳最新）
@@ -240,14 +200,14 @@ jobs:
           docker buildx imagetools create -t "${IMAGE_NAME}:${VERSION}" \
             "${{ steps.digests.outputs.gpu_src }}"
           docker buildx imagetools create -t "${IMAGE_NAME}:${VERSION}-cpu" \
-            "${{ steps.digests.outputs.cpu_src_amd64 }}" "${{ steps.digests.outputs.cpu_src_arm64 }}"
+            "${{ steps.digests.outputs.cpu_src }}"
 
       - name: Push latest tags
         run: |
           docker buildx imagetools create -t "${IMAGE_NAME}:latest" \
             "${{ steps.digests.outputs.gpu_src }}"
           docker buildx imagetools create -t "${IMAGE_NAME}:latest-cpu" \
-            "${{ steps.digests.outputs.cpu_src_amd64 }}" "${{ steps.digests.outputs.cpu_src_arm64 }}"
+            "${{ steps.digests.outputs.cpu_src }}"
 
       - name: Inspect published tags
         run: |
@@ -271,8 +231,9 @@ jobs:
 
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ALIYUN_REGISTRY_USERNAME }}
+          password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
 
       - name: Resolve digest
         id: digests
