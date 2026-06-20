@@ -21,12 +21,19 @@ ws_router_stream = APIRouter(prefix="/v2/asr")
 
 # 活动后端，由 main.py 启动时注入
 _backend = None
+_recording_manager = None
 
 
 def init_ws_stream(backend):
     """注入活动后端（VadOfflineBackend / VllmStreamBackend）。"""
     global _backend
     _backend = backend
+
+
+def init_stream_recordings(manager):
+    """注入流式录音管理器（None=不保存）。"""
+    global _recording_manager
+    _recording_manager = manager
 
 
 async def verify_ws_token(ws: WebSocket) -> bool:
@@ -58,6 +65,7 @@ async def stream(ws: WebSocket):
     # acquire 成功后任何失败路径（含 accept 异常）都必须经 finally 释放计数
     session = None
     consume_task = None
+    recorder = None
     recv_bytes = 0
     sent_msgs = 0
     backlog_bytes = 0      # 已入队未处理完的字节数（接收侧增、消费侧减，单循环内无竞态）
@@ -98,6 +106,14 @@ async def stream(ws: WebSocket):
                 code="params_ignored",
                 message="以下参数因对应功能未启用被忽略: " + ", ".join(warnings),
                 fatal=False).model_dump())
+        if _recording_manager is not None:
+            sample_rate = getattr(session, "audio_fs", start_msg.get("audio_fs", cfg.STREAM_SAMPLE_RATE))
+            recorder = _recording_manager.start(
+                wav_name=start_msg.get("wav_name") or "stream",
+                sample_rate=sample_rate,
+            )
+            if recorder is not None:
+                await ws.send_json({"type": "recording.created", **recorder.info})
 
         # ── 收发解耦：接收循环只入队，独立任务消费（VAD/ASR/发送）──
         # 推理慢于实时时积压留在应用层队列，接收不阻塞，pong 可被及时读取，
@@ -158,6 +174,16 @@ async def stream(ws: WebSocket):
                     break
                 recv_bytes += len(m["bytes"])
                 backlog_bytes += len(m["bytes"])
+                if recorder is not None:
+                    try:
+                        recorder.write(m["bytes"])
+                    except Exception as e:
+                        logger.warning(f"[stream] 录音写入失败，停止本会话录音: {e}", exc_info=True)
+                        try:
+                            recorder.close()
+                        except Exception:
+                            pass
+                        recorder = None
                 frame_q.put_nowait(m["bytes"])
             elif m.get("text"):
                 try:
@@ -192,6 +218,11 @@ async def stream(ws: WebSocket):
             try:
                 await consume_task
             except (asyncio.CancelledError, Exception):
+                pass
+        if recorder is not None:
+            try:
+                recorder.close()
+            except Exception:
                 pass
         try:
             await ws.send_json(SessionClosed(reason="end").model_dump())

@@ -123,7 +123,10 @@ GET /v2/capabilities
     "path": "/v2/asr/stream",
     "partial_results": false,
     "word_timestamps": true,
-    "speaker_labels": true
+    "speaker_labels": true,
+    "save_audio": false,
+    "recording_retention_hours": 72,
+    "recording_download_path": null
   },
   "defaults": {
     "max_segment": 5, "max_end_silence_ms": 800, "max_segment_sec": 12,
@@ -142,4 +145,7 @@ GET /v2/capabilities
 | stream.partial_results | 是否产生中间结果 `partial`（vad-offline 后端为 false） |
 | stream.word_timestamps | `final` 是否带单词级时间戳（随对齐开关） |
 | stream.speaker_labels | 实时 `final` 是否带说话人标签 |
+| stream.save_audio | 是否保存实时输入音频为 WAV（默认 false） |
+| stream.recording_retention_hours | 实时录音保留小时数，默认 72；0 表示不自动清理 |
+| stream.recording_download_path | 开启保存时返回下载 / 删除路径模板；未开启时为 `null` |
 | defaults | 可覆盖参数（实时 `start` 字段 / 离线 Form 字段）的当前生效默认值，反映实际配置；Web UI 用于数值框占位提示 |

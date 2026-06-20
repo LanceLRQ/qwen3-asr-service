@@ -5,6 +5,7 @@ mode 正确、不误挂离线接口。standard 分支需加载真实模型，留
 隔离 setup_logger / cfg 全局副作用。
 """
 import logging
+import sys
 import threading
 import types
 from unittest.mock import MagicMock
@@ -37,6 +38,7 @@ def isolated_create_app(tmp_path, monkeypatch):
     saved_level = root.level
     keys = ("MODEL_SOURCE", "MAX_SEGMENT_DURATION", "HOST", "PORT", "API_KEY", "MAX_QUEUE_SIZE",
             "SERVE_MODE", "ENABLE_STREAM", "MAX_STREAM_SESSIONS", "STREAM_ASR_CONCURRENCY",
+            "STREAM_SAVE_AUDIO", "STREAM_RECORDING_RETENTION_HOURS",
             "CONFIG_FILE", "ENABLE_SPEAKER", "SPEAKER_THRESHOLD", "SPEAKER_MAX",
             "SPEAKER_MIN_SEG_MS", "SPEAKER_MAX_WINDOWS",
             "ENABLE_SPEAKER_DB", "SPEAKER_DB_PATH", "SPEAKER_ID_THRESHOLD", "SPEAKER_ID_MARGIN",
@@ -104,6 +106,9 @@ def test_vllm_mode_mounts_stream_and_common(isolated_create_app, monkeypatch):
     assert stream["partial_results"] is True
     assert stream["word_timestamps"] is False
     assert stream["path"] == "/v2/asr/stream"
+    assert stream["save_audio"] is False
+    assert stream["recording_retention_hours"] == 72
+    assert stream["recording_download_path"] is None
 
     # capabilities 在 v1/v2 都可用
     assert client.get("/v1/capabilities").json()["mode"] == "vllm"
@@ -155,39 +160,7 @@ def test_standard_mode_with_stream_mounts_ws(isolated_create_app, monkeypatch):
     """
     import app.main as main
 
-    monkeypatch.setattr(main, "check_ffmpeg", lambda: None)
-    monkeypatch.setattr(main, "detect_device",
-                        lambda: {"type": "cuda", "vram_gb": 24.0, "name": "FakeGPU"})
-    monkeypatch.setattr(main, "resolve_device", lambda req, device_info=None: "cuda")
-
-    class FakeVAD:
-        BACKEND = "pytorch"
-        def __init__(self, *a, **k):
-            self._model = MagicMock()
-            self._infer_lock = threading.Lock()    # 对齐 VADEngine 接口（流式共用推理锁）
-        def load(self): pass
-
-    class FakeASR:
-        def __init__(self, *a, **k): self._model = MagicMock()
-        def load(self): pass
-        @property
-        def align_enabled(self): return True
-
-    class FakePunc:
-        BACKEND = "pytorch"
-        def __init__(self, *a, **k): self._model = MagicMock()
-        def load(self): pass
-
-    class FakeTM:
-        def __init__(self, *a, **k): pass
-        def set_processor(self, fn): pass
-        def start(self): pass
-        def shutdown(self): pass
-
-    monkeypatch.setattr(main, "VADEngine", FakeVAD)
-    monkeypatch.setattr(main, "QwenASREngine", FakeASR)
-    monkeypatch.setattr(main, "PuncEngine", FakePunc)
-    monkeypatch.setattr(main, "TaskManager", FakeTM)
+    _mock_standard_engines(monkeypatch, align_enabled=True)
 
     app = main.create_app(_args(serve_mode="standard", device="auto", enable_stream=True))
     client = TestClient(app)
@@ -200,6 +173,9 @@ def test_standard_mode_with_stream_mounts_ws(isolated_create_app, monkeypatch):
     assert caps["stream"]["backend"] == "vad-offline"
     assert caps["stream"]["path"] == "/v2/asr/stream"
     assert caps["stream"]["word_timestamps"] is True   # 对齐开启
+    assert caps["stream"]["save_audio"] is False
+    assert caps["stream"]["recording_retention_hours"] == 72
+    assert caps["stream"]["recording_download_path"] is None
 
     # 离线接口仍在
     assert client.get("/v1/health").json()["mode"] == "standard"
@@ -208,8 +184,28 @@ def test_standard_mode_with_stream_mounts_ws(isolated_create_app, monkeypatch):
     with client.websocket_connect("/v2/asr/stream") as ws:
         created = ws.receive_json()
         assert created["type"] == "session.created"
-        assert created["backend"] == "vad-offline"
         assert created["mode"] == "standard"
+        assert created["backend"] == "vad-offline"
+
+
+def test_standard_mode_stream_save_audio_capability(isolated_create_app, monkeypatch):
+    """开启实时录音保存时，capabilities 返回下载/删除路径模板。"""
+    import app.main as main
+
+    _mock_standard_engines(monkeypatch)
+
+    app = main.create_app(_args(
+        device="auto",
+        enable_stream=True,
+        stream_save_audio=True,
+        stream_recording_retention_hours=48,
+    ))
+    client = TestClient(app)
+
+    stream = client.get("/v2/capabilities").json()["stream"]
+    assert stream["save_audio"] is True
+    assert stream["recording_retention_hours"] == 48
+    assert stream["recording_download_path"] == "/v2/stream-recordings/{recording_id}"
 
 
 def test_config_stream_defaults():
@@ -224,6 +220,8 @@ def test_config_stream_defaults():
     assert cfg.STREAM_MAX_FRAME_BYTES == 2 * 1024 * 1024
     assert cfg.STREAM_MAX_BACKLOG_BYTES == 8 * 1024 * 1024
     assert cfg.STREAM_SAMPLE_RATE == 16000
+    assert cfg.STREAM_SAVE_AUDIO is False
+    assert cfg.STREAM_RECORDING_RETENTION_HOURS == 72
 
 
 def test_parse_args_defaults(monkeypatch):
@@ -235,6 +233,8 @@ def test_parse_args_defaults(monkeypatch):
     assert args.enable_stream is False
     assert args.max_stream_sessions is None
     assert args.stream_asr_concurrency is None
+    assert args.stream_save_audio is False
+    assert args.stream_recording_retention_hours == 72
 
 
 def test_parse_args_stream_flags(monkeypatch):
@@ -242,11 +242,14 @@ def test_parse_args_stream_flags(monkeypatch):
     monkeypatch.setattr("sys.argv", [
         "prog", "--no-config", "--serve-mode", "standard", "--enable-stream",
         "--max-stream-sessions", "8", "--stream-asr-concurrency", "3",
+        "--stream-save-audio", "--stream-recording-retention-hours", "48",
     ])
     args = parse_args()
     assert args.enable_stream is True
     assert args.max_stream_sessions == 8
     assert args.stream_asr_concurrency == 3
+    assert args.stream_save_audio is True
+    assert args.stream_recording_retention_hours == 48
 
 
 def test_health_echoes_config_file(isolated_create_app, monkeypatch):
@@ -330,14 +333,19 @@ def test_apply_cli_config_writes_stream(monkeypatch):
     monkeypatch.setattr("sys.argv", [
         "prog", "--no-config", "--enable-stream",
         "--max-stream-sessions", "5", "--stream-asr-concurrency", "4",
+        "--stream-save-audio", "--stream-recording-retention-hours", "24",
     ])
     saved = {k: getattr(cfg, k) for k in ("SERVE_MODE", "ENABLE_STREAM", "MAX_STREAM_SESSIONS",
-                                          "STREAM_ASR_CONCURRENCY", "MODEL_SOURCE", "MAX_SEGMENT_DURATION")}
+                                          "STREAM_ASR_CONCURRENCY", "STREAM_SAVE_AUDIO",
+                                          "STREAM_RECORDING_RETENTION_HOURS",
+                                          "MODEL_SOURCE", "MAX_SEGMENT_DURATION")}
     try:
         _apply_cli_config(parse_args())
         assert cfg.ENABLE_STREAM is True
         assert cfg.MAX_STREAM_SESSIONS == 5
         assert cfg.STREAM_ASR_CONCURRENCY == 4
+        assert cfg.STREAM_SAVE_AUDIO is True
+        assert cfg.STREAM_RECORDING_RETENTION_HOURS == 24
     finally:
         for k, v in saved.items():
             setattr(cfg, k, v)
@@ -372,10 +380,14 @@ def test_log_effective_config_backfills_runtime_defaults(caplog):
 
 # ─── S 系列：说话人分离装配与降级 ───
 
-def _mock_standard_engines(monkeypatch):
+def _mock_standard_engines(monkeypatch, *, align_enabled=False):
     """standard 分支的重引擎全套 mock（体例同 test_standard_mode_with_stream_mounts_ws）。"""
     import app.main as main
+    from fastapi import APIRouter
+    import app.config as cfg
 
+    monkeypatch.setattr(main, "_STANDARD_DEPS_OK", True)
+    monkeypatch.setattr(main, "_STANDARD_DEPS_ERR", None, raising=False)
     monkeypatch.setattr(main, "check_ffmpeg", lambda: None)
     monkeypatch.setattr(main, "detect_device",
                         lambda: {"type": "cuda", "vram_gb": 24.0, "name": "FakeGPU"})
@@ -392,7 +404,16 @@ def _mock_standard_engines(monkeypatch):
         def __init__(self, *a, **k): self._model = MagicMock()
         def load(self): pass
         @property
-        def align_enabled(self): return False
+        def align_enabled(self): return align_enabled
+
+    class FakePunc:
+        BACKEND = "pytorch"
+        def __init__(self, *a, **k): self._model = MagicMock()
+        def load(self): pass
+
+    class FakePipeline:
+        def __init__(self, *a, **k): pass
+        def run(self, *a, **k): return {}
 
     class FakeTM:
         def __init__(self, *a, **k): pass
@@ -400,9 +421,55 @@ def _mock_standard_engines(monkeypatch):
         def start(self): pass
         def shutdown(self): pass
 
+    class FakeStreamSession:
+        audio_fs = cfg.STREAM_SAMPLE_RATE
+
+        def configure(self, msg):
+            self.audio_fs = msg.get("audio_fs", cfg.STREAM_SAMPLE_RATE)
+            return []
+
+        async def feed_audio(self, data):
+            if False:
+                yield data
+
+        async def flush(self):
+            if False:
+                yield {}
+
+    class FakeVadOfflineBackend:
+        mode = "standard"
+        backend = "vad-offline"
+
+        def __init__(self, *a, **k):
+            self.capabilities = {
+                "partial_results": False,
+                "word_timestamps": align_enabled,
+                "speaker_labels": bool(k.get("speaker")),
+            }
+
+        async def acquire(self):
+            return True
+
+        def create_session(self, sid):
+            return FakeStreamSession()
+
+        def release(self, session):
+            pass
+
+        def shutdown(self):
+            pass
+
+    fake_stream_session = types.ModuleType("app.runtime.stream_session")
+    fake_stream_session.VadOfflineBackend = FakeVadOfflineBackend
+
     monkeypatch.setattr(main, "VADEngine", FakeVAD)
     monkeypatch.setattr(main, "QwenASREngine", FakeASR)
+    monkeypatch.setattr(main, "PuncEngine", FakePunc)
+    monkeypatch.setattr(main, "ASRPipeline", FakePipeline)
     monkeypatch.setattr(main, "TaskManager", FakeTM)
+    monkeypatch.setattr(main, "init_routes", lambda *a, **k: None)
+    monkeypatch.setattr(main, "build_offline_router", lambda prefix, **k: APIRouter(prefix=prefix))
+    monkeypatch.setitem(sys.modules, "app.runtime.stream_session", fake_stream_session)
 
 
 def test_standard_mode_speaker_enabled(isolated_create_app, monkeypatch):

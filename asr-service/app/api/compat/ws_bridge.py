@@ -33,22 +33,25 @@ logger = logging.getLogger(__name__)
 
 # 活动后端（与 v2 共享同一 StreamBackend 实例；并发计数同源），由 main.py 注入
 _backend = None
+_recording_manager = None
 
 # 消费队列哨兵
 _SOFT_FLUSH = object()   # 冲刷当前缓冲末句但**不结束**本轮（OpenAI commit）
 _HARD_END = object()     # 冲刷并结束本轮（DashScope finish-task）
 
 
-def init_compat_ws(backend):
+def init_compat_ws(backend, recording_manager=None):
     """注入实时兼容用活动后端（None=未启用实时，端点不挂载）。"""
-    global _backend
+    global _backend, _recording_manager
     _backend = backend
+    _recording_manager = recording_manager
 
 
 async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) -> bool:
     """单轮会话（一次 run-task 周期 / OpenAI 整个连接）。返回是否继续复用连接。"""
     frame_q: asyncio.Queue = asyncio.Queue()
     state = {"backlog": 0}
+    recorder = None
 
     async def _emit(f):
         # partial（vLLM 路线 A）：adapter 实现 translate_partials → 下发增量（R2）；未实现 → 跳过
@@ -105,6 +108,15 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
                 except ValueError as e:
                     await ws.send_json(adapter.translate_error("invalid_config", str(e), fatal=True))
                     return False
+                if recorder is not None:
+                    recorder.close()
+                    recorder = None
+                if _recording_manager is not None:
+                    sample_rate = getattr(session, "audio_fs", payload.get("audio_fs", cfg.STREAM_SAMPLE_RATE))
+                    recorder = _recording_manager.start(
+                        wav_name=payload.get("wav_name") or "compat-stream",
+                        sample_rate=sample_rate,
+                    )
                 await adapter.on_configured(ws, warnings)
             elif kind == "audio":
                 if not payload:
@@ -118,6 +130,16 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
                         "backlog_overflow", "服务端处理积压超限，请降低推流速率", fatal=True))
                     return False
                 state["backlog"] += len(payload)
+                if recorder is not None:
+                    try:
+                        recorder.write(payload)
+                    except Exception as e:
+                        logger.warning(f"[compat-ws] 录音写入失败，停止本轮录音: {e}", exc_info=True)
+                        try:
+                            recorder.close()
+                        except Exception:
+                            pass
+                        recorder = None
                 frame_q.put_nowait(payload)
             elif kind == "flush":
                 frame_q.put_nowait(_SOFT_FLUSH)
@@ -128,6 +150,11 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
                 return adapter.reusable
             # kind == "ignore": 跳过
     finally:
+        if recorder is not None:
+            try:
+                recorder.close()
+            except Exception:
+                pass
         if not consume_task.done():
             consume_task.cancel()
             try:

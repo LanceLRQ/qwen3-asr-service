@@ -80,9 +80,9 @@ def ws_app(monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    def _make(backend, api_key=""):
+    def _make(backend, api_key="", recording_manager=None):
         monkeypatch.setattr(cfg, "API_KEY", api_key)
-        ws_bridge.init_compat_ws(backend)
+        ws_bridge.init_compat_ws(backend, recording_manager=recording_manager)
         app = FastAPI()
         app.include_router(build_openai_ws_router())
         app.include_router(build_dashscope_ws_router())
@@ -118,6 +118,35 @@ def test_openai_full_flow(ws_app):
         assert ev["item_id"] == "item_0"
         assert "delta" not in ev["type"]   # Stage A 不发逐字增量
     assert backend.released == 1
+
+
+def test_openai_realtime_saves_recording_when_enabled(ws_app, tmp_path):
+    import wave
+
+    from app.runtime.stream_recording import StreamRecordingManager
+
+    manager = StreamRecordingManager(
+        enabled=True,
+        directory=str(tmp_path / "recordings"),
+        retention_hours=72,
+    )
+    backend = FakeBackend()
+    client = ws_app(backend, recording_manager=manager)
+    with client.websocket_connect(OPENAI_WS) as ws:
+        ws.receive_json()
+        ws.send_json({"type": "session.update", "session": {"audio": {"input": {
+            "format": {"rate": 8000}}}}})
+        ws.receive_json()
+        ws.send_json({"type": "input_audio_buffer.append",
+                      "audio": base64.b64encode(b"\x01\x00\x02\x00").decode()})
+        ws.send_json({"type": "input_audio_buffer.commit"})
+        assert ws.receive_json()["type"] == "conversation.item.input_audio_transcription.completed"
+
+    files = list((tmp_path / "recordings").glob("*.wav"))
+    assert len(files) == 1
+    with wave.open(str(files[0]), "rb") as wf:
+        assert wf.getframerate() == 8000
+        assert wf.getnframes() == 2
 
 
 def test_openai_session_update_no_rate_echoes_default(ws_app):

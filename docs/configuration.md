@@ -75,6 +75,15 @@
 | `--task-db-path` | 路径 | `data/tasks.db` | 任务库路径（相对服务根目录） |
 | `--task-retention-days` | 天数 | `7` | 过期任务清理窗口，启动时执行；`0` = 永不清理 |
 
+### 实时录音留存
+
+默认不保存实时推流音频。开启后，服务端把每个实时会话收到的 PCM16 输入封装为 WAV 文件，存放在临时缓存目录的 `stream_recordings` 子目录。录音属于敏感数据，下载和删除接口强制要求配置 `api_key` 并携带 Bearer Token；服务端未配置 `api_key` 时接口返回 503。
+
+| 参数 | 取值 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--stream-save-audio` / `--no-stream-save-audio` | - | 关闭 | 保存实时录音原件为 WAV；开启后 WS 会在 `start` 后返回 `recording.created` |
+| `--stream-recording-retention-hours` | 小时 | `72` | 录音保留时长，启动时清理过期文件；`0` = 永不自动清理 |
+
 ### 说话人分离
 
 | 参数 | 取值 | 默认值 | 说明 |
@@ -172,7 +181,7 @@ bash start.sh --no-config
 
 - 仅支持 YAML，顶层为扁平键值映射；全部可配键见 [`asr-service/config.example.yaml`](../asr-service/config.example.yaml)。
 - **启动时硬校验**：未知键（带近似拼写提示）、空值、类型错误、取值越界、重复键均直接报错退出，防止拼写错误静默生效；多处错误一次性全部报出。
-- 布尔开关在配置文件设 `true` 后，命令行可用反向参数覆盖（`--no-punc` / `--no-web` / `--no-stream` / `--no-align` / `--no-task-store` / `--no-speaker` / `--no-speaker-db` / `--no-speaker-auto-enroll` / `--no-speaker-store-audio`）。
+- 布尔开关在配置文件设 `true` 后，命令行可用反向参数覆盖（`--no-punc` / `--no-web` / `--no-stream` / `--no-stream-save-audio` / `--no-align` / `--no-task-store` / `--no-speaker` / `--no-speaker-db` / `--no-speaker-auto-enroll` / `--no-speaker-store-audio`）。
 
 ### 安全
 

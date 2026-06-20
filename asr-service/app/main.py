@@ -61,6 +61,32 @@ _CFG_FALLBACK_ATTRS = {
 }
 
 
+def _init_stream_recording_manager():
+    """创建流式录音管理器并执行启动清理。"""
+    from app.runtime.stream_recording import StreamRecordingManager
+
+    manager = StreamRecordingManager(
+        enabled=cfg.STREAM_SAVE_AUDIO,
+        directory=cfg.STREAM_RECORDINGS_DIR,
+        retention_hours=cfg.STREAM_RECORDING_RETENTION_HOURS,
+    )
+    expired = manager.cleanup_expired()
+    if expired:
+        logger.info(f"已清理 {expired} 个过期流式录音（>{cfg.STREAM_RECORDING_RETENTION_HOURS} 小时）")
+    return manager
+
+
+def _mount_stream_recording_routes(app: FastAPI, manager) -> None:
+    """挂载流式录音下载/删除接口。接口内部强制 api_key。"""
+    from app.api.stream_recording_routes import (
+        build_stream_recordings_router,
+        init_stream_recording_routes,
+    )
+
+    init_stream_recording_routes(manager)
+    app.include_router(build_stream_recordings_router())
+
+
 def _log_effective_config(args):
     """启动时打印生效配置（四层合并结果），便于核对实际运行参数；api_key 脱敏。
 
@@ -122,6 +148,9 @@ def _apply_cli_config(args):
         cfg.MAX_STREAM_SESSIONS = args.max_stream_sessions
     if getattr(args, "stream_asr_concurrency", None) is not None:
         cfg.STREAM_ASR_CONCURRENCY = args.stream_asr_concurrency
+    cfg.STREAM_SAVE_AUDIO = getattr(args, "stream_save_audio", False)
+    if getattr(args, "stream_recording_retention_hours", None) is not None:
+        cfg.STREAM_RECORDING_RETENTION_HOURS = args.stream_recording_retention_hours
     if getattr(args, "vad_speech_noise_thres", None) is not None:
         cfg.VAD_SPEECH_NOISE_THRES = args.vad_speech_noise_thres
     cfg.STREAM_NOISE_FILTER = getattr(args, "stream_noise_filter", False)
@@ -388,6 +417,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
             logger.error(f"任务持久化初始化失败，本次以纯内存模式运行: {e}")
             task_store = None
 
+    stream_recording_manager = _init_stream_recording_manager()
+
     # 创建任务管理器
     task_manager = TaskManager(max_queue_size=cfg.MAX_QUEUE_SIZE, store=task_store)
 
@@ -422,6 +453,12 @@ def _assemble_standard(app: FastAPI, args) -> None:
             "partial_results": False,
             "word_timestamps": enable_align if stream_enabled else False,
             "speaker_labels": speaker_enabled if stream_enabled else False,
+            "save_audio": bool(stream_enabled and cfg.STREAM_SAVE_AUDIO),
+            "recording_retention_hours": cfg.STREAM_RECORDING_RETENTION_HOURS,
+            "recording_download_path": (
+                "/v2/stream-recordings/{recording_id}"
+                if stream_enabled and cfg.STREAM_SAVE_AUDIO else None
+            ),
         },
         # 可覆盖参数的当前生效默认值（反映实际配置，供 Web UI 占位提示）
         "defaults": {
@@ -457,6 +494,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
     init_common(service_info)
     app.include_router(build_common_router("/v1"))
     app.include_router(build_common_router("/v2"))
+    _mount_stream_recording_routes(app, stream_recording_manager)
 
     # 离线路由：v1（含 deprecated 别名）+ v2（同名复用）
     init_routes(task_manager, task_store)
@@ -475,6 +513,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
     stream_backend = None
     if stream_enabled:
         from app.api.ws_routes import ws_router_stream, init_ws_stream
+        from app.api.ws_routes import init_stream_recordings
         from app.runtime.stream_session import VadOfflineBackend
         stream_backend = VadOfflineBackend(
             asr_engine, vad_engine, punc_engine,
@@ -489,6 +528,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
             snr_min_db=cfg.STREAM_SNR_MIN_DB,
         )
         init_ws_stream(stream_backend)
+        init_stream_recordings(stream_recording_manager)
         app.include_router(ws_router_stream)
         logger.info("实时转写已启用：WS /v2/asr/stream（路线B / vad-offline）")
 
@@ -499,7 +539,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
         from app.api.compat import init_compat
         from app.api.compat.errors import register_compat_exception_handlers
         init_compat(task_manager=task_manager, task_store=task_store,
-                    backend=stream_backend, service_info=service_info)
+                    backend=stream_backend, service_info=service_info,
+                    recording_manager=stream_recording_manager)
         register_compat_exception_handlers(app)
     if enable_openai:
         from app.api.compat.openai_routes import build_openai_router
@@ -652,7 +693,10 @@ def _assemble_vllm(app: FastAPI, args) -> None:
         energy_floor_dbfs=cfg.VLLM_ENERGY_FLOOR_DBFS,
         end_silence_ms=cfg.VLLM_END_SILENCE_MS,
     )
+    stream_recording_manager = _init_stream_recording_manager()
     init_ws_stream(stream_backend)
+    from app.api.ws_routes import init_stream_recordings
+    init_stream_recordings(stream_recording_manager)
     app.include_router(ws_router_stream)
 
     # 离线任务层（Phase 1）：复用 standard 的 TaskManager/TaskStore/离线路由（依赖中性，
@@ -708,6 +752,11 @@ def _assemble_vllm(app: FastAPI, args) -> None:
             "partial_results": True,
             "word_timestamps": False,
             "speaker_labels": False,                   # 流式说话人仍无（仅离线，见能力对照）
+            "save_audio": cfg.STREAM_SAVE_AUDIO,
+            "recording_retention_hours": cfg.STREAM_RECORDING_RETENTION_HOURS,
+            "recording_download_path": (
+                "/v2/stream-recordings/{recording_id}" if cfg.STREAM_SAVE_AUDIO else None
+            ),
         },
         # 离线可覆盖默认（Web UI 占位/对照用）；vLLM 无 FSMN，分段用标点优先
         "defaults": {
@@ -746,6 +795,7 @@ def _assemble_vllm(app: FastAPI, args) -> None:
     init_common(service_info)
     app.include_router(build_common_router("/v1"))
     app.include_router(build_common_router("/v2"))
+    _mount_stream_recording_routes(app, stream_recording_manager)
 
     # 离线路由：v1（含 deprecated 别名）+ v2（同名复用）——与 standard 同一套契约
     from app.api.routes import init_routes, build_offline_router
@@ -770,7 +820,8 @@ def _assemble_vllm(app: FastAPI, args) -> None:
         from app.api.compat import init_compat
         from app.api.compat.errors import register_compat_exception_handlers
         init_compat(task_manager=task_manager, task_store=task_store,
-                    backend=stream_backend, service_info=service_info)
+                    backend=stream_backend, service_info=service_info,
+                    recording_manager=stream_recording_manager)
         register_compat_exception_handlers(app)
     if enable_openai:
         from app.api.compat.openai_routes import build_openai_router

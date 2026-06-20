@@ -12,6 +12,7 @@
   - [消息流程](#消息流程)
   - [客户端 → 服务端](#客户端--服务端)
   - [服务端 → 客户端](#服务端--客户端)
+  - [实时录音下载 / 删除](#实时录音下载--删除)
   - [错误码](#错误码)
   - [WebSocket 关闭码](#websocket-关闭码)
 
@@ -136,6 +137,7 @@ WS /v2/asr/stream
 | type | 字段 | 说明 |
 |------|------|------|
 | `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` / `limits` | 连接建立即下发；`capabilities` 含 `partial_results` / `word_timestamps` / `languages_auto` / `speaker_labels` / `speaker_identification`，以及可调声明 `noise_filter_tunable` / `speaker_tunable` / `endpoint_tunable` / `output_toggles`（标示对应覆盖项本会话是否可调）；`limits` 含 `max_frame_bytes` / `max_backlog_bytes`，超实时推流的客户端应据此控速（参考 `final.end` 反馈的处理进度，保持未处理积压低于上限） |
+| `recording.created` | `recording_id` / `wav_name` | 仅开启 `stream_save_audio` 时出现，在 `start` 校验成功后下发；客户端可用 `recording_id` 下载或删除本次保存的 WAV 录音 |
 | `partial` | `seg_id` / `text` | 中间结果（仅 `partial_results=true` 的后端，vad-offline 不产生） |
 | `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` | 句级定稿结果；`start`/`end` 为毫秒；`words` 仅 `word_timestamps=true` 时存在；`speaker`（匿名标签 A/B/C…）仅 `speaker_labels=true` 且本段可判定时存在；`speaker_name` 仅 `identify_speakers=true` 且声纹命中时存在（说话人标签 / 真名语义见[说话人管理](speakers.md#说话人分离与声纹识别)） |
 | `error` | `code` / `message` / `seg_id` / `fatal` | `fatal=true` 后会话终止 |
@@ -146,6 +148,38 @@ WS /v2/asr/stream
 ```json
 {"type": "final", "seg_id": 0, "text": "甚至出现交易几乎停滞的情况。", "start": 320, "end": 3520, "words": null}
 ```
+
+### 实时录音下载 / 删除
+
+默认不保存录音。启动时配置 `stream_save_audio: true` 或 `--stream-save-audio` 后，服务端保存每个实时会话收到的 PCM16 输入为 WAV，并在 WS 中下发：
+
+```json
+{"type": "recording.created", "recording_id": "9f86...", "wav_name": "stream.wav"}
+```
+
+录音保留时长由 `stream_recording_retention_hours` / `--stream-recording-retention-hours` 控制，默认 `72` 小时，服务启动时清理过期文件，`0` 表示永不自动清理。
+
+下载：
+
+```
+GET /v2/stream-recordings/{recording_id}
+Authorization: Bearer <api-key>
+```
+
+删除：
+
+```
+DELETE /v2/stream-recordings/{recording_id}
+Authorization: Bearer <api-key>
+```
+
+删除响应：
+
+```json
+{"recording_id": "9f86...", "status": "deleted", "deleted": true}
+```
+
+录音接口强制要求服务端配置 `api_key`，并要求请求携带 Bearer Token；未配置 `api_key` 时返回 503，鉴权失败返回 401，文件不存在下载返回 404，删除返回 `{"status":"not_found","deleted":false}`。
 
 ### 错误码
 

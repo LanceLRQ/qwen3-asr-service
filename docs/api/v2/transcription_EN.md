@@ -12,6 +12,7 @@ Two ways to transcribe: **offline batch** (upload a whole clip, get the result a
   - [Message Flow](#message-flow)
   - [Client → Server](#client--server)
   - [Server → Client](#server--client)
+  - [Real-time Recording Download / Delete](#real-time-recording-download--delete)
   - [Error Codes](#error-codes)
   - [WebSocket Close Codes](#websocket-close-codes)
 
@@ -136,6 +137,7 @@ All server-to-client messages use a uniform envelope and carry a `type`:
 | type | Fields | Description |
 |------|--------|-------------|
 | `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` / `limits` | Sent on connect; `capabilities` contains `partial_results` / `word_timestamps` / `languages_auto` / `speaker_labels` / `speaker_identification`, plus tunability flags `noise_filter_tunable` / `speaker_tunable` / `endpoint_tunable` / `output_toggles` (whether the corresponding overrides can be tuned in this session); `limits` contains `max_frame_bytes` / `max_backlog_bytes` — clients pushing faster than real time should pace themselves accordingly (use `final.end` as processing-progress feedback and keep the unprocessed backlog below the limit) |
+| `recording.created` | `recording_id` / `wav_name` | Sent only when `stream_save_audio` is enabled, after `start` is accepted; use `recording_id` to download or delete the saved WAV recording |
 | `partial` | `seg_id` / `text` | Intermediate result (only for backends with `partial_results=true`; vad-offline does not produce them) |
 | `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` | Finalized sentence-level result; `start`/`end` in milliseconds; `words` only when `word_timestamps=true`; `speaker` (anonymous label A/B/C…) only when `speaker_labels=true` and this segment is decidable; `speaker_name` only when `identify_speakers=true` and a voiceprint matches (speaker label / real-name semantics in [Speaker Management](speakers_EN.md#speaker-diarization--voiceprint-identification)) |
 | `error` | `code` / `message` / `seg_id` / `fatal` | The session terminates when `fatal=true` |
@@ -146,6 +148,38 @@ All server-to-client messages use a uniform envelope and carry a `type`:
 ```json
 {"type": "final", "seg_id": 0, "text": "甚至出现交易几乎停滞的情况。", "start": 320, "end": 3520, "words": null}
 ```
+
+### Real-time Recording Download / Delete
+
+Recordings are not saved by default. Start with `stream_save_audio: true` or `--stream-save-audio` to save each real-time session's received PCM16 input as WAV. The WS then emits:
+
+```json
+{"type": "recording.created", "recording_id": "9f86...", "wav_name": "stream.wav"}
+```
+
+Retention is controlled by `stream_recording_retention_hours` / `--stream-recording-retention-hours`, default `72` hours. Expired files are cleaned at service startup; `0` means never auto-clean.
+
+Download:
+
+```
+GET /v2/stream-recordings/{recording_id}
+Authorization: Bearer <api-key>
+```
+
+Delete:
+
+```
+DELETE /v2/stream-recordings/{recording_id}
+Authorization: Bearer <api-key>
+```
+
+Delete response:
+
+```json
+{"recording_id": "9f86...", "status": "deleted", "deleted": true}
+```
+
+Recording endpoints require the server to have `api_key` configured and require a Bearer token on the request. No server `api_key` returns 503; auth failure returns 401; missing file returns 404 for download and `{"status":"not_found","deleted":false}` for delete.
 
 ### Error Codes
 

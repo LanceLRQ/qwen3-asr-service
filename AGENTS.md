@@ -14,7 +14,7 @@ This repository contains a Python ASR API service. Core source code lives in `as
 
 ## Coding Style & Naming Conventions
 
-Use Python 3.12 and follow PEP 8 with 4-space indentation. Prefer small, pure functions for mapping and parsing logic, especially in `app/api/compat` and `app/utils`. Keep startup parameters centralized in `app/utils/arg_schema.py`; update `app/main.py`, `config.example.yaml`, and related tests when adding options. Name test files `test_*.py` and test functions `test_*`.
+Use Python 3.12 and follow PEP 8 with 4-space indentation. Always use the project virtual environment for Python commands, scripts, and tests; run `venv/bin/python` / `venv/bin/python -m pytest` from `asr-service` instead of system `python`, `python3`, or `pytest`. Prefer small, pure functions for mapping and parsing logic, especially in `app/api/compat` and `app/utils`. Keep startup parameters centralized in `app/utils/arg_schema.py`; update `app/main.py`, `config.example.yaml`, and related tests when adding options. Name test files `test_*.py` and test functions `test_*`.
 
 ## Testing Guidelines
 

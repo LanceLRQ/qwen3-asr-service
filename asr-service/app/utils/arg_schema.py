@@ -140,6 +140,26 @@ ARG_SPECS = (
         help_en=f"Max concurrent realtime ASR decodes (default: {cfg.STREAM_ASR_CONCURRENCY})",
     ),
     ArgSpec(
+        key="stream_save_audio", flags=("--stream-save-audio",), default=False, type=bool,
+        group="实时转写",
+        help="保存实时录音原件为 WAV（默认关，录音下载/删除接口要求 api_key）",
+        help_en="Save realtime input audio as WAV (off by default; download/delete "
+                "requires api_key)",
+        negative_flags=("--no-stream-save-audio",),
+        negative_help="不保存实时录音原件（覆盖配置文件）",
+        negative_help_en="Do not save realtime input audio (overrides config file)",
+    ),
+    ArgSpec(
+        key="stream_recording_retention_hours",
+        flags=("--stream-recording-retention-hours",),
+        default=72,
+        type=int,
+        group="实时转写",
+        help="实时录音保留时长（小时），启动时清理过期文件；0=永不清理 (default: 72)",
+        help_en="Realtime recording retention in hours, cleaned at startup; "
+                "0=never (default: 72)",
+    ),
+    ArgSpec(
         key="vad_speech_noise_thres", flags=("--vad-speech-noise-thres",),
         default=0.6, type=float, group="远场过滤",
         help="FSMN-VAD 语音/噪声判决阈值（离线+实时统一）：调高更激进过滤远场/弱帧 (default: 0.6)",

@@ -39,6 +39,12 @@ class CancelResponse(BaseModel):
     message: str
 
 
+class StreamRecordingDeleteResponse(BaseModel):
+    recording_id: str
+    status: str     # "deleted" | "not_found"
+    deleted: bool
+
+
 class SpeakerTemplateInfo(BaseModel):
     id: int
     dur_sec: float
@@ -100,6 +106,9 @@ class StreamCapabilities(BaseModel):
     partial_results: bool = False
     word_timestamps: bool = False
     speaker_labels: bool = False      # 实时 final.speaker（匿名 A/B/C…）
+    save_audio: bool = False          # 是否保存实时录音 WAV
+    recording_retention_hours: int = 72
+    recording_download_path: str | None = None
 
 
 class CapabilitiesResponse(BaseModel):

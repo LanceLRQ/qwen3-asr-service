@@ -75,6 +75,15 @@ Reduces false triggers from far-field sounds and ambient noise. `--vad-speech-no
 | `--task-db-path` | Path | `data/tasks.db` | Task database path (relative to the service root) |
 | `--task-retention-days` | Days | `7` | Retention window for expired tasks, cleaned at startup; `0` = never clean |
 
+### Real-time Recording Retention
+
+Real-time input audio is not saved by default. When enabled, each real-time session's received PCM16 input is wrapped as a WAV file under the temporary cache `stream_recordings` directory. Recordings are sensitive data: download and delete endpoints require a configured `api_key` plus a Bearer token; when the server has no `api_key`, those endpoints return 503.
+
+| Parameter | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `--stream-save-audio` / `--no-stream-save-audio` | - | Disabled | Save real-time input audio as WAV; when enabled, the WS sends `recording.created` after `start` |
+| `--stream-recording-retention-hours` | Hours | `72` | Recording retention window, cleaned at startup; `0` = never auto-clean |
+
 ### Speaker Diarization
 
 | Parameter | Values | Default | Description |
@@ -172,7 +181,7 @@ bash start.sh --no-config
 
 - YAML only, flat key-value mapping at the top level; all available keys are listed in [`asr-service/config.example.yaml`](../asr-service/config.example.yaml).
 - **Hard validation at startup**: unknown keys (with did-you-mean hints), null values, type errors, out-of-range values and duplicate keys all abort startup with readable errors — typos never take effect silently; all errors are reported at once.
-- Boolean switches set to `true` in the file can be overridden from the CLI with negative flags (`--no-punc` / `--no-web` / `--no-stream` / `--no-align` / `--no-task-store` / `--no-speaker` / `--no-speaker-db` / `--no-speaker-auto-enroll` / `--no-speaker-store-audio`).
+- Boolean switches set to `true` in the file can be overridden from the CLI with negative flags (`--no-punc` / `--no-web` / `--no-stream` / `--no-stream-save-audio` / `--no-align` / `--no-task-store` / `--no-speaker` / `--no-speaker-db` / `--no-speaker-auto-enroll` / `--no-speaker-store-audio`).
 
 ### Security
 

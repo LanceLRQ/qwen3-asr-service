@@ -103,6 +103,7 @@ CACHE_DIR = os.path.join(tempfile.gettempdir(), "qwen3-asr-service")
 UPLOADS_DIR = os.path.join(CACHE_DIR, "uploads")
 AUDIO_CHUNKS_DIR = os.path.join(CACHE_DIR, "audio_chunks")
 RESULTS_DIR = os.path.join(CACHE_DIR, "results")
+STREAM_RECORDINGS_DIR = os.path.join(CACHE_DIR, "stream_recordings")
 
 # ─── 日志 ───
 
@@ -146,6 +147,8 @@ STREAM_MAX_FRAME_BYTES = 2 * 1024 * 1024    # 单条二进制帧上限（字节�
 STREAM_MAX_BACKLOG_BYTES = 8 * 1024 * 1024  # 会话处理积压上限（字节），超限回 backlog_overflow 断开
                                             # （16kHz PCM16 约合 4 分钟积压；离线/流式争抢推理时的保护阀）
 STREAM_SAMPLE_RATE = 16000      # 内部统一采样率
+STREAM_SAVE_AUDIO = False       # 是否保存流式录音原件（WAV），默认关
+STREAM_RECORDING_RETENTION_HOURS = 72  # 流式录音保留时长（小时）；0 = 永不自动清理
 
 # ─── 远场过滤（段级能量/SNR 门控，仅实时，默认关）───
 

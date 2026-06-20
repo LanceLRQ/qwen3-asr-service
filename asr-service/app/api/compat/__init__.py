@@ -8,7 +8,8 @@ from app.api.compat.openai_routes import init_openai_routes
 from app.api.compat.ws_bridge import init_compat_ws
 
 
-def init_compat(*, task_manager, task_store=None, backend=None, service_info=None):
+def init_compat(*, task_manager, task_store=None, backend=None, service_info=None,
+                recording_manager=None):
     """由 main.py 装配末尾注入运行时依赖。
 
     task_manager：离线兼容入队/同步等待/轮询；service_info：GET /models 读模型信息；
@@ -17,4 +18,4 @@ def init_compat(*, task_manager, task_store=None, backend=None, service_info=Non
     """
     init_openai_routes(task_manager=task_manager, service_info=service_info)
     init_dashscope_routes(task_manager=task_manager)
-    init_compat_ws(backend)
+    init_compat_ws(backend, recording_manager=recording_manager)

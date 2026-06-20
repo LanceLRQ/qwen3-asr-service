@@ -44,9 +44,10 @@ class FakeBackend:
         self.released = True
 
 
-def _make_client(backend):
+def _make_client(backend, recording_manager=None):
     from app.api import ws_routes
     ws_routes.init_ws_stream(backend)
+    ws_routes.init_stream_recordings(recording_manager)
     app = FastAPI()
     app.include_router(ws_routes.ws_router_stream)
     return TestClient(app)
@@ -78,6 +79,41 @@ def test_session_created_and_full_flow():
         assert closed["type"] == "session.closed"
 
     assert backend.released is True
+
+
+def test_stream_recording_created_and_wav_saved(tmp_path):
+    import wave
+
+    from app.runtime.stream_recording import StreamRecordingManager
+
+    backend = FakeBackend()
+    manager = StreamRecordingManager(
+        enabled=True,
+        directory=str(tmp_path / "recordings"),
+        retention_hours=72,
+    )
+    client = _make_client(backend, manager)
+    with client.websocket_connect("/v2/asr/stream") as ws:
+        ws.receive_json()  # session.created
+        ws.send_json({"type": "start", "audio_fs": 8000, "wav_name": "mic"})
+        rec = ws.receive_json()
+        assert rec["type"] == "recording.created"
+        assert rec["recording_id"]
+        assert rec["wav_name"] == "mic.wav"
+
+        ws.send_bytes(b"\x01\x00\x02\x00")
+        assert ws.receive_json()["type"] == "final"
+        ws.send_json({"type": "stop"})
+        assert ws.receive_json()["type"] == "final"
+        assert ws.receive_json()["type"] == "session.closed"
+
+    path = manager.path_for(rec["recording_id"])
+    assert path is not None
+    with wave.open(str(path), "rb") as wf:
+        assert wf.getnchannels() == 1
+        assert wf.getsampwidth() == 2
+        assert wf.getframerate() == 8000
+        assert wf.getnframes() == 2
 
 
 def test_auth_rejected_without_token(monkeypatch):

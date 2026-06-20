@@ -123,7 +123,10 @@ Returns the current serving mode and capability declaration (clients can use it 
     "path": "/v2/asr/stream",
     "partial_results": false,
     "word_timestamps": true,
-    "speaker_labels": true
+    "speaker_labels": true,
+    "save_audio": false,
+    "recording_retention_hours": 72,
+    "recording_download_path": null
   },
   "defaults": {
     "max_segment": 5, "max_end_silence_ms": 800, "max_segment_sec": 12,
@@ -142,4 +145,7 @@ Returns the current serving mode and capability declaration (clients can use it 
 | stream.partial_results | Whether intermediate `partial` results are produced (false for vad-offline) |
 | stream.word_timestamps | Whether `final` carries word-level timestamps (follows the alignment switch) |
 | stream.speaker_labels | Whether real-time `final` carries speaker labels |
+| stream.save_audio | Whether real-time input audio is saved as WAV (default false) |
+| stream.recording_retention_hours | Real-time recording retention in hours, default 72; 0 disables auto cleanup |
+| stream.recording_download_path | Download/delete path template when saving is enabled; `null` when disabled |
 | defaults | Current effective defaults of the overridable params (real-time `start` fields / offline Form fields), reflecting actual config; used by the Web UI for input placeholders |

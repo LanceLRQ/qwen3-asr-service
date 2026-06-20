@@ -25,6 +25,8 @@ LEGACY_DEFAULTS = {
     "enable_stream": False,
     "max_stream_sessions": None,
     "stream_asr_concurrency": None,
+    "stream_save_audio": False,
+    "stream_recording_retention_hours": 72,
     # ── 远场过滤新增，非重构前遗留 ──
     "vad_speech_noise_thres": 0.6,
     "stream_noise_filter": False,
@@ -117,6 +119,7 @@ def test_explicit_default_value_still_present():
     ("--no-punc", "enable_punc"),
     ("--no-web", "web"),
     ("--no-stream", "enable_stream"),
+    ("--no-stream-save-audio", "stream_save_audio"),
     ("--no-speaker", "enable_speaker"),
     ("--no-speaker-db", "enable_speaker_db"),
     ("--no-speaker-auto-enroll", "speaker_auto_enroll"),
