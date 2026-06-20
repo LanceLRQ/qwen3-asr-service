@@ -195,6 +195,7 @@ def test_standard_mode_stream_save_audio_capability(isolated_create_app, monkeyp
     _mock_standard_engines(monkeypatch)
 
     app = main.create_app(_args(
+        api_key="sk-secret",
         device="auto",
         enable_stream=True,
         stream_save_audio=True,
@@ -206,6 +207,25 @@ def test_standard_mode_stream_save_audio_capability(isolated_create_app, monkeyp
     assert stream["save_audio"] is True
     assert stream["recording_retention_hours"] == 48
     assert stream["recording_download_path"] == "/v2/stream-recordings/{recording_id}"
+
+
+def test_stream_save_audio_disabled_without_api_key(isolated_create_app, monkeypatch):
+    """未配置 api_key 时不启用录音保存，避免生成不可下载/删除的录音。"""
+    import app.main as main
+
+    _mock_standard_engines(monkeypatch)
+
+    app = main.create_app(_args(
+        api_key="",
+        device="auto",
+        enable_stream=True,
+        stream_save_audio=True,
+    ))
+    client = TestClient(app)
+
+    stream = client.get("/v2/capabilities").json()["stream"]
+    assert stream["save_audio"] is False
+    assert stream["recording_download_path"] is None
 
 
 def test_config_stream_defaults():

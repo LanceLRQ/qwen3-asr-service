@@ -65,8 +65,11 @@ def _init_stream_recording_manager():
     """创建流式录音管理器并执行启动清理。"""
     from app.runtime.stream_recording import StreamRecordingManager
 
+    enabled = bool(cfg.STREAM_SAVE_AUDIO and cfg.API_KEY)
+    if cfg.STREAM_SAVE_AUDIO and not cfg.API_KEY:
+        logger.warning("已请求保存实时录音，但未配置 api_key；录音保存已禁用")
     manager = StreamRecordingManager(
-        enabled=cfg.STREAM_SAVE_AUDIO,
+        enabled=enabled,
         directory=cfg.STREAM_RECORDINGS_DIR,
         retention_hours=cfg.STREAM_RECORDING_RETENTION_HOURS,
     )
@@ -453,11 +456,11 @@ def _assemble_standard(app: FastAPI, args) -> None:
             "partial_results": False,
             "word_timestamps": enable_align if stream_enabled else False,
             "speaker_labels": speaker_enabled if stream_enabled else False,
-            "save_audio": bool(stream_enabled and cfg.STREAM_SAVE_AUDIO),
+            "save_audio": bool(stream_enabled and stream_recording_manager.enabled),
             "recording_retention_hours": cfg.STREAM_RECORDING_RETENTION_HOURS,
             "recording_download_path": (
                 "/v2/stream-recordings/{recording_id}"
-                if stream_enabled and cfg.STREAM_SAVE_AUDIO else None
+                if stream_enabled and stream_recording_manager.enabled else None
             ),
         },
         # 可覆盖参数的当前生效默认值（反映实际配置，供 Web UI 占位提示）
@@ -752,10 +755,11 @@ def _assemble_vllm(app: FastAPI, args) -> None:
             "partial_results": True,
             "word_timestamps": False,
             "speaker_labels": False,                   # 流式说话人仍无（仅离线，见能力对照）
-            "save_audio": cfg.STREAM_SAVE_AUDIO,
+            "save_audio": stream_recording_manager.enabled,
             "recording_retention_hours": cfg.STREAM_RECORDING_RETENTION_HOURS,
             "recording_download_path": (
-                "/v2/stream-recordings/{recording_id}" if cfg.STREAM_SAVE_AUDIO else None
+                "/v2/stream-recordings/{recording_id}"
+                if stream_recording_manager.enabled else None
             ),
         },
         # 离线可覆盖默认（Web UI 占位/对照用）；vLLM 无 FSMN，分段用标点优先

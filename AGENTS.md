@@ -9,12 +9,12 @@ This repository contains a Python ASR API service. Core source code lives in `as
 - `bash manage.sh`: recommended Linux/macOS entry for guided setup, start, stop, and Docker/venv management.
 - `cd asr-service && bash setup.sh`: create/update the standard virtual environment and install runtime dependencies.
 - `cd asr-service && bash start.sh --web`: start the local service and Web UI.
-- `cd asr-service && venv/bin/python -m pytest tests/unit -q`: run unit tests with coverage from `pytest.ini`.
+- `PYTHONPATH=asr-service .venv/bin/python -m pytest asr-service/tests/unit -q`: run unit tests with coverage from `pytest.ini`.
 - `cd asr-service/scripts/e2e && ./run.sh --list`: list available E2E smoke checks.
 
 ## Coding Style & Naming Conventions
 
-Use Python 3.12 and follow PEP 8 with 4-space indentation. Always use the project virtual environment for Python commands, scripts, and tests; run `venv/bin/python` / `venv/bin/python -m pytest` from `asr-service` instead of system `python`, `python3`, or `pytest`. Prefer small, pure functions for mapping and parsing logic, especially in `app/api/compat` and `app/utils`. Keep startup parameters centralized in `app/utils/arg_schema.py`; update `app/main.py`, `config.example.yaml`, and related tests when adding options. Name test files `test_*.py` and test functions `test_*`.
+Use Python 3.12 and follow PEP 8 with 4-space indentation. Always use the repository virtual environment for Python commands, scripts, and tests; run `.venv/bin/python` / `.venv/bin/python -m pytest` from the repository root instead of system `python`, `python3`, or `pytest`. Prefer small, pure functions for mapping and parsing logic, especially in `app/api/compat` and `app/utils`. Keep startup parameters centralized in `app/utils/arg_schema.py`; update `app/main.py`, `config.example.yaml`, and related tests when adding options. Name test files `test_*.py` and test functions `test_*`.
 
 ## Testing Guidelines
 

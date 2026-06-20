@@ -23,7 +23,7 @@ max_segment: 5              # VAD 切片合并最大时长（秒）
 enable_stream: true         # WS /v2/asr/stream（standard 模式）
 # max_stream_sessions: 16   # 实时最大并发会话数
 # stream_asr_concurrency: 1 # 实时 ASR 解码并发上限（模型层有推理锁，>1 无收益）
-# stream_save_audio: false  # 保存实时录音原件为 WAV（默认关；下载/删除接口要求 api_key）
+# stream_save_audio: false  # 保存实时录音原件为 WAV（默认关；实际启用和下载/删除均要求 api_key）
 # stream_recording_retention_hours: 72 # 实时录音保留时长（小时），启动时清理；0=永不清理
 
 # ── 智能远场过滤（减少远场/环境音误触发，默认关）──

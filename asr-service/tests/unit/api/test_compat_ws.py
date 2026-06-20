@@ -136,7 +136,10 @@ def test_openai_realtime_saves_recording_when_enabled(ws_app, tmp_path):
         ws.receive_json()
         ws.send_json({"type": "session.update", "session": {"audio": {"input": {
             "format": {"rate": 8000}}}}})
-        ws.receive_json()
+        updated = ws.receive_json()
+        recording = updated["session"]["recording"]
+        assert recording["recording_id"]
+        assert recording["wav_name"] == "compat-stream.wav"
         ws.send_json({"type": "input_audio_buffer.append",
                       "audio": base64.b64encode(b"\x01\x00\x02\x00").decode()})
         ws.send_json({"type": "input_audio_buffer.commit"})
@@ -147,6 +150,24 @@ def test_openai_realtime_saves_recording_when_enabled(ws_app, tmp_path):
     with wave.open(str(files[0]), "rb") as wf:
         assert wf.getframerate() == 8000
         assert wf.getnframes() == 2
+
+
+def test_dashscope_realtime_exposes_recording_id(ws_app, tmp_path):
+    from app.runtime.stream_recording import StreamRecordingManager
+
+    manager = StreamRecordingManager(
+        enabled=True,
+        directory=str(tmp_path / "recordings"),
+        retention_hours=72,
+    )
+    client = ws_app(FakeBackend(), recording_manager=manager)
+    with client.websocket_connect(DASHSCOPE_WS) as ws:
+        ws.send_json({"header": {"action": "run-task", "task_id": "task-1"},
+                      "payload": {"parameters": {"sample_rate": 8000}}})
+        started = ws.receive_json()
+        recording = started["payload"]["recording"]
+        assert recording["recording_id"]
+        assert recording["wav_name"] == "compat-stream.wav"
 
 
 def test_openai_session_update_no_rate_echoes_default(ws_app):

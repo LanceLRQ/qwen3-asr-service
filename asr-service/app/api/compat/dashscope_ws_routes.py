@@ -63,12 +63,15 @@ class DashScopeRealtimeAdapter:
             return ("end", None)
         return ("ignore", None)
 
-    async def on_configured(self, ws: WebSocket, warnings):
+    async def on_configured(self, ws: WebSocket, warnings, recording=None):
         if warnings:
             logger.info(f"[compat-ws/dashscope] 忽略未启用参数: {', '.join(warnings)}")
+        payload = {}
+        if recording:
+            payload["recording"] = recording
         await ws.send_json({
             "header": {"task_id": self._task_id, "event": "task-started", "attributes": {}},
-            "payload": {},
+            "payload": payload,
         })
 
     def translate_partials(self, partial: dict):

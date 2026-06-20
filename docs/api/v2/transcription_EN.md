@@ -151,11 +151,15 @@ All server-to-client messages use a uniform envelope and carry a `type`:
 
 ### Real-time Recording Download / Delete
 
-Recordings are not saved by default. Start with `stream_save_audio: true` or `--stream-save-audio` to save each real-time session's received PCM16 input as WAV. The WS then emits:
+Recordings are not saved by default. Start with `stream_save_audio: true` / `--stream-save-audio` and a configured server-side `api_key` to save each real-time session's received PCM16 input as WAV. If no `api_key` is configured, recording saving is not enabled.
+
+Native `WS /v2/asr/stream` emits:
 
 ```json
 {"type": "recording.created", "recording_id": "9f86...", "wav_name": "stream.wav"}
 ```
+
+Compatible real-time APIs carry the same info in their start confirmation messages: OpenAI Realtime uses `session.updated.session.recording`, and DashScope Realtime uses `task-started.payload.recording`.
 
 Retention is controlled by `stream_recording_retention_hours` / `--stream-recording-retention-hours`, default `72` hours. Expired files are cleaned at service startup; `0` means never auto-clean.
 

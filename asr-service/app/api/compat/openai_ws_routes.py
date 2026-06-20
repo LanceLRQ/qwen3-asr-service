@@ -93,16 +93,19 @@ class OpenAIRealtimeAdapter:
             return ("flush", None)
         return ("ignore", None)
 
-    async def on_configured(self, ws: WebSocket, warnings):
+    async def on_configured(self, ws: WebSocket, warnings, recording=None):
         if warnings:
             logger.info(f"[compat-ws/openai] 忽略未启用参数: {', '.join(warnings)}")
         # 回显服务端采用的采样率，客户端据此可检测与实发 PCM 的不一致（未声明 rate 时为默认 24000）
+        session = {
+            "object": "realtime.transcription_session",
+            "audio": {"input": {"format": {"type": "audio/pcm", "rate": self._audio_fs}}},
+        }
+        if recording:
+            session["recording"] = recording
         await ws.send_json({
             "type": "session.updated",
-            "session": {
-                "object": "realtime.transcription_session",
-                "audio": {"input": {"format": {"type": "audio/pcm", "rate": self._audio_fs}}},
-            },
+            "session": session,
         })
 
     def translate_partials(self, partial: dict):

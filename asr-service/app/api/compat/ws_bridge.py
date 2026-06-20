@@ -9,7 +9,8 @@ adapter 鸭子接口：
   async on_open(ws, backend)             # 连接建立后发上游"已建立"消息（OpenAI session.created；DashScope 无）
   classify(m) -> (kind, payload)         # starlette receive dict → kind∈{configure,audio,flush,end,ignore}
                                          #   configure→cfg dict；audio→PCM bytes（OpenAI 已 base64 解码）
-  async on_configured(ws, warnings)      # configure 成功后（OpenAI session.updated；DashScope task-started）
+  async on_configured(ws, warnings, recording=None)
+                                         # configure 成功后（OpenAI session.updated；DashScope task-started）
   translate_finals(final) -> list[dict]  # 一条 final → 上游事件（OpenAI completed / DashScope result-generated）
   translate_partials(p) -> list[dict]    # （可选，R2）一条 partial → 增量事件；未实现 = R1 finals-only
   translate_error(code, message, *, fatal=False) -> dict
@@ -117,7 +118,7 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
                         wav_name=payload.get("wav_name") or "compat-stream",
                         sample_rate=sample_rate,
                     )
-                await adapter.on_configured(ws, warnings)
+                await adapter.on_configured(ws, warnings, recording=recorder.info if recorder else None)
             elif kind == "audio":
                 if not payload:
                     continue

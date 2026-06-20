@@ -151,11 +151,15 @@ WS /v2/asr/stream
 
 ### 实时录音下载 / 删除
 
-默认不保存录音。启动时配置 `stream_save_audio: true` 或 `--stream-save-audio` 后，服务端保存每个实时会话收到的 PCM16 输入为 WAV，并在 WS 中下发：
+默认不保存录音。启动时配置 `stream_save_audio: true` / `--stream-save-audio` 且服务端配置了 `api_key` 后，服务端保存每个实时会话收到的 PCM16 输入为 WAV；未配置 `api_key` 时保存不会启用。
+
+原生 `WS /v2/asr/stream` 会下发：
 
 ```json
 {"type": "recording.created", "recording_id": "9f86...", "wav_name": "stream.wav"}
 ```
+
+兼容实时接口会在启动确认消息中携带同样信息：OpenAI Realtime 为 `session.updated.session.recording`，DashScope Realtime 为 `task-started.payload.recording`。
 
 录音保留时长由 `stream_recording_retention_hours` / `--stream-recording-retention-hours` 控制，默认 `72` 小时，服务启动时清理过期文件，`0` 表示永不自动清理。
 

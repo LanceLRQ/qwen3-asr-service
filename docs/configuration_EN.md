@@ -77,7 +77,7 @@ Reduces false triggers from far-field sounds and ambient noise. `--vad-speech-no
 
 ### Real-time Recording Retention
 
-Real-time input audio is not saved by default. When enabled, each real-time session's received PCM16 input is wrapped as a WAV file under the temporary cache `stream_recordings` directory. Recordings are sensitive data: download and delete endpoints require a configured `api_key` plus a Bearer token; when the server has no `api_key`, those endpoints return 503.
+Real-time input audio is not saved by default. When enabled with a configured `api_key`, each real-time session's received PCM16 input is wrapped as a WAV file under the temporary cache `stream_recordings` directory; if no `api_key` is configured, saving is not enabled. Recordings are sensitive data: download and delete endpoints require a configured `api_key` plus a Bearer token.
 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
