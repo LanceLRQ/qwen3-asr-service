@@ -38,17 +38,29 @@ def events_from_windows(windows: list[tuple]) -> list[dict]:
 def scene_timeline(windows: list[tuple], scene_map=None, silence_dbfs: float = -50.0,
                    vocal_priority: bool = True,
                    singing_min: float = scene_mapper.SCENE_SINGING_MIN,
-                   singing_bias: float = 0.0) -> list[dict]:
-    """逐窗 → 每窗 scene → run-length 合并成连续场景时间段 [{label, start_ms, end_ms}]。"""
+                   singing_bias: float = 0.0, weights: dict | None = None) -> list[dict]:
+    """逐窗 → 每窗 scene → run-length 合并成连续场景时间段
+    [{label, start_ms, end_ms, scene_scores}]；scene_scores 为该段各桶平均概率。"""
     segs: list[dict] = []
+    buf: list[dict] = []   # 当前段累积的各窗 scores
+
+    def _flush():
+        if buf and segs:
+            segs[-1]["scene_scores"] = scene_mapper.mean_bucket_scores(buf, scene_map, weights=weights)
+
     for (s, e, _top, scores, dbfs) in windows:
         label, _ = scene_mapper.classify_window(
             scores, dbfs, scene_map=scene_map, silence_dbfs=silence_dbfs,
-            vocal_priority=vocal_priority, singing_min=singing_min, singing_bias=singing_bias)
+            vocal_priority=vocal_priority, singing_min=singing_min, singing_bias=singing_bias,
+            weights=weights)
         if segs and segs[-1]["label"] == label:
             segs[-1]["end_ms"] = e
+            buf.append(scores)
         else:
+            _flush()
+            buf = [scores]
             segs.append({"label": label, "start_ms": s, "end_ms": e})
+    _flush()
     return segs
 
 
@@ -56,7 +68,7 @@ def tag_wav(tagger, wav: np.ndarray, sr: int, *, interval_ms: int, topk: int,
             scene_enable: bool, scene_map=None, silence_dbfs: float = -50.0,
             vocal_priority: bool = True,
             singing_min: float = scene_mapper.SCENE_SINGING_MIN,
-            singing_bias: float = 0.0) -> dict:
+            singing_bias: float = 0.0, weights: dict | None = None) -> dict:
     """整段打标（/v2/audio/tag 端点用）：audio_events 事件段 + 可选 scene_timeline。"""
     if wav.ndim > 1:
         wav = wav.mean(axis=1)
@@ -66,5 +78,5 @@ def tag_wav(tagger, wav: np.ndarray, sr: int, *, interval_ms: int, topk: int,
     result: dict = {"audio_events": events_from_windows(windows)}
     if scene_enable:
         result["scene_timeline"] = scene_timeline(
-            windows, scene_map, silence_dbfs, vocal_priority, singing_min, singing_bias)
+            windows, scene_map, silence_dbfs, vocal_priority, singing_min, singing_bias, weights)
     return result

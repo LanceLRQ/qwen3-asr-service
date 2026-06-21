@@ -83,6 +83,11 @@ enable_audio_tagging: false   # 总开关；关闭时零侵入、不加载引擎
 #                                  #（直播主播开 BGM 说话→说话、演唱→演唱：选 live；可在 WebUI 下拉/按请求 scene_preset 覆盖）
 # scene_singing_min: 0.10          # 演唱判定阈值（覆盖预设；留空=随预设）
 # scene_singing_bias: 0.0          # 清唱偏置（覆盖预设；留空=随预设）：演唱与说话竞争时给演唱加的分
+# scene_weights:                   # 每桶权重乘数（同时作用于判定与 scene_scores；缺省全 1.0）
+#   music: 0.8                     #   如背景音乐易盖过说话，可下调 music / 上调 speech
+#   speech: 1.1
+# scene_lyrics_aware: true         # 离线：用转写歌词作人声证据修正歌声（PANNs 对带伴奏歌声常只给 music）
+# scene_speech_min: 0.30           # 文本感知判别阈：有歌词段 speech 分≥此值判说话，否则有伴奏判演唱（调高→更多判演唱）
 
 # ── 兼容接口（/compat/*，drop-in 对接 OpenAI/DashScope 客户端，默认关）──
 # 实时 WS 兼容（OpenAI Realtime / DashScope Paraformer realtime）随对应开关 + enable_stream 自动挂载；

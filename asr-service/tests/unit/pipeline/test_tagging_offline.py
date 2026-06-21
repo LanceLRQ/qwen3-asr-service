@@ -68,6 +68,9 @@ def test_run_tagging_enabled(noise_env, tmp_path, monkeypatch):
     assert result["audio_events"]
     assert any(e["label"] == "Singing" for e in result["audio_events"])
     assert all(seg.get("scene") == "singing" for seg in result["segments"])
+    # 每段附带各桶概率分布 scene_scores（多标签）
+    ss = result["segments"][0]["scene_scores"]
+    assert ss["singing"] > 0.5 and ss["music"] < ss["singing"]
 
 
 def test_run_tagging_scene_disabled_keeps_events(noise_env, tmp_path, monkeypatch):

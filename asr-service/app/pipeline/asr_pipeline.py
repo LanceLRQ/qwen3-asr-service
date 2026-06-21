@@ -456,19 +456,34 @@ class ASRPipeline:
                 vocal_priority = cfg.SCENE_VOCAL_PRIORITY
                 singing_min = cfg.SCENE_SINGING_MIN
                 singing_bias = cfg.SCENE_SINGING_BIAS
+            weights = cfg.SCENE_WEIGHTS or None
             for s in segments:
                 s_start = int(s["start"] * 1000)
                 s_end = int(s["end"] * 1000)
-                overlap = [
-                    scene_mapper.classify_window(
-                        scores, dbfs, scene_map=self._scene_map, silence_dbfs=silence_dbfs,
-                        vocal_priority=vocal_priority, singing_min=singing_min,
-                        singing_bias=singing_bias)
-                    for (ws, we, _top, scores, dbfs) in windows
-                    if we > s_start and ws < s_end
-                ]
-                if overlap:
-                    s["scene"] = scene_mapper.vote_scene(overlap)
+                # 与段重叠的窗 + 重叠时长权重：大部分落在段外的跨界窗按比例压低，
+                # 不让「说话结束后 BGM 恢复」的尾窗整窗拉高 music
+                seg_scores, seg_ov, dbfs_acc = [], [], 0.0
+                for (ws, we, _top, scores, dbfs) in windows:
+                    ov = min(we, s_end) - max(ws, s_start)
+                    if ov > 0:
+                        seg_scores.append(scores)
+                        seg_ov.append(ov)
+                        dbfs_acc += dbfs * ov
+                if seg_scores:
+                    bs = scene_mapper.mean_bucket_scores(                    # 各桶重叠加权平均（+桶权重）
+                        seg_scores, self._scene_map, weights=weights, window_weights=seg_ov)
+                    seg_dbfs = dbfs_acc / (sum(seg_ov) or 1.0)
+                    label, _ = scene_mapper.classify_buckets(               # 聚合后定主场景
+                        bs, seg_dbfs, silence_dbfs=silence_dbfs, vocal_priority=vocal_priority,
+                        singing_min=singing_min, singing_bias=singing_bias)
+                    if cfg.SCENE_LYRICS_AWARE:
+                        # 转写文本作人声证据：带伴奏歌声 PANNs 常只给 music，靠歌词救回 singing
+                        txt = (s.get("text") or "").strip()
+                        has_text = bool(txt) and txt != "[识别失败]"
+                        label = scene_mapper.refine_scene_with_text(
+                            label, bs, has_text, speech_min=cfg.SCENE_SPEECH_MIN)
+                    s["scene"] = label
+                    s["scene_scores"] = bs
 
         logger.info(f"[Pipeline] 音频标注完成: {len(windows)} 窗 → {len(audio_events)} 事件段")
         return audio_events

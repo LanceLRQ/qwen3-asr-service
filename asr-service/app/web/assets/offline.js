@@ -133,6 +133,14 @@
   const SCENE_KEYS = ['silence', 'speech', 'singing', 'music', 'other'];
   function sceneLabel(s) { return SCENE_KEYS.includes(s) ? t('scene.' + s) : s; }
   function sceneCls(s) { return 'scene-' + (SCENE_KEYS.includes(s) ? s : 'other'); }
+  // 各桶概率 → 多标签（降序，过滤 <10% 噪声），渲染成「语音 62% · 音乐 31%」
+  function sceneTags(scores) {
+    if (!scores) return [];
+    return Object.entries(scores)
+      .filter(([, v]) => v >= 0.10)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => ({ label: k, pct: Math.round(v * 100) }));
+  }
 
   const STATUS_TAG_TYPES = { pending: 'warning', processing: 'info', completed: 'success', failed: 'error', cancelled: 'default' };
   function statusLabel(s) { const v = t('status.' + s); return v === 'status.' + s ? s : v; }
@@ -182,7 +190,7 @@
         return m.score != null ? t('spk.similarity', m.score.toFixed(2)) : '';
       }
       return { result, segments, audioEvents, sceneTimeline, isEmpty, metaTags, jsonText, downloadJson,
-               seek, seekEvent, fmtTime, fmtMs, spkIdx, spkTitle, sceneLabel, sceneCls, t };
+               seek, seekEvent, fmtTime, fmtMs, spkIdx, spkTitle, sceneLabel, sceneCls, sceneTags, t };
     },
     template: `
       <div>
@@ -197,7 +205,7 @@
           <div>
             <div v-for="(seg, i) in segments" :key="i" class="seg-row" :class="{ static: !onSeek }" @click="seek(seg)">
               <span class="seg-time">{{ fmtTime(seg.start) }}</span>
-              <span class="seg-text"><span v-if="seg.scene" class="scene-badge" :class="sceneCls(seg.scene)">{{ sceneLabel(seg.scene) }}</span><span v-if="seg.speaker" class="speaker-badge" :class="'spk-' + spkIdx(seg.speaker)" :title="spkTitle(seg)">{{ seg.speaker_name || seg.speaker }}</span>{{ seg.text }}</span>
+              <span class="seg-text"><template v-if="sceneTags(seg.scene_scores).length"><span v-for="tag in sceneTags(seg.scene_scores)" :key="tag.label" class="scene-badge" :class="sceneCls(tag.label)" :title="sceneLabel(tag.label)">{{ sceneLabel(tag.label) }} {{ tag.pct }}%</span></template><span v-else-if="seg.scene" class="scene-badge" :class="sceneCls(seg.scene)">{{ sceneLabel(seg.scene) }}</span><span v-if="seg.speaker" class="speaker-badge" :class="'spk-' + spkIdx(seg.speaker)" :title="spkTitle(seg)">{{ seg.speaker_name || seg.speaker }}</span>{{ seg.text }}</span>
               <span v-if="onSeek" class="seg-play"><a-icon name="play" size="14"></a-icon></span>
             </div>
           </div>
@@ -209,6 +217,7 @@
           <div v-for="(ev, i) in sceneTimeline" :key="'sc' + i" class="event-row" :class="{ seekable: !!onSeek }" @click="seekEvent(ev)">
             <span class="event-span">{{ fmtMs(ev.start_ms) }} – {{ fmtMs(ev.end_ms) }}</span>
             <span class="scene-badge" :class="sceneCls(ev.label)">{{ sceneLabel(ev.label) }}</span>
+            <span v-for="tag in sceneTags(ev.scene_scores)" :key="tag.label" class="event-conf" style="margin-left:0;">{{ sceneLabel(tag.label) }} {{ tag.pct }}%</span>
           </div>
         </template>
 

@@ -82,10 +82,11 @@ def classify_window(scores: dict[str, float], dbfs: float | None,
                     min_score: float = SCENE_MIN_SCORE,
                     vocal_priority: bool = True,
                     singing_min: float = SCENE_SINGING_MIN,
-                    singing_bias: float = 0.0) -> tuple[str, float]:
+                    singing_bias: float = 0.0,
+                    weights: dict[str, float] | None = None) -> tuple[str, float]:
     """单窗 → (scene_label, confidence)。
 
-    桶得分 = 该桶成员概率的最大值。先判静音，再按 vocal_priority 决定内容场景：
+    桶得分 = 该桶成员概率的最大值 ×（可选）weights 桶权重。先判静音，再按 vocal_priority 决定内容场景：
 
     - 静音：能量低于 silence_dbfs **且** 无明确内容信号（最高桶得分 < min_score）才判 silence。
       不无条件以能量判静音——短促/轻声台词会被打标窗（≈1s）RMS 稀释到底噪，但语音分仍高。
@@ -96,9 +97,20 @@ def classify_window(scores: dict[str, float], dbfs: float | None,
       （背景音乐更易占主导，适合音乐内容分析场景）。
     最高桶得分 < min_score → other（兜底）。
     """
-    smap = scene_map or DEFAULT_SCENE_MAP
-    bucket_score = {b: max((scores.get(m, 0.0) for m in members), default=0.0)
-                    for b, members in smap.items()}
+    bs = bucket_scores(scores, scene_map, weights)
+    return classify_buckets(bs, dbfs, silence_dbfs=silence_dbfs, min_score=min_score,
+                            vocal_priority=vocal_priority, singing_min=singing_min,
+                            singing_bias=singing_bias)
+
+
+def classify_buckets(bucket_score: dict[str, float], dbfs: float | None, *,
+                     silence_dbfs: float = -50.0, min_score: float = SCENE_MIN_SCORE,
+                     vocal_priority: bool = True, singing_min: float = SCENE_SINGING_MIN,
+                     singing_bias: float = 0.0) -> tuple[str, float]:
+    """已算好的桶得分 → (scene_label, confidence)。判定逻辑同 classify_window。
+
+    供段级「重叠加权平均桶分」直接定场景用（聚合后判定，规避单个跨界窗主导）。
+    """
     best_bucket, best_score = SCENE_OTHER, 0.0
     for bucket, s in bucket_score.items():
         if s > best_score:
@@ -125,6 +137,24 @@ def classify_window(scores: dict[str, float], dbfs: float | None,
     if best_bucket == SCENE_MUSIC and sing >= singing_min:
         return SCENE_SINGING, float(sing)
     return best_bucket, float(best_score)
+
+
+def refine_scene_with_text(base_label: str, bucket_score: dict[str, float], has_text: bool, *,
+                           speech_min: float = 0.30, min_score: float = SCENE_MIN_SCORE) -> str:
+    """用转写文本作人声证据修正离线段场景（PANNs 对带伴奏的歌声常只给 Music、不给 Singing）。
+
+    有歌词文本 = 一定有人声 → 该段绝非纯 music。base_label 为 speech/music 时：
+    speech 分 ≥ speech_min → speech（说话占优，含说话+BGM）；否则有音乐伴奏（music ≥ min_score）
+    → singing（演唱）；否则 speech（无明显伴奏的轻声说话）。
+    其余情形（无文本 / 已判 silence·other·singing）原样返回。
+    """
+    if not has_text or base_label not in (SCENE_SPEECH, SCENE_MUSIC):
+        return base_label
+    if bucket_score.get(SCENE_SPEECH, 0.0) >= speech_min:
+        return SCENE_SPEECH
+    if bucket_score.get(SCENE_MUSIC, 0.0) >= min_score:
+        return SCENE_SINGING
+    return SCENE_SPEECH
 
 
 def vote_scene(window_scenes: list[tuple[str, float]]) -> str:
@@ -175,11 +205,38 @@ def aggregate_events(windows: list[tuple[int, int, list[tuple[str, float]]]],
 
 
 def bucket_scores(scores: dict[str, float],
-                  scene_map: dict[str, list[str]] | None = None) -> dict[str, float]:
-    """各内容桶的代表分（成员概率最大值），供流式 SceneMsg.scores 下发（小而有用）。"""
+                  scene_map: dict[str, list[str]] | None = None,
+                  weights: dict[str, float] | None = None) -> dict[str, float]:
+    """各内容桶的代表分（成员概率最大值 ×可选桶权重），供流式 SceneMsg.scores / 判定。"""
     smap = scene_map or DEFAULT_SCENE_MAP
-    return {b: round(max((scores.get(m, 0.0) for m in members), default=0.0), 4)
+    w = weights or {}
+    return {b: round(max((scores.get(m, 0.0) for m in members), default=0.0) * w.get(b, 1.0), 4)
             for b, members in smap.items()}
+
+
+def mean_bucket_scores(scores_list: list[dict[str, float]],
+                       scene_map: dict[str, list[str]] | None = None,
+                       weights: dict[str, float] | None = None,
+                       window_weights: list[float] | None = None) -> dict[str, float]:
+    """多窗各内容桶代表分的（加权）均值（段级概率分布，供 segment.scene_scores）。
+
+    返回 {bucket: 段内平均概率}——各桶独立置信度（不归一到 1），能如实体现
+    「说话+背景音乐」两者并存（如 speech 0.6 / music 0.5）。空输入 → 空 dict。
+    - weights: 每桶乘数（部署/调优用，默认全 1.0）。
+    - window_weights: 各窗权重（如窗-段时间重叠时长），用于压低大部分落在段外的跨界窗。
+    """
+    smap = scene_map or DEFAULT_SCENE_MAP
+    n = len(scores_list)
+    if not n:
+        return {}
+    ww = window_weights if (window_weights and len(window_weights) == n) else [1.0] * n
+    total = sum(ww) or 1.0
+    w = weights or {}
+    sums = {b: 0.0 for b in smap}
+    for scores, wt in zip(scores_list, ww):
+        for b, members in smap.items():
+            sums[b] += max((scores.get(m, 0.0) for m in members), default=0.0) * wt
+    return {b: round(sums[b] / total * w.get(b, 1.0), 4) for b in smap}
 
 
 # 离开"内容场景"（回到 silence/other）的目标桶，退出用 exit_sec 阈值

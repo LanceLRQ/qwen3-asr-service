@@ -102,7 +102,7 @@ class StreamSession:
                  speaker_service=None, noise_filter=False, energy_floor_dbfs=-50.0,
                  snr_min_db=6.0, tagger=None, scene_enable=True, scene_enter_sec=2.0,
                  scene_exit_sec=2.0, scene_silence_dbfs=-50.0, scene_vocal_priority=True,
-                 scene_singing_min=0.10, scene_singing_bias=0.0,
+                 scene_singing_min=0.10, scene_singing_bias=0.0, scene_weights=None,
                  tag_interval_ms=960, tag_topk=5, scene_map=None):
         self.sid = sid
         self._svad = svad
@@ -131,6 +131,7 @@ class StreamSession:
         self._scene_vocal_priority = scene_vocal_priority
         self._scene_singing_min = scene_singing_min
         self._scene_singing_bias = scene_singing_bias
+        self._scene_weights = scene_weights
         self._scene_map = scene_map              # 自定义场景映射（None = 内置默认）
         self._tag_topk = tag_topk
         self._scene_step = max(1, int(_TARGET_SR * max(1, tag_interval_ms) / 1000))
@@ -483,7 +484,8 @@ class StreamSession:
                 tr.scores, rms_dbfs(window), scene_map=self._scene_map,
                 silence_dbfs=self._scene_silence_dbfs,
                 vocal_priority=self._scene_vocal_priority,
-                singing_min=self._scene_singing_min, singing_bias=self._scene_singing_bias)
+                singing_min=self._scene_singing_min, singing_bias=self._scene_singing_bias,
+                weights=self._scene_weights)
         except Exception as e:
             logger.warning(f"[stream] 场景打标失败，跳过: {e}")
             return
@@ -511,7 +513,7 @@ class VadOfflineBackend:
                  noise_filter=False, energy_floor_dbfs=-50.0, snr_min_db=6.0, tagger=None,
                  scene_enable=True, scene_enter_sec=2.0, scene_exit_sec=2.0,
                  scene_silence_dbfs=-50.0, scene_vocal_priority=True,
-                 scene_singing_min=0.10, scene_singing_bias=0.0,
+                 scene_singing_min=0.10, scene_singing_bias=0.0, scene_weights=None,
                  tag_interval_ms=960, tag_topk=5, scene_map=None):
         self._svad = StreamingVADEngine(vad, chunk_ms=vad_chunk_ms)
         self._asr = asr
@@ -526,6 +528,7 @@ class VadOfflineBackend:
         self._scene_vocal_priority = scene_vocal_priority
         self._scene_singing_min = scene_singing_min
         self._scene_singing_bias = scene_singing_bias
+        self._scene_weights = scene_weights
         self._tag_interval_ms = tag_interval_ms
         self._tag_topk = tag_topk
         self._scene_map = scene_map
@@ -576,6 +579,7 @@ class VadOfflineBackend:
             scene_exit_sec=self._scene_exit_sec, scene_silence_dbfs=self._scene_silence_dbfs,
             scene_vocal_priority=self._scene_vocal_priority,
             scene_singing_min=self._scene_singing_min, scene_singing_bias=self._scene_singing_bias,
+            scene_weights=self._scene_weights,
             tag_interval_ms=self._tag_interval_ms, tag_topk=self._tag_topk,
             scene_map=self._scene_map,
         )

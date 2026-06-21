@@ -202,6 +202,11 @@ def _apply_cli_config(args):
         cfg.SCENE_SINGING_MIN = args.scene_singing_min
     if getattr(args, "scene_singing_bias", None) is not None:
         cfg.SCENE_SINGING_BIAS = args.scene_singing_bias
+    if getattr(args, "scene_weights", None):
+        cfg.SCENE_WEIGHTS = args.scene_weights
+    cfg.SCENE_LYRICS_AWARE = getattr(args, "scene_lyrics_aware", True)
+    if getattr(args, "scene_speech_min", None) is not None:
+        cfg.SCENE_SPEECH_MIN = args.scene_speech_min
     cfg.ENABLE_OPENAI_API = getattr(args, "enable_openai_api", False)
     if getattr(args, "openai_sync_timeout", None) is not None:
         cfg.OPENAI_SYNC_TIMEOUT = args.openai_sync_timeout
@@ -567,6 +572,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
             scene_vocal_priority=cfg.SCENE_VOCAL_PRIORITY,
             scene_singing_min=cfg.SCENE_SINGING_MIN,
             scene_singing_bias=cfg.SCENE_SINGING_BIAS,
+            scene_weights=cfg.SCENE_WEIGHTS or None,
             tag_interval_ms=cfg.AUDIO_TAGGING_INTERVAL_MS,
             tag_topk=cfg.AUDIO_TAGGING_TOPK,
             scene_map=scene_map,

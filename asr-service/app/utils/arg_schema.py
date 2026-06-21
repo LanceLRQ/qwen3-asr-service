@@ -444,6 +444,26 @@ ARG_SPECS = (
         help_en="A-cappella bias (overrides preset; empty = follow preset): score added to singing when it competes with speech, helps unaccompanied singing",
     ),
     ArgSpec(
+        key="scene_weights", flags=(), default={}, type=dict,
+        group="音频标注",
+        help="每桶权重乘数（仅配置文件 dict，如 {music: 0.8, speech: 1.1}）：同时作用于判定与 scene_scores",
+        help_en="Per-bucket weight multipliers (config-file dict only, e.g. {music: 0.8, speech: 1.1}); applied to both decision and scene_scores",
+    ),
+    ArgSpec(
+        key="scene_lyrics_aware", flags=("--scene-lyrics-aware",), default=True, type=bool,
+        negative_flags=("--no-scene-lyrics-aware",), group="音频标注",
+        help="离线：用转写文本作人声证据修正歌声（带伴奏歌声 PANNs 常只给 music）",
+        help_en="Offline: use transcript text as vocal evidence to recover singing (PANNs often labels accompanied singing as music)",
+        negative_help="关闭文本感知歌声修正（纯按模型分判定）",
+        negative_help_en="Disable lyrics-aware singing recovery (decide purely by model scores)",
+    ),
+    ArgSpec(
+        key="scene_speech_min", flags=("--scene-speech-min",), default=0.30, type=float,
+        group="音频标注",
+        help="文本感知判别阈：有歌词段 speech 分≥此值判 speech，否则有伴奏判 singing (default: 0.30)",
+        help_en="Lyrics-aware threshold: for segments with text, speech score ≥ this → speech, else (with accompaniment) → singing (default: 0.30)",
+    ),
+    ArgSpec(
         key="enable_openai_api", flags=("--enable-openai-api",), default=False, type=bool,
         group="兼容接口",
         help="启用 OpenAI 兼容接口 /compat/openai/v1/*（drop-in 对接 OpenAI SDK）",
@@ -584,6 +604,8 @@ def build_parser(lang: str = "zh") -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(description=_DESCRIPTION["en" if en else "zh"])
     for spec in ARG_SPECS:
+        if spec.type is dict or not spec.flags:
+            continue                       # 仅配置文件项（如 dict 型 scene_weights），不上 CLI
         if spec.type is bool:
             parser.add_argument(
                 *spec.flags, dest=spec.attr, action="store_true",

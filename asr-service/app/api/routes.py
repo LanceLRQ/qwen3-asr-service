@@ -198,7 +198,8 @@ async def tag_audio(
                 interval_ms=cfg.AUDIO_TAGGING_INTERVAL_MS, topk=cfg.AUDIO_TAGGING_TOPK,
                 scene_enable=with_scene, scene_map=_scene_map,
                 silence_dbfs=cfg.SCENE_SILENCE_DBFS, vocal_priority=vocal_priority,
-                singing_min=singing_min, singing_bias=singing_bias)
+                singing_min=singing_min, singing_bias=singing_bias,
+                weights=cfg.SCENE_WEIGHTS or None)
         finally:
             for p in (save_path, wav_path):
                 if os.path.exists(p):

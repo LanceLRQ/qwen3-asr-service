@@ -28,6 +28,8 @@ def test_scene_timeline_run_length_merge():
     tl = audio_tagging.scene_timeline(w)
     assert len(tl) == 1 and tl[0]["label"] == "singing"
     assert tl[0]["start_ms"] == 0
+    # 段级各桶概率分布（mean_bucket_scores）
+    assert tl[0]["scene_scores"]["singing"] > 0.5
 
 
 def test_tag_wav_structure_and_events():

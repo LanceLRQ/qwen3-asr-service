@@ -135,10 +135,13 @@ GET /v2/tasks/{task_id}
 
 - 顶层 `audio_events`：按起止时间聚合的事件段数组（**非逐窗**），每段
   `{"label","start_ms","end_ms","confidence"}`——`label` 为 AudioSet 类别，`start_ms`/`end_ms` 为毫秒，`confidence` 为该段内最大概率；
-- `segments[].scene`：该段所属场景字符串，取值 `silence`/`speech`/`singing`/`music`/`other`（或自定义桶），仅在场景识别（`scene_enable`）开启时存在。
+- `segments[].scene`：该段主场景字符串，取值 `silence`/`speech`/`singing`/`music`/`other`（或自定义桶），仅在场景识别（`scene_enable`）开启时存在；
+- `segments[].scene_scores`：该段各场景桶的平均概率分布 `{bucket: prob}`，**各桶独立置信度**（不归一到 1，能体现「说话+背景音乐」并存，如 `{"speech":0.62,"music":0.31}`）。
+- 提交时可加表单参数 `scene_preset`（`balanced`/`live`/`music`）按请求覆盖场景判定预设。
 
 ```json
-"segments": [{"start": 0.31, "end": 11.76, "text": "...", "scene": "speech"}],
+"segments": [{"start": 0.31, "end": 11.76, "text": "...", "scene": "speech",
+              "scene_scores": {"speech": 0.62, "music": 0.31, "singing": 0.03}}],
 "audio_events": [{"label": "Speech", "start_ms": 0, "end_ms": 25920, "confidence": 0.897}]
 ```
 

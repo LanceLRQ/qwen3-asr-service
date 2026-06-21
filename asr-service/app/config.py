@@ -209,6 +209,11 @@ SCENE_PRESET = "balanced"          # 场景判定预设：balanced(均衡,人声
 SCENE_VOCAL_PRIORITY = True        # 人声优先：说话/演唱达阈值即压过背景音乐（关=桶间 argmax+演唱特例）
 SCENE_SINGING_MIN = 0.10           # 演唱判定阈值（命中演唱桶达此值即可判演唱）
 SCENE_SINGING_BIAS = 0.0           # 清唱偏置：演唱与说话竞争时给演唱加的分（利于无伴奏清唱）
+SCENE_WEIGHTS = {}                 # 每桶权重乘数（部署调优，配置文件 dict）：如 {music: 0.8, speech: 1.1}
+                                   # 同时作用于场景判定与 scene_scores；缺省/空 = 全 1.0（原样）
+SCENE_LYRICS_AWARE = True          # 离线：用转写文本作人声证据修正歌声（PANNs 对带伴奏歌声常只给 music）
+SCENE_SPEECH_MIN = 0.30            # 文本感知判别阈：有歌词段 speech 分≥此值判 speech，否则有伴奏判 singing
+                                   #（调高→更多带伴奏人声判演唱；调低→更易判说话）
 
 # ─── vLLM（路线 A：原生流式）───
 

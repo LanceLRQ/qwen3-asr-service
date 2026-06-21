@@ -110,6 +110,79 @@ def test_presets_have_expected_shape():
     assert sm.resolve_preset("nonexistent") == sm.resolve_preset("balanced")  # 未知名回退默认
 
 
+# ─── 每桶权重 weights ───
+
+def test_weights_demote_music():
+    # music 原本占优；weights 压低 music 后，人声优先下说话胜出更稳，且 scene_scores 反映权重
+    sc = {"Speech": 0.4, "Music": 0.6}
+    assert sm.classify_window(sc, dbfs=-20.0, vocal_priority=False)[0] == "music"
+    assert sm.classify_window(sc, dbfs=-20.0, vocal_priority=False, weights={"music": 0.5})[0] == "speech"
+
+
+def test_bucket_scores_applies_weights():
+    bs = sm.bucket_scores({"Music": 0.8}, weights={"music": 0.5})
+    assert bs["music"] == pytest.approx(0.4)
+
+
+# ─── mean_bucket_scores（重叠加权 + 桶权重）───
+
+def test_mean_bucket_scores_plain():
+    out = sm.mean_bucket_scores([{"Speech": 0.6}, {"Speech": 0.2}])
+    assert out["speech"] == pytest.approx(0.4)
+
+
+def test_mean_bucket_scores_window_weights_demote_straddle():
+    # 两窗：说话窗(重叠权重大) + 跨界 music 窗(重叠权重小) → 加权后 speech 远高于等权
+    scores = [{"Speech": 0.8, "Music": 0.1}, {"Speech": 0.1, "Music": 0.9}]
+    plain = sm.mean_bucket_scores(scores)
+    weighted = sm.mean_bucket_scores(scores, window_weights=[900, 100])
+    assert weighted["speech"] > plain["speech"]
+    assert weighted["music"] < plain["music"]
+    assert weighted["speech"] > weighted["music"]
+
+
+def test_mean_bucket_scores_bucket_weights():
+    out = sm.mean_bucket_scores([{"Music": 0.8}], weights={"music": 0.5})
+    assert out["music"] == pytest.approx(0.4)
+
+
+def test_classify_buckets_direct():
+    assert sm.classify_buckets({"speech": 0.5, "music": 0.7}, -20.0)[0] == "speech"
+    assert sm.classify_buckets({"speech": 0.0, "music": 0.7}, -20.0)[0] == "music"
+
+
+# ─── refine_scene_with_text（文本感知歌声修正）───
+
+def test_refine_music_with_lyrics_to_singing():
+    # 判成 music 但有歌词 + 说话分不强 → 演唱（带伴奏歌声）
+    bs = {"speech": 0.07, "singing": 0.04, "music": 0.44}
+    assert sm.refine_scene_with_text("music", bs, has_text=True, speech_min=0.30) == "singing"
+
+
+def test_refine_weak_speech_with_lyrics_to_singing():
+    # 判成 speech 但说话分低 + 有伴奏 + 有歌词 → 演唱
+    bs = {"speech": 0.18, "singing": 0.04, "music": 0.30}
+    assert sm.refine_scene_with_text("speech", bs, has_text=True, speech_min=0.30) == "singing"
+
+
+def test_refine_keeps_strong_speech():
+    # 说话分高（说话+BGM）→ 仍 speech，不误判演唱
+    bs = {"speech": 0.52, "singing": 0.05, "music": 0.50}
+    assert sm.refine_scene_with_text("speech", bs, has_text=True, speech_min=0.30) == "speech"
+
+
+def test_refine_no_text_unchanged():
+    # 无歌词（纯器乐）→ 原样保留 music
+    bs = {"speech": 0.05, "singing": 0.04, "music": 0.7}
+    assert sm.refine_scene_with_text("music", bs, has_text=False) == "music"
+
+
+def test_refine_keeps_existing_singing_and_silence():
+    bs = {"speech": 0.1, "singing": 0.5, "music": 0.3}
+    assert sm.refine_scene_with_text("singing", bs, has_text=True) == "singing"
+    assert sm.refine_scene_with_text("silence", bs, has_text=True) == "silence"
+
+
 # ─── vote_scene ───
 
 def test_vote_scene_majority():
