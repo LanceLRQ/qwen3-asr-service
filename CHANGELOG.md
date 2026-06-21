@@ -17,9 +17,14 @@
 - **新增标注端点**：`POST /v2/audio/tag`（仅标注，不做转写）。
 - **双引擎**：PANNs（推荐，16k / 32k 变体）与 YAMNet（轻量备选，可选依赖，vLLM 模式不可用）。
 - **可配置场景映射** `--scene-map-file`；新增 `THIRD_PARTY_NOTICES.md`。
+- **新增调优与排错文档**（中英 `docs/troubleshooting`）：实时 / 离线断句与过滤链路差异、实时降噪门控（`stream_noise_filter` / `stream_snr_min_db` / `stream_energy_floor_dbfs`）与 `vad_speech_noise_thres` 取舍、按内容类型推荐配置、排错速查；首个实战案例＝含 BGM 的演唱段在实时被自适应 SNR 门误杀（离线无此门）。
 
 ### 修复
 - **场景分类准确性（人声优先 + 预设）**：场景判定改为「人声优先」模型——主播开背景音乐说话归 `speech`、演唱归 `singing`，纯器乐才归 `music`，不再被泛化的 `Music` 标签淹没。静音判定改为内容感知，仅在能量低 **且** 无明确语音/演唱信号时才判 `silence`，修复短促/轻声台词被打标窗（≈1s）能量稀释而误判静音。新增场景预设 `--scene-preset`（`balanced` 均衡 / `live` 直播含清唱偏置 / `music` 音乐优先），打包好权重，支持部署默认 + 按请求覆盖（`/v2/asr`、`/v2/audio/tag` 表单参数 `scene_preset`）+ WebUI 下拉选择；`--scene-singing-min` / `--scene-singing-bias` 可单项微调。
+
+### 评审修复（多 Agent 代码评审）
+- **短尾窗导致 PANNs 崩溃**（必修）：末尾不足整窗的尾片（< 4960 采样 / 约 310ms）经 CNN14 五次时间池化被压成 0，触发 `RuntimeError`——离线 `try/except` 静默丢弃整条音频的标注、`/v2/audio/tag` 返回 500。`predict_window` 对短输入补零到模型最小采样后修复，并补真实 CNN14 短窗回归测试。
+- **WebUI 场景徽标矛盾**（必修）：逐段徽标原从修正前的 `scene_scores` 渲染，文本感知救回的演唱段（label=`singing`、但桶分仍偏 `music`）被概率徽标顶替成「音乐」。改为恒显示权威主场景标签及其概率，其余并存桶按 ≥10% 追加显示。
 
 ### 修复（其它）
 - **语言提示归一化（原生端点）**：原生离线 `/v2/asr` 与实时 `/v2/asr/stream` 现统一把上游 `language` 归一为引擎语种名——接受 ISO-639-1 码（`zh`）、规范英文名（`Chinese`）、带地区子标签（`zh-CN`），无法识别的取值降级为自动检测。修复客户端传 `zh` 时透传到引擎抛 `Unsupported language: Zh`、导致**实时逐句报 `feed_failed` 零文本 / 离线任务失败**的问题（兼容层早有此归一，原生端点此前漏做）。归一化逻辑下沉至中立的 `app/utils/language.py`，离线与实时共用，兼容层 `mappers.to_engine_language` 改为 re-export。
