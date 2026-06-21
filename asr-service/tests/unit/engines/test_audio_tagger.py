@@ -48,3 +48,18 @@ class _FakeTagger:
 
 def test_protocol_conformance():
     assert isinstance(_FakeTagger(), AudioTaggerEngine)
+
+
+def test_panns_predict_window_short_clip_no_crash():
+    """末尾不足整窗的短尾片喂 CNN14 不得崩溃（补零到模型最小采样后推理）。"""
+    pytest.importorskip("torch")
+    pytest.importorskip("torchlibrosa")
+    from app.engines.panns import Cnn14
+    from app.engines.panns_tagger_engine import PANNsTaggerEngine, _VARIANT_PARAMS
+
+    eng = PANNsTaggerEngine(variant="16k", device="cpu")
+    eng._model = Cnn14(classes_num=527, **_VARIANT_PARAMS["16k"]).eval()
+    eng.labels = [str(i) for i in range(527)]
+    for n in (1, 100, 4000):                       # 均短于 _min_samples，旧实现会 RuntimeError
+        tr = eng.predict_window(np.zeros(n, dtype=np.float32), 16000, topk=5)
+        assert len(tr.scores) == 527 and len(tr.top) == 5

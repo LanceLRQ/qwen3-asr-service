@@ -143,10 +143,10 @@
   const SCENE_KEYS = ['silence', 'speech', 'singing', 'music', 'other'];
   function sceneLabel(s) { return SCENE_KEYS.includes(s) ? t('scene.' + s) : s; }
   function sceneCls(s) { return 'scene-' + (SCENE_KEYS.includes(s) ? s : 'other'); }
-  function sceneTags(scores) {
+  function sceneTags(scores, exclude) {
     if (!scores) return [];
     return Object.entries(scores)
-      .filter(([, v]) => v >= 0.10)
+      .filter(([k, v]) => v >= 0.10 && k !== exclude)
       .sort((a, b) => b[1] - a[1])
       .map(([k, v]) => ({ label: k, pct: Math.round(v * 100) }));
   }
@@ -873,7 +873,7 @@
                   <div v-if="i > 0 && line.batch !== finals[i - 1].batch" class="transcript-divider"><span>{{ t('result.divider') }}</span></div>
                   <div class="transcript-line">
                     <span class="t">{{ line.start != null ? fmtMs(line.start) : '' }}</span>
-                    <span class="tx"><template v-if="sceneTags(line.sceneScores).length"><span v-for="tag in sceneTags(line.sceneScores)" :key="tag.label" class="scene-badge" :class="sceneCls(tag.label)" :title="sceneLabel(tag.label)">{{ sceneLabel(tag.label) }} {{ tag.pct }}%</span></template><span v-else-if="line.scene" class="scene-badge" :class="sceneCls(line.scene)">{{ sceneLabel(line.scene) }}</span><span v-if="line.speaker" class="speaker-badge" :class="'spk-' + spkIdx(line.speaker)">{{ line.speakerName || line.speaker }}</span>{{ line.text }}<n-text v-if="line.words" depth="3" style="font-size:.78em;"> {{ t('result.words', line.words) }}</n-text></span>
+                    <span class="tx"><span v-if="line.scene" class="scene-badge" :class="sceneCls(line.scene)" :title="sceneLabel(line.scene)">{{ sceneLabel(line.scene) }}</span><span v-for="tag in sceneTags(line.sceneScores, line.scene)" :key="tag.label" class="scene-badge" :class="sceneCls(tag.label)" :title="sceneLabel(tag.label)">{{ sceneLabel(tag.label) }} {{ tag.pct }}%</span><span v-if="line.speaker" class="speaker-badge" :class="'spk-' + spkIdx(line.speaker)">{{ line.speakerName || line.speaker }}</span>{{ line.text }}<n-text v-if="line.words" depth="3" style="font-size:.78em;"> {{ t('result.words', line.words) }}</n-text></span>
                   </div>
                 </template>
                 <div v-if="partial" class="partial-line">{{ partial }}<span class="cursor-blk"></span></div>

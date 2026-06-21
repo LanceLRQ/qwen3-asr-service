@@ -45,6 +45,8 @@ class PANNsTaggerEngine:
         self._model = None
         self.labels: list[str] = []
         self._infer_lock = threading.Lock()   # 共享实例跨任务/会话调用，forward 串行化
+        # CNN14 五次时间池化(/32)后须 ≥1 帧，否则 RuntimeError；据此推最小采样（按 target_sr）
+        self._min_samples = 32 * _VARIANT_PARAMS[variant]["hop_size"]
 
     @property
     def target_sr(self) -> int:
@@ -90,8 +92,9 @@ class PANNsTaggerEngine:
         if sr != self.target_sr:
             import librosa
             x = librosa.resample(x, orig_sr=sr, target_sr=self.target_sr)
-        if x.size == 0:
-            x = np.zeros(1, dtype=np.float32)
+        # 不足整窗的尾片/极短输入补零到模型最小采样，否则 CNN14 时间维被池化成 0 触发崩溃
+        if x.size < self._min_samples:
+            x = np.pad(x, (0, self._min_samples - x.size))
 
         t = torch.from_numpy(np.ascontiguousarray(x)).float().unsqueeze(0).to(self._device)
         with self._infer_lock, torch.no_grad():
