@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const { ref, reactive, computed, watch, onMounted, onBeforeUnmount, h } = Vue;
-  const { fmtTime, fmtDate, fmtBytes, spkIdx, authHeaders, mountApp, makeT, locale } = window.AsrCommon;
+  const { fmtTime, fmtMs, fmtDate, fmtBytes, spkIdx, authHeaders, mountApp, makeT, locale } = window.AsrCommon;
 
   const M = {
     zh: {
@@ -17,10 +17,17 @@
       'result.fullText': '完整文本', 'result.rawJson': '原始 JSON', 'result.downloadJson': '下载 JSON',
       'spk.anonymous': '匿名说话人', 'spk.autoEnrolled': '自动登记（可在说话人管理页改名）',
       'spk.similarity': '声纹相似度 {0}',
+      // 音频标注（派生场景 + 事件段）
+      'scene.silence': '静音', 'scene.speech': '语音', 'scene.singing': '歌唱',
+      'scene.music': '音乐', 'scene.other': '其它',
+      'result.audioEvents': '音频事件', 'result.sceneTimeline': '场景时间线',
+      'result.noEvents': '未检出音频事件',
       // 上传
       'upload.title': '上传音频', 'upload.hint': '点击或拖拽上传音频文件',
       'upload.formats': 'wav / mp3 / flac / m4a / aac / ogg / wma / amr / opus',
       'upload.identify': '声纹识别（标注真名，未知说话人自动登记）',
+      'upload.tagOnly': '仅标注（不转写）', 'upload.tagScene': '包含场景时间线',
+      'action.tagging': '标注中…', 'action.tag': '开始标注',
       // 高级设置（可选按请求覆盖）
       'adv.title': '高级设置（可选覆盖）',
       'adv.hint': '留空＝用服务端默认；关闭开关＝本次不执行该步骤。',
@@ -70,9 +77,15 @@
       'result.fullText': 'Full text', 'result.rawJson': 'Raw JSON', 'result.downloadJson': 'Download JSON',
       'spk.anonymous': 'Anonymous speaker', 'spk.autoEnrolled': 'Auto-enrolled (rename on the Speakers page)',
       'spk.similarity': 'Voiceprint similarity {0}',
+      'scene.silence': 'Silence', 'scene.speech': 'Speech', 'scene.singing': 'Singing',
+      'scene.music': 'Music', 'scene.other': 'Other',
+      'result.audioEvents': 'Audio events', 'result.sceneTimeline': 'Scene timeline',
+      'result.noEvents': 'No audio events detected',
       'upload.title': 'Upload audio', 'upload.hint': 'Click or drag to upload an audio file',
       'upload.formats': 'wav / mp3 / flac / m4a / aac / ogg / wma / amr / opus',
       'upload.identify': 'Speaker identification (label real names, auto-enroll unknowns)',
+      'upload.tagOnly': 'Tag only (no transcription)', 'upload.tagScene': 'Include scene timeline',
+      'action.tagging': 'Tagging…', 'action.tag': 'Start tagging',
       'adv.title': 'Advanced (optional overrides)',
       'adv.hint': 'Empty = server default; turning a switch off skips that step for this request.',
       'adv.output': 'Output', 'adv.punc': 'Punctuation', 'adv.words': 'Word timestamps', 'adv.diarize': 'Speaker diarization',
@@ -110,6 +123,11 @@
   };
   const t = makeT(M);
 
+  // 派生场景：已知五桶给本地化标签 + 固定配色 class，未知值回退原文 + other 配色
+  const SCENE_KEYS = ['silence', 'speech', 'singing', 'music', 'other'];
+  function sceneLabel(s) { return SCENE_KEYS.includes(s) ? t('scene.' + s) : s; }
+  function sceneCls(s) { return 'scene-' + (SCENE_KEYS.includes(s) ? s : 'other'); }
+
   const STATUS_TAG_TYPES = { pending: 'warning', processing: 'info', completed: 'success', failed: 'error', cancelled: 'default' };
   function statusLabel(s) { const v = t('status.' + s); return v === 'status.' + s ? s : v; }
   const POLL_ACTIVE_MS = 3000;   // 列表含进行中任务时的刷新间隔
@@ -121,6 +139,10 @@
     setup(props) {
       const result = computed(() => props.data.result || {});
       const segments = computed(() => result.value.segments || []);
+      const audioEvents = computed(() => result.value.audio_events || []);
+      const sceneTimeline = computed(() => result.value.scene_timeline || []);
+      // 转写结果至少有「分段」概念；仅当三者皆空才提示无分段（仅标注模式没有 segments 是正常的）
+      const isEmpty = computed(() => !segments.value.length && !audioEvents.value.length && !sceneTimeline.value.length);
       const metaTags = computed(() => {
         const r = result.value, tags = [];
         if (r.language) tags.push(t('meta.language', r.language));
@@ -140,6 +162,7 @@
         URL.revokeObjectURL(a.href);
       }
       function seek(seg) { if (props.onSeek && seg.start != null) props.onSeek(seg); }
+      function seekEvent(ev) { if (props.onSeek && ev.start_ms != null) props.onSeek({ start: ev.start_ms / 1000 }); }
       // 声纹识别开启时 result.speakers 为映射表（含 score）；纯标签列表时为空映射
       const spkMeta = computed(() => {
         const map = {};
@@ -152,7 +175,8 @@
         if (m.auto_enrolled) return t('spk.autoEnrolled');
         return m.score != null ? t('spk.similarity', m.score.toFixed(2)) : '';
       }
-      return { result, segments, metaTags, jsonText, downloadJson, seek, fmtTime, spkIdx, spkTitle, t };
+      return { result, segments, audioEvents, sceneTimeline, isEmpty, metaTags, jsonText, downloadJson,
+               seek, seekEvent, fmtTime, fmtMs, spkIdx, spkTitle, sceneLabel, sceneCls, t };
     },
     template: `
       <div>
@@ -162,18 +186,38 @@
         <n-alert v-if="result.warnings && result.warnings.length" type="warning" size="small" :show-icon="true" :bordered="false" style="margin-bottom:14px;">
           {{ t('warn.ignored', result.warnings.join(', ')) }}
         </n-alert>
-        <div class="sec-title">{{ t('result.segments') }}</div>
-        <n-empty v-if="!segments.length" :description="t('result.noSegments')" size="small" style="margin:12px 0;"></n-empty>
-        <div v-else>
-          <div v-for="(seg, i) in segments" :key="i" class="seg-row" :class="{ static: !onSeek }" @click="seek(seg)">
-            <span class="seg-time">{{ fmtTime(seg.start) }}</span>
-            <span class="seg-text"><span v-if="seg.speaker" class="speaker-badge" :class="'spk-' + spkIdx(seg.speaker)" :title="spkTitle(seg)">{{ seg.speaker_name || seg.speaker }}</span>{{ seg.text }}</span>
-            <span v-if="onSeek" class="seg-play"><a-icon name="play" size="14"></a-icon></span>
+        <template v-if="segments.length">
+          <div class="sec-title">{{ t('result.segments') }}</div>
+          <div>
+            <div v-for="(seg, i) in segments" :key="i" class="seg-row" :class="{ static: !onSeek }" @click="seek(seg)">
+              <span class="seg-time">{{ fmtTime(seg.start) }}</span>
+              <span class="seg-text"><span v-if="seg.scene" class="scene-badge" :class="sceneCls(seg.scene)">{{ sceneLabel(seg.scene) }}</span><span v-if="seg.speaker" class="speaker-badge" :class="'spk-' + spkIdx(seg.speaker)" :title="spkTitle(seg)">{{ seg.speaker_name || seg.speaker }}</span>{{ seg.text }}</span>
+              <span v-if="onSeek" class="seg-play"><a-icon name="play" size="14"></a-icon></span>
+            </div>
           </div>
-        </div>
+        </template>
+        <n-empty v-else-if="isEmpty" :description="t('result.noSegments')" size="small" style="margin:12px 0;"></n-empty>
+
+        <template v-if="sceneTimeline.length">
+          <div class="sec-title" style="margin-top:18px;">{{ t('result.sceneTimeline') }}</div>
+          <div v-for="(ev, i) in sceneTimeline" :key="'sc' + i" class="event-row" :class="{ seekable: !!onSeek }" @click="seekEvent(ev)">
+            <span class="event-span">{{ fmtMs(ev.start_ms) }} – {{ fmtMs(ev.end_ms) }}</span>
+            <span class="scene-badge" :class="sceneCls(ev.label)">{{ sceneLabel(ev.label) }}</span>
+          </div>
+        </template>
+
+        <template v-if="audioEvents.length">
+          <div class="sec-title" style="margin-top:18px;">{{ t('result.audioEvents') }}</div>
+          <div v-for="(ev, i) in audioEvents" :key="'ev' + i" class="event-row" :class="{ seekable: !!onSeek }" @click="seekEvent(ev)">
+            <span class="event-span">{{ fmtMs(ev.start_ms) }} – {{ fmtMs(ev.end_ms) }}</span>
+            <span class="seg-text">{{ ev.label }}</span>
+            <span class="event-conf">{{ ev.confidence != null ? ev.confidence.toFixed(2) : '' }}</span>
+          </div>
+        </template>
+
         <n-collapse :default-expanded-names="['full']" style="margin-top:18px;">
-          <n-collapse-item :title="t('result.fullText')" name="full">
-            <div class="full-text">{{ result.full_text || '' }}</div>
+          <n-collapse-item v-if="result.full_text" :title="t('result.fullText')" name="full">
+            <div class="full-text">{{ result.full_text }}</div>
           </n-collapse-item>
           <n-collapse-item :title="t('result.rawJson')" name="json">
             <template #header-extra>
@@ -218,7 +262,10 @@
       const canIdentify = ref(false);
       const identifySpeakers = ref(false);
       // —— 高级设置门控标志（/v2/health）+ 按请求覆盖值（null=不下发，用服务端默认）——
-      const srv = reactive({ punc: false, align: false, speaker: false, speakerDb: false, defaults: {} });
+      const srv = reactive({ punc: false, align: false, speaker: false, speakerDb: false, tagging: false, defaults: {} });
+      // 仅标注（不转写）：勾选后改调 /v2/audio/tag 同步返回事件/场景；tagScene 控制是否带场景时间线
+      const tagOnly = ref(false);
+      const tagScene = ref(true);
       const adv = reactive({
         withPunc: true, withWords: true, diarize: true,   // 降级开关：默认开，关闭才下发 false
         maxSegment: null, idThreshold: null, idMargin: null,
@@ -237,6 +284,7 @@
           if (r.ok) {
             const c = await r.json();
             canIdentify.value = !!c.speaker_identification;
+            srv.tagging = !!c.audio_tagging;
             srv.defaults = c.defaults || {};
           }
         } catch (e) { /* 探测失败按不可用处理，开关保持隐藏 */ }
@@ -264,6 +312,27 @@
         if (!selectedFile.value || current.phase === 'submitting' || current.phase === 'running') return;
         resetCurrent();
         current.phase = 'submitting';
+
+        // 仅标注：同步端点，直接拿事件/场景渲染（无任务、无轮询）
+        if (tagOnly.value) {
+          const tform = new FormData();
+          tform.append('file', selectedFile.value);
+          tform.append('with_scene', tagScene.value ? 'true' : 'false');
+          try {
+            const res = await fetch('/v2/audio/tag', { method: 'POST', body: tform, headers: authHeaders() });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({ detail: t('msg.recognizeFailed') }));
+              throw new Error(err.detail || t('msg.recognizeFailed'));
+            }
+            current.data = { result: await res.json() };
+            current.phase = 'done';
+          } catch (e) {
+            current.phase = 'error';
+            current.error = e.message;
+          }
+          return;
+        }
+
         const form = new FormData();
         form.append('file', selectedFile.value);
         if (identifySpeakers.value) form.append('identify_speakers', 'true');
@@ -493,7 +562,7 @@
 
       return {
         uploadFileList, onUploadChange, fileSize, audioSrc, audioRef, selectedFile,
-        canIdentify, identifySpeakers, srv, adv, ph,
+        canIdentify, identifySpeakers, srv, adv, ph, tagOnly, tagScene,
         current, progressPct, submit, cancelTask, seekAudio,
         taskList, toggleTaskList, manualRefresh, filterOptions, columns, rowProps,
         viewer, t,
@@ -522,10 +591,16 @@
                   <n-tag size="tiny" :bordered="false">{{ fileSize }}</n-tag>
                 </div>
                 <audio ref="audioRef" class="audio-box" controls :src="audioSrc"></audio>
-                <n-checkbox v-if="canIdentify" v-model:checked="identifySpeakers" size="small" :disabled="!adv.diarize" style="margin-top:12px;">
+                <n-checkbox v-if="srv.tagging" v-model:checked="tagOnly" size="small" style="margin-top:12px;">
+                  {{ t('upload.tagOnly') }}
+                </n-checkbox>
+                <n-checkbox v-if="srv.tagging && tagOnly" v-model:checked="tagScene" size="small" style="margin-top:8px;margin-left:22px;">
+                  {{ t('upload.tagScene') }}
+                </n-checkbox>
+                <n-checkbox v-if="canIdentify && !tagOnly" v-model:checked="identifySpeakers" size="small" :disabled="!adv.diarize" style="margin-top:12px;">
                   {{ t('upload.identify') }}
                 </n-checkbox>
-                <n-collapse style="margin-top:12px;">
+                <n-collapse v-if="!tagOnly" style="margin-top:12px;">
                   <n-collapse-item :title="t('adv.title')" name="adv">
                     <div class="adv-hint">{{ t('adv.hint') }}</div>
                     <template v-if="srv.punc || srv.align || srv.speaker">
@@ -545,7 +620,9 @@
                 <n-button type="primary" size="large" block strong style="margin-top:14px;"
                           :loading="current.phase === 'submitting'"
                           :disabled="current.phase === 'submitting' || current.phase === 'running'" @click="submit">
-                  {{ current.phase === 'running' || current.phase === 'submitting' ? t('action.recognizing') : t('action.start') }}
+                  {{ current.phase === 'running' || current.phase === 'submitting'
+                       ? (tagOnly ? t('action.tagging') : t('action.recognizing'))
+                       : (tagOnly ? t('action.tag') : t('action.start')) }}
                 </n-button>
               </template>
             </n-card>

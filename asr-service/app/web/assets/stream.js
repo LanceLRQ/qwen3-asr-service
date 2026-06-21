@@ -29,7 +29,10 @@
       'cap.flag.languages_auto': '自动语种', 'cap.flag.speaker_labels': '说话人分离',
       'cap.flag.speaker_identification': '声纹识别', 'cap.flag.noise_filter_tunable': '降噪可调',
       'cap.flag.speaker_tunable': '说话人可调', 'cap.flag.endpoint_tunable': '断句可调',
-      'cap.flag.output_toggles': '输出可控',
+      'cap.flag.output_toggles': '输出可控', 'cap.flag.scene': '场景识别',
+      'scene.current': '当前场景',
+      'scene.silence': '静音', 'scene.speech': '语音', 'scene.singing': '歌唱',
+      'scene.music': '音乐', 'scene.other': '其它',
       'cap.tip.partial_results': '需 vLLM 模式才支持（当前 vad-offline 后端按段输出，不产增量结果）',
       // 诊断指标
       'diag.sent': '发送速率', 'diag.recv': '接收速率', 'diag.buf': '发送缓冲',
@@ -89,7 +92,10 @@
       'cap.flag.languages_auto': 'Auto language', 'cap.flag.speaker_labels': 'Speaker labels',
       'cap.flag.speaker_identification': 'Speaker ID', 'cap.flag.noise_filter_tunable': 'Denoise tunable',
       'cap.flag.speaker_tunable': 'Speaker tunable', 'cap.flag.endpoint_tunable': 'Endpoint tunable',
-      'cap.flag.output_toggles': 'Output toggles',
+      'cap.flag.output_toggles': 'Output toggles', 'cap.flag.scene': 'Scene',
+      'scene.current': 'Current scene',
+      'scene.silence': 'Silence', 'scene.speech': 'Speech', 'scene.singing': 'Singing',
+      'scene.music': 'Music', 'scene.other': 'Other',
       'cap.tip.partial_results': 'Requires vLLM mode (the current vad-offline backend emits per segment, not incrementally)',
       'diag.sent': 'Send rate', 'diag.recv': 'Recv rate', 'diag.buf': 'Send buffer',
       'diag.frame': 'Max frame', 'diag.stall': 'Render lag',
@@ -128,6 +134,11 @@
     },
   };
   const t = makeT(M);
+
+  // 派生场景：已知五桶给本地化标签 + 固定配色 class，未知值回退原文 + other 配色
+  const SCENE_KEYS = ['silence', 'speech', 'singing', 'music', 'other'];
+  function sceneLabel(s) { return SCENE_KEYS.includes(s) ? t('scene.' + s) : s; }
+  function sceneCls(s) { return 'scene-' + (SCENE_KEYS.includes(s) ? s : 'other'); }
 
   const RT_SR = 16000;
   const FRAME = 3200;                 // 200ms @16k
@@ -216,7 +227,7 @@
       const CAP_ORDER = [
         'languages_auto', 'partial_results', 'word_timestamps',
         'speaker_labels', 'speaker_identification',
-        'noise_filter_tunable', 'speaker_tunable', 'endpoint_tunable', 'output_toggles',
+        'noise_filter_tunable', 'speaker_tunable', 'endpoint_tunable', 'output_toggles', 'scene',
       ];
       const capFlags = computed(() => {
         const c = capParts.value && capParts.value.capabilities;
@@ -233,13 +244,14 @@
       // —— 结果 ——
       const finals = reactive([]);        // {key, start, text, words, speaker, speakerName}
       const partial = ref('');
+      const currentScene = ref(null);     // {label, confidence, since} 实时派生场景实况（scene 消息驱动）
       const appendMode = ref(false);      // 追加输出：开始新会话时不清空结果，按批次派生分隔线续写
       let finalSeq = 0, batchSeq = 0;     // batchSeq：每次追加新会话 +1，渲染层据相邻条目 batch 变化插分隔线
       function appendFinal(m) {
         finals.push({ key: ++finalSeq, batch: batchSeq, start: m.start, text: m.text || '', words: (m.words && m.words.length) || 0, speaker: m.speaker || null, speakerName: m.speaker_name || null });
         if (finals.length > MAX_TRANSCRIPT_LINES) finals.shift();
       }
-      function clearResults() { finals.length = 0; partial.value = ''; batchSeq = 0; }
+      function clearResults() { finals.length = 0; partial.value = ''; batchSeq = 0; currentScene.value = null; }
 
       // 满高布局下转写区内部滚动：新 final/partial 到达时跟随滚底
       const transcriptRef = ref(null);
@@ -382,9 +394,12 @@
             };
             statusKey.value = 'connected'; statusDetail.value = m.backend;
             streamState.value = 'streaming';
+            if (!appendMode.value) currentScene.value = null;   // 新会话复位场景实况（追加模式保留上次）
             if (onReady) onReady();
           } else if (m.type === 'partial') {
             partial.value = m.text || '';
+          } else if (m.type === 'scene') {
+            currentScene.value = { label: m.label, confidence: m.confidence, since: m.since };
           } else if (m.type === 'final') {
             if (m.end != null && m.end > procEndMs) procEndMs = m.end;   // 服务端处理进度反馈
             appendFinal(m);
@@ -680,7 +695,7 @@
         lang, canIdentify, identifySpeakers, appendMode, srv, adv, warn, ph,
         streamState, statusText, busy, source,
         capWarning, hint, capParts, capFlags, diag, vuRef,
-        finals, partial, fmtMs, transcriptRef, spkIdx,
+        finals, partial, currentScene, sceneLabel, sceneCls, fmtMs, transcriptRef, spkIdx,
         logs, logOpen, logRef,
         streamFile, streamFileList, streamFileSize, onStreamUploadChange,
         noThrottle, useFfmpeg, ffLoading, fileProgress, fileRunning,
@@ -830,6 +845,11 @@
           <div class="main-col">
             <n-card :bordered="false" class="panel" content-class="panel-body" size="small">
               <template #header><span class="panel-title"><a-icon name="doc" size="15"></a-icon>{{ t('panel.result') }}</span></template>
+              <div v-if="currentScene" class="scene-live">
+                <span class="lbl">{{ t('scene.current') }}</span>
+                <span class="scene-badge" :class="sceneCls(currentScene.label)">{{ sceneLabel(currentScene.label) }}</span>
+                <span v-if="currentScene.confidence != null" class="conf">{{ currentScene.confidence.toFixed(2) }}</span>
+              </div>
               <div id="transcript" ref="transcriptRef">
                 <n-empty v-if="!finals.length && !partial" :description="t('result.waiting')" size="small" style="margin:24px 0;"></n-empty>
                 <template v-for="(line, i) in finals" :key="line.key">
