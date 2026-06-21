@@ -97,18 +97,22 @@ curl -X POST http://127.0.0.1:8765/v2/audio/tag \
 |-----------|------|---------|-------------|
 | file | File | Required | Audio file: same formats as [`POST /v2/asr`](#submit-asr-task) |
 | with_scene | bool | true | Whether to return the scene timeline |
+| scene_preset | string | (server default) | Per-request scene preset override: `balanced` / `live` / `music` |
+
+> Note: this endpoint has no transcript, so **lyrics-aware singing recovery does not apply** (see [Configuration · Audio Tagging](../../configuration_EN.md#audio-tagging-general-audio-event-tagging--derived-scene)); accompanied singing may read as `music` — for per-sentence scenes use `/v2/asr`.
 
 Response (200):
 
 ```json
 {
   "audio_events": [{"label": "Speech", "start_ms": 0, "end_ms": 2000, "confidence": 0.9}],
-  "scene_timeline": [{"label": "speech", "start_ms": 0, "end_ms": 2000}]
+  "scene_timeline": [{"label": "speech", "start_ms": 0, "end_ms": 2000,
+                      "scene_scores": {"speech": 0.62, "music": 0.18, "singing": 0.03}}]
 }
 ```
 
 - `audio_events`: onset/offset-aggregated event segments (see [Result Structure](tasks_EN.md#result-structure) for the field semantics).
-- `scene_timeline`: run-length-merged contiguous scene segments; omitted / `null` when `with_scene=false`.
+- `scene_timeline`: run-length-merged contiguous scene segments, each with `scene_scores` (per-bucket distribution); omitted / `null` when `with_scene=false`.
 
 | Status Code | Meaning |
 |-------------|---------|

@@ -1,8 +1,8 @@
-# vLLM Engine Feature Overview (differences vs the default standard mode)
+# vLLM Engine Feature Overview
 
 [← Back to docs home](../README.md) ｜ [中文](vllm-vs-standard.md) | **English**
 
-> This page summarizes the **functional differences** of the **vLLM engine** (`--serve-mode vllm`) relative to the original default **standard** mode (funasr / OpenVINO), to aid selection and upgrade evaluation.
+> This page focuses on the **functional differences of the vLLM engine vs the default standard mode**: it summarizes how the **vLLM engine** (`--serve-mode vllm`) differs from the original default **standard** mode (funasr / OpenVINO) in **features**, to aid selection and upgrade evaluation.
 >
 > **In one line**: the service originally had only the `standard` mode; this feature adds an **optional `vllm` mode** — GPU-native streaming (incremental, per-sentence) plus an offline endpoint with the same contract as standard, and brings speaker / compatibility-API capabilities to that mode. **The two modes are mutually exclusive at startup; standard mode's behavior, parameters and defaults are completely unchanged (zero regression).**
 

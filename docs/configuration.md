@@ -101,8 +101,9 @@
 ### 音频标注（通用音频事件标注 + 派生场景）
 
 开启后复用同一路音频额外输出 **AudioSet 通用事件标注**（PANNs 527 类 / YAMNet 521 类）与
-**派生场景**（`silence`/`speech`/`singing`/`music`/`other`）：离线结果加 `audio_events` 事件段与
-`segments[].scene`；实时流推 `scene` 消息；另有 `POST /v2/audio/tag` 只打标不转写。
+**派生场景**（`silence`/`speech`/`singing`/`music`/`other`）：离线结果加 `audio_events` 事件段、
+每段主场景 `segments[].scene` 与各桶概率分布 `segments[].scene_scores`；实时流推 `scene` 消息、
+并在每条 `final` 句级结果附 `scene`/`scene_scores`；另有 `POST /v2/audio/tag` 只打标不转写。
 全程 opt-in + 惰性加载 + 失败降级，关闭时零侵入。
 
 | 参数 | 取值 | 默认值 | 说明 |
@@ -113,14 +114,29 @@
 | `--audio-tagging-topk` | 数字 | `5` | 对外返回的 top-K 标签数 |
 | `--audio-tagging-interval-ms` | 毫秒 | `960` | 推理窗步长（降频省算力） |
 | `--scene-enable` / `--no-scene` | - | 开启 | 输出派生场景；关闭则只给原始 `audio_events` 标签 |
+| `--scene-preset` | `balanced` \| `live` \| `music` | `balanced` | 场景判定预设（打包权重）：**balanced** 均衡人声优先 / **live** 直播（人声优先+清唱偏置）/ **music** 音乐优先。可经 WebUI 下拉、离线 `/v2/asr`·`/v2/audio/tag` 表单 `scene_preset`、实时 `start` 消息按请求/会话覆盖 |
 | `--scene-map-file` | 路径 | （内置 5 桶） | 自定义场景映射 yaml/json：`{桶: [AudioSet 类名, ...]}`；加载失败回退内置默认 |
-| `--scene-enter-sec` | 秒 | `2.0` | 迟滞（流式）：连续 N 秒判定才进入某场景 |
-| `--scene-exit-sec` | 秒 | `2.0` | 迟滞（流式）：连续 M 秒判定才退出当前场景 |
-| `--scene-silence-dbfs` | dBFS | `-50.0` | 静音判定能量底（低于此判 `silence`，不耗模型） |
+| `--scene-enter-sec` | 秒 | `2.0` | 迟滞（流式连续 `scene` 消息）：连续 N 秒判定才进入某场景 |
+| `--scene-exit-sec` | 秒 | `2.0` | 迟滞（流式连续 `scene` 消息）：连续 M 秒判定才退出当前场景 |
+| `--scene-silence-dbfs` | dBFS | `-50.0` | 静音判定能量底；仅在**无明确语音/演唱信号**时据此判 `silence` |
+| `--scene-singing-min` | 数字 | 随预设 | 演唱判定阈值（覆盖预设；留空=随预设） |
+| `--scene-singing-bias` | 数字 | 随预设 | 清唱偏置：演唱与说话竞争时给演唱加的分（覆盖预设） |
+| `--scene-lyrics-aware` / `--no-scene-lyrics-aware` | - | 开启 | 离线/实时逐句：用转写歌词作人声证据修正歌声（带伴奏歌声 PANNs 常只给 `music`） |
+| `--scene-speech-min` | 数字 | `0.30` | 文本感知判别阈：有歌词段 `speech` 分≥此值判说话，否则有伴奏判演唱 |
+| `scene_weights`（仅配置文件 dict） | `{桶: 乘数}` | （全 1.0） | 每桶权重乘数，如 `{music: 0.8, speech: 1.1}`；同时作用于场景判定与 `scene_scores` |
 
-> 说明：`scene` 是**持续的主导内容状态**（迟滞平滑、互斥）；掌声/笑声/狗叫等**瞬时事件**不进
-> `scene`，统一进 `audio_events`。YAMNet 为非推荐轻量备选（精度低于 PANNs、vLLM 模式不可用），
-> 限制详见 README。
+> **场景判定模型**：`scene` 是**持续的主导内容状态**（互斥）；掌声/笑声/狗叫等**瞬时事件**不进
+> `scene`，统一进 `audio_events`。判定为**人声优先**——说话/演唱只要达阈值就压过背景音乐，纯器乐
+> 才归 `music`（`music` 预设回退为按桶分 argmax）。段级按窗与段的**时间重叠加权**聚合，规避
+> 「说话结束后 BGM 恢复」被跨界窗污染。`scene_scores` 为各桶**独立置信度**（不归一到 1，体现
+> 「说话+背景音乐」并存）。
+>
+> **演唱识别局限**：PANNs 对**带伴奏的歌声**常只输出 `Music`、不给 `Singing`（演唱桶分接近零），
+> 调阈值/权重救不回；故离线与实时逐句借 **ASR 已转写歌词＝确有人声** 这一事实，按 `--scene-speech-min`
+> 区分说话/演唱（`--no-scene-lyrics-aware` 可关）。实时**连续 `scene` 消息**无逐段文本，仍按模型分
+> 判定，对带伴奏歌声可能仍判 `music`；逐句场景请用 `final.scene`。
+>
+> YAMNet 为非推荐轻量备选（精度低于 PANNs、vLLM 模式不可用），限制详见 README。
 
 ### vLLM 原生流式（仅 `--serve-mode vllm`）
 

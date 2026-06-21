@@ -96,22 +96,26 @@ curl -X POST http://127.0.0.1:8765/v2/audio/tag \
 |------|------|--------|------|
 | file | 文件 | 必填 | 音频文件，格式同 `/v2/asr`（WAV/MP3/FLAC/M4A/AAC/OGG/WMA/AMR/OPUS） |
 | with_scene | bool | true | 是否输出场景时间线 `scene_timeline`；`false` 时该字段省略 / 为 `null` |
+| scene_preset | string | （服务端默认） | 按请求覆盖场景判定预设：`balanced` / `live` / `music` |
 
 > 配置了 API 密钥时同其他接口要求携带 Bearer Token（未配置密钥时免认证）。
+>
+> 注：本端点无转写文本，**文本感知歌声修正不生效**（详见[配置文档·音频标注](../../configuration.md#音频标注通用音频事件标注--派生场景)）；带伴奏歌声可能判为 `music`，逐句更准的场景请走 `/v2/asr`。
 
 响应：
 
 ```json
 {
   "audio_events": [{"label": "Speech", "start_ms": 0, "end_ms": 2000, "confidence": 0.9}],
-  "scene_timeline": [{"label": "speech", "start_ms": 0, "end_ms": 2000}]
+  "scene_timeline": [{"label": "speech", "start_ms": 0, "end_ms": 2000,
+                      "scene_scores": {"speech": 0.62, "music": 0.18, "singing": 0.03}}]
 }
 ```
 
 | 字段 | 说明 |
 |------|------|
 | `audio_events[]` | 按起止时间聚合的事件段：`label`（AudioSet 类别）、`start_ms` / `end_ms`（毫秒）、`confidence`（段内最大概率） |
-| `scene_timeline[]` | 连续场景段的游程合并列表：`label`（`silence`/`speech`/`singing`/`music`/`other` 或自定义桶）、`start_ms` / `end_ms`；`with_scene=false` 时省略 / 为 `null` |
+| `scene_timeline[]` | 连续场景段的游程合并列表：`label`（`silence`/`speech`/`singing`/`music`/`other` 或自定义桶）、`start_ms` / `end_ms`、`scene_scores`（该段各桶概率分布）；`with_scene=false` 时省略 / 为 `null` |
 
 | 状态码 | 含义 |
 |--------|------|
