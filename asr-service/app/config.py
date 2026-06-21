@@ -29,7 +29,8 @@ TAGGING_MODEL_DIR = os.path.join(MODELS_DIR, "tagging")
 
 # 随包数据（标签表等）
 DATA_DIR = os.path.join(BASE_DIR, "app", "data")
-AUDIOSET_LABELS_CSV = os.path.join(DATA_DIR, "audioset_labels.csv")
+AUDIOSET_LABELS_CSV = os.path.join(DATA_DIR, "audioset_labels.csv")   # PANNs 527 类
+YAMNET_LABELS_CSV = os.path.join(DATA_DIR, "yamnet_labels.csv")       # YAMNet 521 类
 
 # OpenVINO 模型仓库（HuggingFace）
 OV_MODEL_REPO_MAP = {
@@ -74,6 +75,7 @@ MODEL_LOCAL_MAP = {
     "campplus": os.path.join(SPEAKER_MODEL_DIR, "campplus"),
     "tagging_panns_16k": os.path.join(TAGGING_MODEL_DIR, "panns_16k"),
     "tagging_panns_32k": os.path.join(TAGGING_MODEL_DIR, "panns_32k"),
+    "tagging_yamnet": os.path.join(TAGGING_MODEL_DIR, "yamnet"),
 }
 
 # 音频标注权重来源（统一走 HF/直链，ModelScope 无可信仓库，见设计 §5）：
@@ -83,6 +85,8 @@ TAGGING_PANNS_16K_URL = (
 )
 TAGGING_PANNS_16K_FILENAME = "Cnn14_16k_mAP=0.438.pth"
 TAGGING_PANNS_32K_REPO = "nicofarr/panns_Cnn14"
+# YAMNet（非推荐轻量备选）：HF thelou1s 官方 Google TFLite（仓库内自动定位 *.tflite）
+TAGGING_YAMNET_REPO = "thelou1s/yamnet"
 
 # ─── VAD 参数 ───
 

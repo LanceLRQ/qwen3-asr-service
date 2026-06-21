@@ -349,10 +349,12 @@ def _assemble_standard(app: FastAPI, args) -> None:
             from app.engines.panns_tagger_engine import PANNsTaggerEngine
             tagger = PANNsTaggerEngine(
                 variant=cfg.AUDIO_TAGGING_PANNS_VARIANT, device=device_map)
+        elif cfg.AUDIO_TAGGING_ENGINE == "yamnet":
+            from app.engines.yamnet_tagger_engine import YamnetTaggerEngine
+            tagger = YamnetTaggerEngine()
         else:
             logger.error(
-                f"音频标注引擎 '{cfg.AUDIO_TAGGING_ENGINE}' 暂未实现"
-                "（YAMNet 为 Phase C），已降级关闭")
+                f"未知音频标注引擎 '{cfg.AUDIO_TAGGING_ENGINE}'（可选 panns/yamnet），已降级关闭")
         if tagger is not None:
             try:
                 tagger.load()

@@ -14,7 +14,7 @@ import threading
 import numpy as np
 
 from app.engines.audio_tagger import TagResult, load_labels_csv, topk_from_probs
-from app.utils.model_manager import ensure_file, ensure_model
+from app.utils.model_manager import ensure_file, ensure_model_hf
 from app.config import (
     MODEL_LOCAL_MAP,
     AUDIOSET_LABELS_CSV,
@@ -110,7 +110,7 @@ class PANNsTaggerEngine:
             return weight_path
         # 32k：HF 仓库（含 state_dict 权重文件）
         local_dir = MODEL_LOCAL_MAP["tagging_panns_32k"]
-        ensure_model(TAGGING_PANNS_32K_REPO, local_dir)
+        ensure_model_hf(TAGGING_PANNS_32K_REPO, local_dir)
         weight_path = _find_weight_file(local_dir)
         if weight_path is None:
             raise FileNotFoundError(
