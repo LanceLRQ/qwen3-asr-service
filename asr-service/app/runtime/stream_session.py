@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 
 from app.utils.audio_resampler import pcm_bytes_to_array, resample_to_16k
+from app.utils.language import to_engine_language
 from app.utils.result_parser import extract_text, extract_words
 from app.engines.streaming_vad_engine import StreamingVADEngine
 from app.runtime.speaker_cluster import OnlineSpeakerClusterer
@@ -166,7 +167,9 @@ class StreamSession:
                 f"audio_fs 必须在 [{_MIN_AUDIO_FS}, {_MAX_AUDIO_FS}] 范围内，收到 {audio_fs}")
         self.audio_fs = audio_fs
         if cfg_msg.get("language") is not None:
-            self.language = cfg_msg.get("language")
+            # 归一成引擎规范名（zh→Chinese / 带地区子标签亦可）；未识别→None 交自动检测，
+            # 避免非法 hint 击穿到引擎抛 Unsupported language
+            self.language = to_engine_language(cfg_msg.get("language"))
         self.wav_name = cfg_msg.get("wav_name", self.sid)
         self.vad_cache = self._svad.new_cache()
         self.seg_id = 0

@@ -7,6 +7,7 @@
 ## 目录
 
 - [离线批处理 · 提交 ASR 任务 `POST /v2/asr`](#提交-asr-任务)
+  - [语言代码取值与归一化](#语言代码取值与归一化)
 - [音频标注 `POST /v2/audio/tag`](#音频标注)
 - [实时转写 `WS /v2/asr/stream`](#实时转写)
   - [鉴权](#鉴权)
@@ -34,7 +35,7 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | file | 文件 | 必填 | 音频文件，支持 WAV/MP3/FLAC/M4A/AAC/OGG/WMA/AMR/OPUS |
-| language | string | null | 语言代码，null 为自动检测 |
+| language | string | null | 识别语言提示，`null`/省略=自动检测；取值与归一化规则见[下方说明](#语言代码取值与归一化) |
 | identify_speakers | bool | false | 对分离出的说话人做声纹识别（需说话人分离与[声纹库](speakers.md#说话人分离与声纹识别)均已启用） |
 | with_punc | bool | 服务端默认 | 是否做标点恢复（降级开关，只能关；服务端未加载标点模型则本就无标点） |
 | with_words | bool | 服务端默认 | 是否输出词级时间戳（需对齐模型已加载） |
@@ -44,6 +45,18 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | speaker_id_margin | float | 服务端默认 | 声纹 top1-top2 margin，范围 `[0, 1]`（需声纹库已启用） |
 
 > 数值越界 → 400；功能未启用的覆盖项不报错，转写结果的 `result.warnings`（字符串数组）列出被忽略项。
+
+#### 语言代码取值与归一化
+
+`language` 接受三种写法，服务端在送入引擎前统一归一为引擎语种名：
+
+- **ISO-639-1 码**：`zh` / `en` / `yue` / `ja` …
+- **规范英文名**（大小写不敏感）：`Chinese` / `English` / …
+- **带地区子标签**：`zh-CN` / `en_US`（按主标签解析）
+
+**无法识别的取值**（拼写错误、未支持语种、`Zh` 这类大小写变体）一律**降级为自动检测，不再报错**——既往直接透传导致引擎抛 `Unsupported language` 的行为已在服务层拦截。离线与[实时转写](#实时转写)共用同一归一化规则。
+
+支持语种（30）：`Chinese`、`English`、`Cantonese`、`Arabic`、`German`、`French`、`Spanish`、`Portuguese`、`Indonesian`、`Italian`、`Korean`、`Russian`、`Thai`、`Vietnamese`、`Japanese`、`Turkish`、`Hindi`、`Malay`、`Dutch`、`Swedish`、`Danish`、`Finnish`、`Polish`、`Czech`、`Filipino`、`Persian`、`Greek`、`Romanian`、`Hungarian`、`Macedonian`。
 
 响应：
 
@@ -151,7 +164,7 @@ WS /v2/asr/stream
 | 字段 | 默认值 | 说明 |
 |------|--------|------|
 | audio_fs | 16000 | 音频采样率，允许 8000–96000，非 16k 时服务端自动重采样 |
-| language | null | 语言代码，null 为自动检测 |
+| language | null | 识别语言提示，`null`/省略=自动检测；取值与归一化规则同[离线提交](#语言代码取值与归一化)（非法/未识别码降级为自动检测，不报错） |
 | wav_name | "stream" | 会话名（展示用） |
 | identify_speakers | false | 对说话人标签做声纹识别（需 `session.created.capabilities.speaker_identification=true`） |
 | noise_filter | 服务端默认 | 本会话覆盖远场段级过滤开关（缺省沿用服务端配置；需 `capabilities.noise_filter_tunable=true`） |

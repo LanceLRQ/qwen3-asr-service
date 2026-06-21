@@ -12,6 +12,7 @@ from app.utils.validation import (
     coerce_num_in_range, MAX_SEGMENT_RANGE,
     SPK_ID_THRESHOLD_RANGE, SPK_ID_MARGIN_RANGE,
 )
+from app.utils.language import to_engine_language
 import app.config as cfg
 
 logger = logging.getLogger(__name__)
@@ -145,7 +146,7 @@ async def submit_asr(
     try:
         task_id = _task_manager.submit(
             file_path=save_path,
-            language=language,
+            language=to_engine_language(language),
             wav_name=file.filename,
             identify_speakers=identify_speakers,
             options=options,

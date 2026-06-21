@@ -7,6 +7,7 @@ Two ways to transcribe: **offline batch** (upload a whole clip, get the result a
 ## Table of Contents
 
 - [Offline Batch · Submit ASR Task `POST /v2/asr`](#submit-asr-task)
+  - [Language codes and normalization](#language-codes-and-normalization)
 - [Audio Tagging `POST /v2/audio/tag`](#audio-tagging)
 - [Real-time Transcription `WS /v2/asr/stream`](#real-time-transcription)
   - [Authentication](#authentication)
@@ -34,7 +35,7 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | file | File | Required | Audio file: WAV/MP3/FLAC/M4A/AAC/OGG/WMA/AMR/OPUS |
-| language | string | null | Language code, null for auto-detection |
+| language | string | null | Language hint; `null`/omitted = auto-detect. Accepted forms and normalization: see [below](#language-codes-and-normalization) |
 | identify_speakers | bool | false | Run voiceprint identification on the diarized speakers (requires both speaker diarization and the [voiceprint database](speakers_EN.md#speaker-diarization--voiceprint-identification) to be enabled) |
 | with_punc | bool | server default | Whether to restore punctuation (downgrade-only toggle; no punctuation if the model isn't loaded server-side) |
 | with_words | bool | server default | Whether to emit word-level timestamps (requires the alignment model loaded) |
@@ -44,6 +45,18 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | speaker_id_margin | float | server default | Voiceprint top1-top2 margin, range `[0, 1]` (requires the voiceprint DB enabled) |
 
 > Out-of-range values → 400; overrides for features that aren't enabled don't error — the transcription `result.warnings` (string array) lists the ignored params.
+
+#### Language codes and normalization
+
+`language` accepts three forms, normalized server-side to the engine's language name before inference:
+
+- **ISO-639-1 codes**: `zh` / `en` / `yue` / `ja` …
+- **Canonical English names** (case-insensitive): `Chinese` / `English` / …
+- **With region subtags**: `zh-CN` / `en_US` (resolved by primary subtag)
+
+**Unrecognized values** (typos, unsupported languages, case variants like `Zh`) **fall back to auto-detection instead of erroring** — the previous pass-through behavior that made the engine raise `Unsupported language` is now intercepted at the service layer. Offline and [real-time transcription](#real-time-transcription) share the same normalization rule.
+
+Supported languages (30): `Chinese`, `English`, `Cantonese`, `Arabic`, `German`, `French`, `Spanish`, `Portuguese`, `Indonesian`, `Italian`, `Korean`, `Russian`, `Thai`, `Vietnamese`, `Japanese`, `Turkish`, `Hindi`, `Malay`, `Dutch`, `Swedish`, `Danish`, `Finnish`, `Polish`, `Czech`, `Filipino`, `Persian`, `Greek`, `Romanian`, `Hungarian`, `Macedonian`.
 
 Response:
 
@@ -147,7 +160,7 @@ Client                                  Server
 | Field | Default | Description |
 |-------|---------|-------------|
 | audio_fs | 16000 | Sample rate, 8000–96000 allowed; non-16k input is resampled server-side |
-| language | null | Language code, null for auto-detection |
+| language | null | Language hint; `null`/omitted = auto-detect. Same accepted forms and normalization as [offline submit](#language-codes-and-normalization) (invalid/unrecognized codes fall back to auto-detect, no error) |
 | wav_name | "stream" | Session name (for display) |
 | identify_speakers | false | Run voiceprint identification on speaker labels (requires `session.created.capabilities.speaker_identification=true`) |
 | noise_filter | server default | Override far-field segment gating for this session (defaults to the server config; requires `capabilities.noise_filter_tunable=true`) |
