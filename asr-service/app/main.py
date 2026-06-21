@@ -172,6 +172,23 @@ def _apply_cli_config(args):
     if getattr(args, "speaker_auto_enroll_min_sec", None) is not None:
         cfg.SPEAKER_AUTO_ENROLL_MIN_SEC = args.speaker_auto_enroll_min_sec
     cfg.SPEAKER_STORE_AUDIO = getattr(args, "speaker_store_audio", False)
+    # 音频标注
+    cfg.ENABLE_AUDIO_TAGGING = getattr(args, "enable_audio_tagging", False)
+    if getattr(args, "audio_tagging_engine", None) is not None:
+        cfg.AUDIO_TAGGING_ENGINE = args.audio_tagging_engine
+    if getattr(args, "audio_tagging_panns_variant", None) is not None:
+        cfg.AUDIO_TAGGING_PANNS_VARIANT = args.audio_tagging_panns_variant
+    if getattr(args, "audio_tagging_topk", None) is not None:
+        cfg.AUDIO_TAGGING_TOPK = args.audio_tagging_topk
+    if getattr(args, "audio_tagging_interval_ms", None) is not None:
+        cfg.AUDIO_TAGGING_INTERVAL_MS = args.audio_tagging_interval_ms
+    cfg.SCENE_ENABLE = getattr(args, "scene_enable", True)
+    if getattr(args, "scene_enter_sec", None) is not None:
+        cfg.SCENE_ENTER_SEC = args.scene_enter_sec
+    if getattr(args, "scene_exit_sec", None) is not None:
+        cfg.SCENE_EXIT_SEC = args.scene_exit_sec
+    if getattr(args, "scene_silence_dbfs", None) is not None:
+        cfg.SCENE_SILENCE_DBFS = args.scene_silence_dbfs
     cfg.ENABLE_OPENAI_API = getattr(args, "enable_openai_api", False)
     if getattr(args, "openai_sync_timeout", None) is not None:
         cfg.OPENAI_SYNC_TIMEOUT = args.openai_sync_timeout
@@ -325,6 +342,25 @@ def _assemble_standard(app: FastAPI, args) -> None:
             speaker_engine = None
     speaker_enabled = speaker_engine is not None
 
+    # 音频标注引擎（可选）：加载失败降级关闭，不影响转写主链路（容错对齐说话人）
+    tagger = None
+    if cfg.ENABLE_AUDIO_TAGGING:
+        if cfg.AUDIO_TAGGING_ENGINE == "panns":
+            from app.engines.panns_tagger_engine import PANNsTaggerEngine
+            tagger = PANNsTaggerEngine(
+                variant=cfg.AUDIO_TAGGING_PANNS_VARIANT, device=device_map)
+        else:
+            logger.error(
+                f"音频标注引擎 '{cfg.AUDIO_TAGGING_ENGINE}' 暂未实现"
+                "（YAMNet 为 Phase C），已降级关闭")
+        if tagger is not None:
+            try:
+                tagger.load()
+            except Exception as e:
+                logger.warning(f"音频标注引擎加载失败，已降级关闭: {e}")
+                tagger = None
+    tagging_enabled = tagger is not None
+
     # 声纹库（可选）：降级矩阵按序检查，任一失败 = ERROR 日志 + 模块关闭、服务继续启动
     speaker_service = None
     speaker_store = None
@@ -367,6 +403,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
         punc_engine=punc_engine,
         speaker_engine=speaker_engine,
         speaker_service=linked_speaker_service,
+        tagger=tagger,
     )
 
     # 任务持久化（可选）：建库失败只告警不中断启动（附属能力不拖垮主链路）
@@ -415,6 +452,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
         "offline_api": True,
         "speaker_labels": speaker_enabled,
         "speaker_identification": speaker_db_enabled,
+        "audio_tagging": tagging_enabled,
+        "scene": tagging_enabled and cfg.SCENE_ENABLE,
         "stream": {
             "enabled": stream_enabled,
             "backend": "vad-offline" if stream_enabled else None,
@@ -435,6 +474,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
             "speaker_id_margin": cfg.SPEAKER_ID_MARGIN,
             "energy_floor_dbfs": cfg.STREAM_ENERGY_FLOOR_DBFS,
             "snr_min_db": cfg.STREAM_SNR_MIN_DB,
+            "audio_tagging_engine": cfg.AUDIO_TAGGING_ENGINE,
+            "audio_tagging_panns_variant": cfg.AUDIO_TAGGING_PANNS_VARIANT,
         },
     }
     service_info = {
@@ -446,6 +487,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
         "punc_enabled": enable_punc,
         "speaker_enabled": speaker_enabled,
         "speaker_db_enabled": speaker_db_enabled,
+        "audio_tagging_enabled": tagging_enabled,
         "asr_backend": asr_backend,
         "vad_backend": VADEngine.BACKEND,
         "punc_backend": PuncEngine.BACKEND if enable_punc else "disabled",
@@ -602,6 +644,9 @@ def _assemble_vllm(app: FastAPI, args) -> None:
             logger.warning(f"说话人引擎加载失败，已降级关闭: {e}")
             speaker_engine = None
     speaker_enabled = speaker_engine is not None
+
+    if cfg.ENABLE_AUDIO_TAGGING:
+        logger.warning("音频标注在 vLLM 模式暂未接入（Phase A 仅 standard 模式），已忽略本次开关")
 
     # 离线能量 VAD（无 funasr）：说话人滑窗来源 + 声纹库登记/识别样本切分的 vad_engine 替身
     energy_vad = None

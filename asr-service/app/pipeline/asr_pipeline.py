@@ -28,12 +28,14 @@ class ASRPipeline:
         punc_engine: PuncEngine | None = None,
         speaker_engine=None,
         speaker_service=None,
+        tagger=None,
     ):
         self.asr = asr_engine
         self.vad = vad_engine
         self.punc = punc_engine
         self.speaker = speaker_engine
         self.speaker_service = speaker_service    # 声纹库联动（None = 未启用）
+        self.tagger = tagger                      # 音频打标引擎（None = 未启用）
 
     def run(
         self,
@@ -216,6 +218,19 @@ class ASRPipeline:
             if speaker_active and progress_callback:
                 progress_callback(0.95)
 
+            # 4.8 通用音频标注（可选；容错旁路：失败只丢标签，不破坏转写）。
+            #     滑窗打标 → audio_events 事件段 + per-segment scene（复用阶段0的 16k wav）。
+            audio_events = None
+            tagging_active = (self.tagger is not None and segments
+                              and not (cancelled and cancelled()))
+            if tagging_active:
+                try:
+                    audio_events = self._run_tagging(
+                        wav_path, segments, scene_enable=cfg.SCENE_ENABLE)
+                except Exception as e:
+                    logger.warning(f"音频标注失败，跳过: {e}")
+                    audio_events = None
+
             # 5. 合并全文
             full_text = "".join(
                 seg["text"] for seg in segments
@@ -234,6 +249,8 @@ class ASRPipeline:
             }
             if speakers_result is not None:
                 result["speakers"] = speakers_result
+            if audio_events is not None:
+                result["audio_events"] = audio_events
             if warnings:
                 result["warnings"] = warnings
             return result
@@ -403,6 +420,57 @@ class ASRPipeline:
         embeddings = self.speaker.embed_windows(wav, windows)
         labels = cluster_offline(embeddings, max_speakers=cfg.SPEAKER_MAX)
         return DiarizationResult(windows, labels, embeddings)
+
+    def _run_tagging(self, wav_path: str, segments: list[dict],
+                     scene_enable: bool = True) -> list[dict]:
+        """通用音频打标：非重叠滑窗 predict_window → audio_events 事件段 + per-seg scene。
+
+        复用阶段0已保证的 16k 单声道 wav；逐窗 top-k 经 onset/offset 聚合成事件段
+        （不逐窗全量落库，规避 result/tasks.db 膨胀）。scene_enable 时按段时间窗投票
+        写 seg["scene"]。延迟导入：打标关闭时本路径零额外依赖。返回 audio_events。
+        """
+        from app.runtime import scene_mapper
+        from app.runtime.noise_gate import rms_dbfs
+
+        wav, sr = sf.read(wav_path, dtype="float32")   # 阶段 0 已保证 16k 单声道
+        if wav.ndim > 1:
+            wav = wav.mean(axis=1)
+        total = len(wav)
+        if total == 0:
+            return []
+
+        step = max(1, int(sr * max(1, cfg.AUDIO_TAGGING_INTERVAL_MS) / 1000))
+        topk = cfg.AUDIO_TAGGING_TOPK
+        silence_dbfs = cfg.SCENE_SILENCE_DBFS
+
+        windows: list[tuple[int, int, list]] = []          # (start_ms, end_ms, top)
+        win_scenes: list[tuple[int, int, str, float]] = []  # (start_ms, end_ms, scene, conf)
+        for off in range(0, total, step):
+            clip = wav[off:off + step]
+            if clip.size == 0:
+                continue
+            start_ms = int(off * 1000 / sr)
+            end_ms = int(min(off + step, total) * 1000 / sr)
+            tr = self.tagger.predict_window(clip, sr, topk)
+            windows.append((start_ms, end_ms, tr.top))
+            if scene_enable:
+                scene, conf = scene_mapper.classify_window(
+                    tr.scores, rms_dbfs(clip), silence_dbfs=silence_dbfs)
+                win_scenes.append((start_ms, end_ms, scene, conf))
+
+        audio_events = scene_mapper.aggregate_events(windows)
+
+        if scene_enable and win_scenes:
+            for s in segments:
+                s_start = int(s["start"] * 1000)
+                s_end = int(s["end"] * 1000)
+                overlap = [(sc, cf) for (ws, we, sc, cf) in win_scenes
+                           if we > s_start and ws < s_end]
+                if overlap:
+                    s["scene"] = scene_mapper.vote_scene(overlap)
+
+        logger.info(f"[Pipeline] 音频标注完成: {len(windows)} 窗 → {len(audio_events)} 事件段")
+        return audio_events
 
     def _merge_vad_segments(
         self,

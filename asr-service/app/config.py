@@ -25,6 +25,11 @@ ALIGN_MODEL_DIR = os.path.join(MODELS_DIR, "align")
 VAD_MODEL_DIR = os.path.join(MODELS_DIR, "vad")
 PUNC_MODEL_DIR = os.path.join(MODELS_DIR, "punc")
 SPEAKER_MODEL_DIR = os.path.join(MODELS_DIR, "speaker")
+TAGGING_MODEL_DIR = os.path.join(MODELS_DIR, "tagging")
+
+# 随包数据（标签表等）
+DATA_DIR = os.path.join(BASE_DIR, "app", "data")
+AUDIOSET_LABELS_CSV = os.path.join(DATA_DIR, "audioset_labels.csv")
 
 # OpenVINO 模型仓库（HuggingFace）
 OV_MODEL_REPO_MAP = {
@@ -67,7 +72,17 @@ MODEL_LOCAL_MAP = {
     "asr_ov_0.6b": os.path.join(ASR_MODEL_DIR, "openvino", "0.6b"),
     "asr_ov_1.7b": os.path.join(ASR_MODEL_DIR, "openvino", "1.7b"),
     "campplus": os.path.join(SPEAKER_MODEL_DIR, "campplus"),
+    "tagging_panns_16k": os.path.join(TAGGING_MODEL_DIR, "panns_16k"),
+    "tagging_panns_32k": os.path.join(TAGGING_MODEL_DIR, "panns_32k"),
 }
+
+# 音频标注权重来源（统一走 HF/直链，ModelScope 无可信仓库，见设计 §5）：
+# 16k 原生权重仅 Zenodo 直链（非 HF repo，用 ensure_file 下载）；32k 走 HF nicofarr 仓库。
+TAGGING_PANNS_16K_URL = (
+    "https://zenodo.org/record/3987831/files/Cnn14_16k_mAP%3D0.438.pth?download=1"
+)
+TAGGING_PANNS_16K_FILENAME = "Cnn14_16k_mAP=0.438.pth"
+TAGGING_PANNS_32K_REPO = "nicofarr/panns_Cnn14"
 
 # ─── VAD 参数 ───
 
@@ -171,6 +186,18 @@ SPEAKER_ENROLL_MIN_SEC = 3.0        # 手动登记单样本最短有效语音（
 SPEAKER_AUTO_ENROLL = True          # 离线 identify 未命中簇自动以「说话人_NN」占位名登记
 SPEAKER_AUTO_ENROLL_MIN_SEC = 10.0  # 自动登记的簇最短语音总时长（严于手动登记）
 SPEAKER_STORE_AUDIO = False         # 留存登记样本音频（扩大合规面，默认关）
+
+# ─── 通用音频事件标注（Audio Tagging，含派生场景）───
+
+ENABLE_AUDIO_TAGGING = False        # 总开关（--enable-audio-tagging）；关闭零侵入、不 import 引擎
+AUDIO_TAGGING_ENGINE = "panns"      # "panns"(推荐) | "yamnet"(轻量备选，Phase C)
+AUDIO_TAGGING_PANNS_VARIANT = "16k" # PANNs 变体："16k"(原生,推荐) | "32k"(HF nicofarr+重采样)
+AUDIO_TAGGING_TOPK = 5              # 对外返回的 top-K 标签数
+AUDIO_TAGGING_INTERVAL_MS = 960     # 推理窗步长（≈YAMNet 帧；降频省算力）
+SCENE_ENABLE = True                 # 是否输出派生场景视图（关=只给原始 audio_events 标签）
+SCENE_ENTER_SEC = 2.0              # 迟滞（流式 Phase B）：连续判定 N 秒才进入某场景
+SCENE_EXIT_SEC = 2.0              # 迟滞（流式 Phase B）：连续判定 M 秒才退出
+SCENE_SILENCE_DBFS = -50.0         # 静音判定能量底（复用 noise_gate.rms_dbfs）
 
 # ─── vLLM（路线 A：原生流式）───
 
