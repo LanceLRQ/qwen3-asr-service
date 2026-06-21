@@ -116,6 +116,20 @@ def test_configure_chunk_size_override_and_range():
         sess.configure({"chunk_size_sec": 10})    # > 5.0 上限
 
 
+@pytest.mark.parametrize("raw,expected", [
+    ("zh", "Chinese"),        # ISO 码
+    ("Zh", "Chinese"),        # 大小写不敏感
+    ("zh-CN", "Chinese"),     # 带地区子标签
+    ("Chinese", "Chinese"),   # 已是规范名
+    ("xx", None),             # 未识别 → None 交自动检测
+])
+def test_configure_normalizes_language(raw, expected):
+    """服务层归一化 language，避免非法 hint 击穿引擎抛 Unsupported language。"""
+    _, sess = _make_session()
+    sess.configure({"audio_fs": 16000, "language": raw})
+    assert sess.language == expected
+
+
 # ─── VllmStreamSession.feed_audio / flush ───
 
 def test_feed_audio_partial_then_final():

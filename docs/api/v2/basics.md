@@ -73,13 +73,16 @@ GET /v2/health
     "offline_api": true,
     "speaker_labels": false,
     "speaker_identification": false,
+    "audio_tagging": false,
+    "scene": false,
     "stream": {
       "enabled": true,
       "backend": "vad-offline",
       "path": "/v2/asr/stream",
       "partial_results": false,
       "word_timestamps": true,
-      "speaker_labels": false
+      "speaker_labels": false,
+      "scene": false
     }
   }
 }
@@ -117,13 +120,16 @@ GET /v2/capabilities
   "offline_api": true,
   "speaker_labels": true,
   "speaker_identification": false,
+  "audio_tagging": true,
+  "scene": true,
   "stream": {
     "enabled": true,
     "backend": "vad-offline",
     "path": "/v2/asr/stream",
     "partial_results": false,
     "word_timestamps": true,
-    "speaker_labels": true
+    "speaker_labels": true,
+    "scene": true
   },
   "defaults": {
     "max_segment": 5, "max_end_silence_ms": 800, "max_segment_sec": 12,
@@ -137,9 +143,12 @@ GET /v2/capabilities
 |------|------|
 | speaker_labels | 说话人分离是否启用（离线 + 实时同一开关） |
 | speaker_identification | 声纹库真名识别是否可用（登记 / identify / 转写联动） |
+| audio_tagging | 音频标注是否启用（`--enable-audio-tagging`，决定 `POST /v2/audio/tag` 是否可用） |
+| scene | 场景识别是否启用（决定离线 `segments[].scene` 与实时 `scene` 消息是否产出） |
 | stream.enabled | 实时端点是否已挂载（需 `--enable-stream`） |
 | stream.backend | `vad-offline` / `vllm-native`（暂未实现） |
 | stream.partial_results | 是否产生中间结果 `partial`（vad-offline 后端为 false） |
 | stream.word_timestamps | `final` 是否带单词级时间戳（随对齐开关） |
 | stream.speaker_labels | 实时 `final` 是否带说话人标签 |
+| stream.scene | 实时连接是否下发场景切换消息 `scene`（需音频标注 + 场景识别启用） |
 | defaults | 可覆盖参数（实时 `start` 字段 / 离线 Form 字段）的当前生效默认值，反映实际配置；Web UI 用于数值框占位提示 |

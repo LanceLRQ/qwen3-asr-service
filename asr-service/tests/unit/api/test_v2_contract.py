@@ -23,6 +23,7 @@ def test_v1_offline_route_inventory():
     got = _route_set(routes.build_offline_router("/v1", include_deprecated=True))
     assert got == {
         ("POST", "/v1/asr"),
+        ("POST", "/v1/audio/tag"),
         ("GET", "/v1/tasks"),
         ("GET", "/v1/tasks/{task_id}"),
         ("DELETE", "/v1/tasks/{task_id}"),
@@ -34,6 +35,7 @@ def test_v2_offline_route_inventory_excludes_deprecated():
     got = _route_set(routes.build_offline_router("/v2"))
     assert got == {
         ("POST", "/v2/asr"),
+        ("POST", "/v2/audio/tag"),
         ("GET", "/v2/tasks"),
         ("GET", "/v2/tasks/{task_id}"),
         ("DELETE", "/v2/tasks/{task_id}"),

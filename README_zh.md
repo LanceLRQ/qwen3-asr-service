@@ -19,6 +19,7 @@
 - **vLLM 原生流式引擎** *（v2.1.0 新增，可选）* - 独立的纯 GPU 运行模式（`--serve-mode vllm`），句内实时 partial→final 增量解码 + 长音频逐块转写，详见 [vLLM 与 standard 差异](docs/vllm-vs-standard.md)
 - **说话人分离** - 离线/实时转写标注匿名说话人标签 A/B/C…（CAM++ 声纹模型，CPU 推理）
 - **声纹库识别** - 登记说话人后转写直接显示真名；未知说话人自动登记占位名，Web 管理页一键改名（speakers.db，强制鉴权）
+- **音频标注** *（v2.3.0 新增，可选）* - 通用音频事件标注（AudioSet 全类，PANNs 527 类 / YAMNet 521 类）+ 派生场景（静音/说话/唱歌/音乐/其他）：离线结果加 `audio_events` 与每段 `scene`，实时流推 `scene` 消息，另有只打标不转写的 `POST /v2/audio/tag`。可开关、双引擎、场景映射可配置。`--enable-audio-tagging` 启用。（YAMNet 为非推荐的轻量备选：精度低于 PANNs，需额外安装可选依赖（`pip install -r requirements-yamnet.txt`），且 vLLM 模式不可用。）
 - **远场过滤 / 参数可调** - 实时段级能量/SNR 门控减少远场与环境音误触发；说话人、断句、输出等参数支持按请求/会话动态覆盖
 - **OpenAI / DashScope 兼容接口** - 改 base_url 即对接 OpenAI / 阿里云 DashScope 生态（离线 + 实时），无需改动业务代码
 - **异步任务 + 持久化** - 提交后轮询结果，任务结果跨重启可查（tasks.db）
@@ -82,12 +83,14 @@ docker run -d --gpus all -p 8765:8765 \
 |------|------|
 | [部署指南](docs/deployment.md) | 系统要求、Linux / Windows / Docker 部署、三种运行模式、Web UI、安全终止 |
 | [配置文档](docs/configuration.md) | 启动参数全表、config.yaml 配置文件、环境变量、任务持久化、内置常量 |
+| [调优与排错](docs/troubleshooting.md) | 实时 / 离线差异、降噪门控与 VAD 阈值取舍、按内容类型推荐配置、排错速查 |
 | [vLLM 与 standard 差异](docs/vllm-vs-standard.md) | vLLM 引擎相对默认 standard 模式的功能差异（选型与升级参考） |
 | [API 文档 v2（默认）](docs/api/v2.md) | 离线批处理、健康检查 / 能力查询、实时转写 WebSocket 协议 |
 | [API 文档 v1（兼容）](docs/api/v1.md) | 旧客户端兼容说明与版本演进约定 |
 | [兼容接口](docs/api/compat.md) | OpenAI / 阿里云 DashScope drop-in 兼容（离线 + 实时），改 base_url 即接入 |
 | [架构说明](docs/architecture.md) | 项目结构、处理流程、关键设计 |
 | [开发指南](docs/development.md) | 开发环境、测试、端到端冒烟、单一 schema / 文档 / 兼容层扩展约定 |
+| [第三方声明](THIRD_PARTY_NOTICES.md) | 内置模型与依赖的许可与署名声明 |
 
 ---
 

@@ -49,6 +49,23 @@ LEGACY_DEFAULTS = {
     "speaker_auto_enroll": True,
     "speaker_auto_enroll_min_sec": 10.0,
     "speaker_store_audio": False,
+    # ── 音频标注（Audio Tagging）新增，非重构前遗留 ──
+    "enable_audio_tagging": False,
+    "audio_tagging_engine": "panns",
+    "audio_tagging_panns_variant": "16k",
+    "audio_tagging_topk": 5,
+    "audio_tagging_interval_ms": 960,
+    "scene_enable": True,
+    "scene_map_file": None,
+    "scene_enter_sec": 2.0,
+    "scene_exit_sec": 2.0,
+    "scene_silence_dbfs": -50.0,
+    "scene_preset": "balanced",
+    "scene_singing_min": None,
+    "scene_singing_bias": None,
+    "scene_weights": {},
+    "scene_lyrics_aware": True,
+    "scene_speech_min": 0.30,
     # ── 兼容接口（/compat/*）新增，非重构前遗留 ──
     "enable_openai_api": False,
     "openai_sync_timeout": 300,
@@ -89,9 +106,9 @@ def test_each_spec_suppressed_when_absent(spec):
     assert not hasattr(ns, spec.attr)
 
 
-@pytest.mark.parametrize("spec", ARG_SPECS, ids=lambda s: s.key)
+@pytest.mark.parametrize("spec", [s for s in ARG_SPECS if s.flags], ids=lambda s: s.key)
 def test_each_spec_present_when_passed(spec):
-    """逐参数断言：显式传入后以正确 dest 与取值出现。"""
+    """逐参数断言：显式传入后以正确 dest 与取值出现（仅 CLI 项；config-only 无 flag 跳过）。"""
     if spec.type is bool:
         argv, expected = [spec.flags[0]], True
     elif spec.choices:

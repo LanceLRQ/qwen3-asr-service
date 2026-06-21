@@ -172,6 +172,41 @@ def _apply_cli_config(args):
     if getattr(args, "speaker_auto_enroll_min_sec", None) is not None:
         cfg.SPEAKER_AUTO_ENROLL_MIN_SEC = args.speaker_auto_enroll_min_sec
     cfg.SPEAKER_STORE_AUDIO = getattr(args, "speaker_store_audio", False)
+    # 音频标注
+    cfg.ENABLE_AUDIO_TAGGING = getattr(args, "enable_audio_tagging", False)
+    if getattr(args, "audio_tagging_engine", None) is not None:
+        cfg.AUDIO_TAGGING_ENGINE = args.audio_tagging_engine
+    if getattr(args, "audio_tagging_panns_variant", None) is not None:
+        cfg.AUDIO_TAGGING_PANNS_VARIANT = args.audio_tagging_panns_variant
+    if getattr(args, "audio_tagging_topk", None) is not None:
+        cfg.AUDIO_TAGGING_TOPK = args.audio_tagging_topk
+    if getattr(args, "audio_tagging_interval_ms", None) is not None:
+        cfg.AUDIO_TAGGING_INTERVAL_MS = args.audio_tagging_interval_ms
+    cfg.SCENE_ENABLE = getattr(args, "scene_enable", True)
+    if getattr(args, "scene_map_file", None) is not None:
+        cfg.SCENE_MAP_FILE = args.scene_map_file
+    if getattr(args, "scene_enter_sec", None) is not None:
+        cfg.SCENE_ENTER_SEC = args.scene_enter_sec
+    if getattr(args, "scene_exit_sec", None) is not None:
+        cfg.SCENE_EXIT_SEC = args.scene_exit_sec
+    if getattr(args, "scene_silence_dbfs", None) is not None:
+        cfg.SCENE_SILENCE_DBFS = args.scene_silence_dbfs
+    # 场景预设：解析为生效权重，再叠加显式单项覆盖（None=随预设）
+    from app.runtime import scene_mapper
+    cfg.SCENE_PRESET = getattr(args, "scene_preset", None) or cfg.SCENE_PRESET
+    _preset = scene_mapper.resolve_preset(cfg.SCENE_PRESET)
+    cfg.SCENE_VOCAL_PRIORITY = _preset["vocal_priority"]
+    cfg.SCENE_SINGING_MIN = _preset["singing_min"]
+    cfg.SCENE_SINGING_BIAS = _preset["singing_bias"]
+    if getattr(args, "scene_singing_min", None) is not None:
+        cfg.SCENE_SINGING_MIN = args.scene_singing_min
+    if getattr(args, "scene_singing_bias", None) is not None:
+        cfg.SCENE_SINGING_BIAS = args.scene_singing_bias
+    if getattr(args, "scene_weights", None):
+        cfg.SCENE_WEIGHTS = args.scene_weights
+    cfg.SCENE_LYRICS_AWARE = getattr(args, "scene_lyrics_aware", True)
+    if getattr(args, "scene_speech_min", None) is not None:
+        cfg.SCENE_SPEECH_MIN = args.scene_speech_min
     cfg.ENABLE_OPENAI_API = getattr(args, "enable_openai_api", False)
     if getattr(args, "openai_sync_timeout", None) is not None:
         cfg.OPENAI_SYNC_TIMEOUT = args.openai_sync_timeout
@@ -201,7 +236,7 @@ def create_app(args=None) -> FastAPI:
     _apply_cli_config(args)
 
     serve_mode = getattr(args, "serve_mode", "standard")
-    app = FastAPI(title="Qwen3-ASR Service", version=os.environ.get("APP_VERSION", "2.2.0"))
+    app = FastAPI(title="Qwen3-ASR Service", version=os.environ.get("APP_VERSION", "2.3.0"))
     # 响应压缩（vendored 前端库 1.7MB → ~426KB；仅作用于 HTTP，WS 不受影响）
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
@@ -325,6 +360,37 @@ def _assemble_standard(app: FastAPI, args) -> None:
             speaker_engine = None
     speaker_enabled = speaker_engine is not None
 
+    # 音频标注引擎（可选）：加载失败降级关闭，不影响转写主链路（容错对齐说话人）
+    tagger = None
+    if cfg.ENABLE_AUDIO_TAGGING:
+        if cfg.AUDIO_TAGGING_ENGINE == "panns":
+            from app.engines.panns_tagger_engine import PANNsTaggerEngine
+            tagger = PANNsTaggerEngine(
+                variant=cfg.AUDIO_TAGGING_PANNS_VARIANT, device=device_map)
+        elif cfg.AUDIO_TAGGING_ENGINE == "yamnet":
+            from app.engines.yamnet_tagger_engine import YamnetTaggerEngine
+            tagger = YamnetTaggerEngine()
+        else:
+            logger.error(
+                f"未知音频标注引擎 '{cfg.AUDIO_TAGGING_ENGINE}'（可选 panns/yamnet），已降级关闭")
+        if tagger is not None:
+            try:
+                tagger.load()
+            except Exception as e:
+                logger.warning(f"音频标注引擎加载失败，已降级关闭: {e}")
+                tagger = None
+    tagging_enabled = tagger is not None
+
+    # 自定义场景映射（可选）：加载失败回退内置默认，不中断启动
+    scene_map = None
+    if tagging_enabled and cfg.SCENE_MAP_FILE:
+        from app.runtime import scene_mapper
+        try:
+            scene_map = scene_mapper.load_scene_map(cfg.SCENE_MAP_FILE)
+            logger.info(f"已加载自定义场景映射: {cfg.SCENE_MAP_FILE}（{len(scene_map)} 桶）")
+        except Exception as e:
+            logger.error(f"自定义场景映射加载失败，回退内置默认: {e}")
+
     # 声纹库（可选）：降级矩阵按序检查，任一失败 = ERROR 日志 + 模块关闭、服务继续启动
     speaker_service = None
     speaker_store = None
@@ -367,6 +433,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
         punc_engine=punc_engine,
         speaker_engine=speaker_engine,
         speaker_service=linked_speaker_service,
+        tagger=tagger,
+        scene_map=scene_map,
     )
 
     # 任务持久化（可选）：建库失败只告警不中断启动（附属能力不拖垮主链路）
@@ -409,12 +477,17 @@ def _assemble_standard(app: FastAPI, args) -> None:
     task_manager.start()
 
     # 构建服务信息（mode-aware，供 /health、/capabilities 使用）
+    from app.runtime import scene_mapper
     stream_enabled = getattr(args, "enable_stream", False)
     capabilities = {
         "mode": "standard",
         "offline_api": True,
         "speaker_labels": speaker_enabled,
         "speaker_identification": speaker_db_enabled,
+        "audio_tagging": tagging_enabled,
+        "scene": tagging_enabled and cfg.SCENE_ENABLE,
+        "scene_preset": cfg.SCENE_PRESET,
+        "scene_presets": list(scene_mapper.SCENE_PRESETS.keys()),
         "stream": {
             "enabled": stream_enabled,
             "backend": "vad-offline" if stream_enabled else None,
@@ -422,6 +495,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
             "partial_results": False,
             "word_timestamps": enable_align if stream_enabled else False,
             "speaker_labels": speaker_enabled if stream_enabled else False,
+            "scene": tagging_enabled and cfg.SCENE_ENABLE if stream_enabled else False,
         },
         # 可覆盖参数的当前生效默认值（反映实际配置，供 Web UI 占位提示）
         "defaults": {
@@ -435,6 +509,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
             "speaker_id_margin": cfg.SPEAKER_ID_MARGIN,
             "energy_floor_dbfs": cfg.STREAM_ENERGY_FLOOR_DBFS,
             "snr_min_db": cfg.STREAM_SNR_MIN_DB,
+            "audio_tagging_engine": cfg.AUDIO_TAGGING_ENGINE,
+            "audio_tagging_panns_variant": cfg.AUDIO_TAGGING_PANNS_VARIANT,
         },
     }
     service_info = {
@@ -446,6 +522,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
         "punc_enabled": enable_punc,
         "speaker_enabled": speaker_enabled,
         "speaker_db_enabled": speaker_db_enabled,
+        "audio_tagging_enabled": tagging_enabled,
         "asr_backend": asr_backend,
         "vad_backend": VADEngine.BACKEND,
         "punc_backend": PuncEngine.BACKEND if enable_punc else "disabled",
@@ -459,7 +536,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
     app.include_router(build_common_router("/v2"))
 
     # 离线路由：v1（含 deprecated 别名）+ v2（同名复用）
-    init_routes(task_manager, task_store)
+    init_routes(task_manager, task_store, tagger=tagger, scene_map=scene_map)
     app.include_router(build_offline_router("/v1", include_deprecated=True))
     app.include_router(build_offline_router("/v2"))
 
@@ -487,6 +564,18 @@ def _assemble_standard(app: FastAPI, args) -> None:
             noise_filter=cfg.STREAM_NOISE_FILTER,
             energy_floor_dbfs=cfg.STREAM_ENERGY_FLOOR_DBFS,
             snr_min_db=cfg.STREAM_SNR_MIN_DB,
+            tagger=tagger,
+            scene_enable=cfg.SCENE_ENABLE,
+            scene_enter_sec=cfg.SCENE_ENTER_SEC,
+            scene_exit_sec=cfg.SCENE_EXIT_SEC,
+            scene_silence_dbfs=cfg.SCENE_SILENCE_DBFS,
+            scene_vocal_priority=cfg.SCENE_VOCAL_PRIORITY,
+            scene_singing_min=cfg.SCENE_SINGING_MIN,
+            scene_singing_bias=cfg.SCENE_SINGING_BIAS,
+            scene_weights=cfg.SCENE_WEIGHTS or None,
+            tag_interval_ms=cfg.AUDIO_TAGGING_INTERVAL_MS,
+            tag_topk=cfg.AUDIO_TAGGING_TOPK,
+            scene_map=scene_map,
         )
         init_ws_stream(stream_backend)
         app.include_router(ws_router_stream)
@@ -602,6 +691,9 @@ def _assemble_vllm(app: FastAPI, args) -> None:
             logger.warning(f"说话人引擎加载失败，已降级关闭: {e}")
             speaker_engine = None
     speaker_enabled = speaker_engine is not None
+
+    if cfg.ENABLE_AUDIO_TAGGING:
+        logger.warning("音频标注在 vLLM 模式暂未接入（Phase A 仅 standard 模式），已忽略本次开关")
 
     # 离线能量 VAD（无 funasr）：说话人滑窗来源 + 声纹库登记/识别样本切分的 vad_engine 替身
     energy_vad = None

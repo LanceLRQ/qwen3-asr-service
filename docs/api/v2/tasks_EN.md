@@ -128,6 +128,19 @@ With speaker diarization enabled (`enable_speaker`), `result` gains the followin
 - top-level `speakers`: the speaker list — `["A","B"]` for plain diarization; upgraded to a mapping table
   `[{"label","speaker_id","name","score","auto_enrolled"?}]` when voiceprint identification is on (entries with no match have `speaker_id`/`name` set to `null`).
 
+With audio tagging enabled (`--enable-audio-tagging`), `result` gains the following optional fields (absent when disabled):
+
+- `segments[].scene`: the dominant scene string for the segment, one of `silence` / `speech` / `singing` / `music` / `other` (or custom buckets); present only when `scene_enable` is on;
+- `segments[].scene_scores`: the segment's average probability per scene bucket `{bucket: prob}` — **independent confidences** (NOT normalized to 1; reflects "speech over background music" coexisting, e.g. `{"speech":0.62,"music":0.31}`);
+- top-level `audio_events`: an array of onset/offset-aggregated event segments (NOT per-window) — each entry is `{"label","start_ms","end_ms","confidence"}` where `label` is an AudioSet class, `start_ms`/`end_ms` are integers (milliseconds), and `confidence` (float) is the max probability within the segment.
+- An optional form field `scene_preset` (`balanced`/`live`/`music`) overrides the scene-decision preset per request.
+
+```json
+"segments": [{"start": 0.31, "end": 11.76, "text": "...", "scene": "speech",
+              "scene_scores": {"speech": 0.62, "music": 0.31, "singing": 0.03}}],
+"audio_events": [{"label": "Speech", "start_ms": 0, "end_ms": 25920, "confidence": 0.897}]
+```
+
 ## Cancel / Delete Task
 
 ```

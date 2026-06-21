@@ -7,6 +7,8 @@ Two ways to transcribe: **offline batch** (upload a whole clip, get the result a
 ## Table of Contents
 
 - [Offline Batch · Submit ASR Task `POST /v2/asr`](#submit-asr-task)
+  - [Language codes and normalization](#language-codes-and-normalization)
+- [Audio Tagging `POST /v2/audio/tag`](#audio-tagging)
 - [Real-time Transcription `WS /v2/asr/stream`](#real-time-transcription)
   - [Authentication](#authentication)
   - [Message Flow](#message-flow)
@@ -33,7 +35,7 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | file | File | Required | Audio file: WAV/MP3/FLAC/M4A/AAC/OGG/WMA/AMR/OPUS |
-| language | string | null | Language code, null for auto-detection |
+| language | string | null | Language hint; `null`/omitted = auto-detect. Accepted forms and normalization: see [below](#language-codes-and-normalization) |
 | identify_speakers | bool | false | Run voiceprint identification on the diarized speakers (requires both speaker diarization and the [voiceprint database](speakers_EN.md#speaker-diarization--voiceprint-identification) to be enabled) |
 | with_punc | bool | server default | Whether to restore punctuation (downgrade-only toggle; no punctuation if the model isn't loaded server-side) |
 | with_words | bool | server default | Whether to emit word-level timestamps (requires the alignment model loaded) |
@@ -43,6 +45,18 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | speaker_id_margin | float | server default | Voiceprint top1-top2 margin, range `[0, 1]` (requires the voiceprint DB enabled) |
 
 > Out-of-range values → 400; overrides for features that aren't enabled don't error — the transcription `result.warnings` (string array) lists the ignored params.
+
+#### Language codes and normalization
+
+`language` accepts three forms, normalized server-side to the engine's language name before inference:
+
+- **ISO-639-1 codes**: `zh` / `en` / `yue` / `ja` …
+- **Canonical English names** (case-insensitive): `Chinese` / `English` / …
+- **With region subtags**: `zh-CN` / `en_US` (resolved by primary subtag)
+
+**Unrecognized values** (typos, unsupported languages, case variants like `Zh`) **fall back to auto-detection instead of erroring** — the previous pass-through behavior that made the engine raise `Unsupported language` is now intercepted at the service layer. Offline and [real-time transcription](#real-time-transcription) share the same normalization rule.
+
+Supported languages (30): `Chinese`, `English`, `Cantonese`, `Arabic`, `German`, `French`, `Spanish`, `Portuguese`, `Indonesian`, `Italian`, `Korean`, `Russian`, `Thai`, `Vietnamese`, `Japanese`, `Turkish`, `Hindi`, `Malay`, `Dutch`, `Swedish`, `Danish`, `Finnish`, `Polish`, `Czech`, `Filipino`, `Persian`, `Greek`, `Romanian`, `Hungarian`, `Macedonian`.
 
 Response:
 
@@ -61,6 +75,51 @@ A successful submission returns only the `task_id`; **the recognition result is 
 | 401 | Authentication failed |
 | 413 | File too large (>1GB) |
 | 503 | Service not ready / task queue full |
+
+## Audio Tagging
+
+```
+POST /v2/audio/tag
+Content-Type: multipart/form-data
+```
+
+Tagging only — detects audio events and the scene timeline without transcribing speech. Requires audio tagging to be enabled on the server (`--enable-audio-tagging`).
+
+```bash
+curl -X POST http://127.0.0.1:8765/v2/audio/tag \
+  -F "file=@/path/to/audio.mp3" \
+  -F "with_scene=true"
+```
+
+**Authentication**: when an API key is configured, a Bearer Token is required (otherwise `401`); open when no `api_key` is set.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| file | File | Required | Audio file: same formats as [`POST /v2/asr`](#submit-asr-task) |
+| with_scene | bool | true | Whether to return the scene timeline |
+| scene_preset | string | (server default) | Per-request scene preset override: `balanced` / `live` / `music` |
+
+> Note: this endpoint has no transcript, so **lyrics-aware singing recovery does not apply** (see [Configuration · Audio Tagging](../../configuration_EN.md#audio-tagging-general-audio-event-tagging--derived-scene)); accompanied singing may read as `music` — for per-sentence scenes use `/v2/asr`.
+
+Response (200):
+
+```json
+{
+  "audio_events": [{"label": "Speech", "start_ms": 0, "end_ms": 2000, "confidence": 0.9}],
+  "scene_timeline": [{"label": "speech", "start_ms": 0, "end_ms": 2000,
+                      "scene_scores": {"speech": 0.62, "music": 0.18, "singing": 0.03}}]
+}
+```
+
+- `audio_events`: onset/offset-aggregated event segments (see [Result Structure](tasks_EN.md#result-structure) for the field semantics).
+- `scene_timeline`: run-length-merged contiguous scene segments, each with `scene_scores` (per-bucket distribution); omitted / `null` when `with_scene=false`.
+
+| Status Code | Meaning |
+|-------------|---------|
+| 200 | Tagging result returned |
+| 400 | Unsupported audio format |
+| 401 | Authentication failed |
+| 503 | Audio tagging is not enabled on the server |
 
 ## Real-time Transcription
 
@@ -105,7 +164,7 @@ Client                                  Server
 | Field | Default | Description |
 |-------|---------|-------------|
 | audio_fs | 16000 | Sample rate, 8000–96000 allowed; non-16k input is resampled server-side |
-| language | null | Language code, null for auto-detection |
+| language | null | Language hint; `null`/omitted = auto-detect. Same accepted forms and normalization as [offline submit](#language-codes-and-normalization) (invalid/unrecognized codes fall back to auto-detect, no error) |
 | wav_name | "stream" | Session name (for display) |
 | identify_speakers | false | Run voiceprint identification on speaker labels (requires `session.created.capabilities.speaker_identification=true`) |
 | noise_filter | server default | Override far-field segment gating for this session (defaults to the server config; requires `capabilities.noise_filter_tunable=true`) |
@@ -137,7 +196,8 @@ All server-to-client messages use a uniform envelope and carry a `type`:
 |------|--------|-------------|
 | `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` / `limits` | Sent on connect; `capabilities` contains `partial_results` / `word_timestamps` / `languages_auto` / `speaker_labels` / `speaker_identification`, plus tunability flags `noise_filter_tunable` / `speaker_tunable` / `endpoint_tunable` / `output_toggles` (whether the corresponding overrides can be tuned in this session); `limits` contains `max_frame_bytes` / `max_backlog_bytes` — clients pushing faster than real time should pace themselves accordingly (use `final.end` as processing-progress feedback and keep the unprocessed backlog below the limit) |
 | `partial` | `seg_id` / `text` | Intermediate result (only for backends with `partial_results=true`; vad-offline does not produce them) |
-| `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` | Finalized sentence-level result; `start`/`end` in milliseconds; `words` only when `word_timestamps=true`; `speaker` (anonymous label A/B/C…) only when `speaker_labels=true` and this segment is decidable; `speaker_name` only when `identify_speakers=true` and a voiceprint matches (speaker label / real-name semantics in [Speaker Management](speakers_EN.md#speaker-diarization--voiceprint-identification)) |
+| `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` / `scene` / `scene_scores` | Finalized sentence-level result; `start`/`end` in milliseconds; `words` only when `word_timestamps=true`; `speaker` (anonymous label A/B/C…) only when `speaker_labels=true` and this segment is decidable; `speaker_name` only when `identify_speakers=true` and a voiceprint matches; `scene` (segment's dominant scene) / `scene_scores` (per-bucket distribution) only when `capabilities.stream.scene=true`, semantics identical to offline `segments[].scene` / `scene_scores` |
+| `scene` | `label` / `confidence` / `since` / `scores` | Current scene update (only when `capabilities.stream.scene=true`); `label` is the current scene; `since` is the start timestamp in milliseconds; `scores` holds per-content-bucket representative scores. Emitted only on a state **change** (hysteresis-smoothed; a continuous state is emitted once) — for per-sentence scene use `final.scene` |
 | `error` | `code` / `message` / `seg_id` / `fatal` | The session terminates when `fatal=true` |
 | `session.closed` | `reason` | Session ended |
 
@@ -145,6 +205,12 @@ All server-to-client messages use a uniform envelope and carry a `type`:
 
 ```json
 {"type": "final", "seg_id": 0, "text": "甚至出现交易几乎停滞的情况。", "start": 320, "end": 3520, "words": null}
+```
+
+`scene` example:
+
+```json
+{"type": "scene", "label": "speech", "confidence": 0.86, "since": 1000, "scores": {"speech": 0.86, "singing": 0.0, "music": 0.04}}
 ```
 
 ### Error Codes

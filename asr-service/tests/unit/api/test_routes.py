@@ -34,7 +34,8 @@ def test_submit_ok(make_client):
     assert resp.status_code == 200
     assert resp.json() == {"task_id": "tid-1"}
     tm.submit.assert_called_once()
-    assert tm.submit.call_args.kwargs["language"] == "zh"
+    # 服务层归一化：上游 ISO 码 zh → 引擎规范名 Chinese（避免击穿引擎抛 Unsupported language）
+    assert tm.submit.call_args.kwargs["language"] == "Chinese"
 
 
 def test_submit_with_options_passthrough(make_client):

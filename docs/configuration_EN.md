@@ -98,6 +98,35 @@ Reduces false triggers from far-field sounds and ambient noise. `--vad-speech-no
 | `--speaker-auto-enroll-min-sec` | Seconds | `10.0` | Minimum total speech duration of a cluster for auto-enrollment (stricter than manual enrollment, to reduce noisy records) |
 | `--speaker-store-audio` / `--no-speaker-store-audio` | - | Disabled | Retain enrollment sample audio in `data/speaker_audio/` (widens the compliance surface, off by default) |
 
+### Audio Tagging (general audio event tagging + derived scene)
+
+When enabled, the service reuses the same audio to additionally output general AudioSet event tags (PANNs 527 classes / YAMNet 521 classes) and a derived scene (silence/speech/singing/music/other). Offline results gain an `audio_events` list (onset/offset event segments), a dominant `segments[].scene`, and a per-bucket distribution `segments[].scene_scores`; the realtime stream pushes `scene` messages and attaches `scene`/`scene_scores` to each `final`; and `POST /v2/audio/tag` does tagging only (no transcription). Fully opt-in with lazy loading and graceful degradation; zero impact when disabled.
+
+| Parameter | Value | Default | Description |
+|------|------|--------|------|
+| `--enable-audio-tagging` / `--no-audio-tagging` | - | Off | Master switch |
+| `--audio-tagging-engine` | `panns` / `yamnet` | `panns` | Engine: panns (recommended, ~320MB weights auto-downloaded on first use) / yamnet (lightweight fallback, needs `pip install -r requirements-yamnet.txt`, standard mode CPU only) |
+| `--audio-tagging-panns-variant` | `16k` / `32k` | `16k` | PANNs variant: 16k native (Zenodo direct download) / 32k (HF `nicofarr` + resample) |
+| `--audio-tagging-topk` | Number | `5` | Number of top-K labels returned |
+| `--audio-tagging-interval-ms` | ms | `960` | Inference window step (lower frequency saves compute) |
+| `--scene-enable` / `--no-scene` | - | On | Output derived scene; off = raw `audio_events` labels only |
+| `--scene-preset` | `balanced` / `live` / `music` | `balanced` | Scene preset (bundled weights): **balanced** vocal-priority / **live** (vocal-priority + a-cappella bias) / **music** music-first. Overridable per request/session via the WebUI dropdown, offline `/v2/asr`·`/v2/audio/tag` form field `scene_preset`, or the realtime `start` message |
+| `--scene-map-file` | Path | (built-in 5 buckets) | Custom scene-map yaml/json `{bucket: [AudioSet labels, ...]}`; falls back to built-in default on load error |
+| `--scene-enter-sec` | Seconds | `2.0` | Hysteresis (streaming continuous `scene` message): N seconds of agreement to enter a scene |
+| `--scene-exit-sec` | Seconds | `2.0` | Hysteresis (streaming continuous `scene` message): M seconds of agreement to exit a scene |
+| `--scene-silence-dbfs` | dBFS | `-50.0` | Silence energy floor; judged `silence` only when there is **no clear speech/singing signal** |
+| `--scene-singing-min` | Number | follow preset | Singing threshold (overrides preset; empty = follow preset) |
+| `--scene-singing-bias` | Number | follow preset | A-cappella bias added to singing when it competes with speech (overrides preset) |
+| `--scene-lyrics-aware` / `--no-scene-lyrics-aware` | - | On | Offline/per-sentence: use transcript text as vocal evidence to recover singing (PANNs often labels accompanied singing as `music`) |
+| `--scene-speech-min` | Number | `0.30` | Lyrics-aware threshold: for segments with text, `speech` ≥ this → speech, else (with accompaniment) → singing |
+| `scene_weights` (config-file dict only) | `{bucket: multiplier}` | (all 1.0) | Per-bucket weight multipliers, e.g. `{music: 0.8, speech: 1.1}`; applied to both scene decision and `scene_scores` |
+
+> **Scene decision model**: `scene` is a sustained dominant-content state (mutually exclusive); transient events (applause/laughter/dog bark) do NOT enter `scene` and go to `audio_events`. Decision is **vocal-priority** — speech/singing override background music once above threshold; only pure instrumental → `music` (the `music` preset falls back to per-bucket argmax). Per-segment scores are aggregated with **time-overlap weighting** of windows vs the segment, avoiding contamination by a window straddling "speech ends, BGM resumes". `scene_scores` are **independent confidences** (not normalized to 1; reflect "speech + background music" coexisting).
+>
+> **Singing limitation**: PANNs often emits only `Music` (not `Singing`, singing-bucket score near zero) for **accompanied singing**, which threshold/weight tuning cannot recover; so offline and per-sentence realtime use the fact that **ASR already transcribed lyrics = vocals present**, splitting speech/singing by `--scene-speech-min` (disable via `--no-scene-lyrics-aware`). The realtime **continuous `scene` message** has no per-segment text and still decides by model scores, so accompanied singing may still read as `music` there — use `final.scene` for per-sentence scenes.
+>
+> YAMNet is a non-recommended lightweight fallback (lower accuracy than PANNs, unavailable in vLLM mode).
+
 ### vLLM Native Streaming (only `--serve-mode vllm`)
 
 Effective only in vllm mode; requires a CUDA GPU and an isolated environment/image (see [vLLM Native Streaming Mode](#vllm-native-streaming-mode) below).

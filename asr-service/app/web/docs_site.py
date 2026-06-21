@@ -53,7 +53,7 @@ def _get_template() -> str | None:
 # 侧边导航顺序与短标题（slug 去 _en 后缀为键；不在表中的文档排在末尾、用文档 h1 兜底）
 # api/v2/* 为 API v2 概览下的子文档，导航中缩进显示（见 _build_nav 的 sub 类）
 _NAV_ORDER = [
-    "readme", "deployment", "configuration", "development",
+    "readme", "deployment", "configuration", "troubleshooting", "development",
     "api/v2", "api/v2/basics", "api/v2/transcription", "api/v2/tasks", "api/v2/speakers",
     "api/v1", "api/compat", "api/compat/openai", "api/compat/dashscope", "architecture",
 ]
@@ -61,6 +61,7 @@ _NAV_TITLES = {
     "readme": ("项目主页", "Home"),
     "deployment": ("部署指南", "Deployment"),
     "configuration": ("配置文档", "Configuration"),
+    "troubleshooting": ("调优与排错", "Tuning & Troubleshooting"),
     "development": ("开发指南", "Development"),
     "api/v2": ("API v2（默认）", "API v2 (default)"),
     "api/v2/basics": ("基础接口", "Basics"),

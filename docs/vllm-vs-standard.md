@@ -1,8 +1,8 @@
-# vLLM 引擎特性总览（相对默认 standard 模式的功能差异）
+# vLLM 引擎特性总览
 
 [← 返回文档首页](../README.md) ｜ **中文** | [English](vllm-vs-standard_EN.md)
 
-> 本文梳理 **vLLM 引擎**（`--serve-mode vllm`）相对原有默认 **standard** 模式（funasr / OpenVINO）在**功能特性**上的明显区别，便于选型与升级评估。
+> 本文聚焦 **vLLM 引擎相对默认 standard 模式的功能差异**：梳理 **vLLM 引擎**（`--serve-mode vllm`）相对原有默认 **standard** 模式（funasr / OpenVINO）在**功能特性**上的明显区别，便于选型与升级评估。
 >
 > **一句话**：原服务只有 `standard` 一种运行模式；本特性新增**可选的 `vllm` 运行模式**——GPU 原生流式（逐句增量）+ 与 standard 同契约的离线接口，并为该模式补齐说话人、兼容接口能力。**两种模式互斥启动；standard 模式的行为、参数、默认值完全不变（零回归）。**
 

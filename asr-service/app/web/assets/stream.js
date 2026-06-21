@@ -29,7 +29,12 @@
       'cap.flag.languages_auto': '自动语种', 'cap.flag.speaker_labels': '说话人分离',
       'cap.flag.speaker_identification': '声纹识别', 'cap.flag.noise_filter_tunable': '降噪可调',
       'cap.flag.speaker_tunable': '说话人可调', 'cap.flag.endpoint_tunable': '断句可调',
-      'cap.flag.output_toggles': '输出可控',
+      'cap.flag.output_toggles': '输出可控', 'cap.flag.scene': '场景识别',
+      'scene.silence': '静音', 'scene.speech': '语音', 'scene.singing': '歌唱',
+      'scene.music': '音乐', 'scene.other': '其它',
+      'scene.preset': '场景预设',
+      'preset.balanced': '均衡（人声优先）', 'preset.live': '直播（人声优先+清唱偏置）',
+      'preset.music': '音乐优先',
       'cap.tip.partial_results': '需 vLLM 模式才支持（当前 vad-offline 后端按段输出，不产增量结果）',
       // 诊断指标
       'diag.sent': '发送速率', 'diag.recv': '接收速率', 'diag.buf': '发送缓冲',
@@ -89,7 +94,12 @@
       'cap.flag.languages_auto': 'Auto language', 'cap.flag.speaker_labels': 'Speaker labels',
       'cap.flag.speaker_identification': 'Speaker ID', 'cap.flag.noise_filter_tunable': 'Denoise tunable',
       'cap.flag.speaker_tunable': 'Speaker tunable', 'cap.flag.endpoint_tunable': 'Endpoint tunable',
-      'cap.flag.output_toggles': 'Output toggles',
+      'cap.flag.output_toggles': 'Output toggles', 'cap.flag.scene': 'Scene',
+      'scene.silence': 'Silence', 'scene.speech': 'Speech', 'scene.singing': 'Singing',
+      'scene.music': 'Music', 'scene.other': 'Other',
+      'scene.preset': 'Scene preset',
+      'preset.balanced': 'Balanced (vocal-priority)', 'preset.live': 'Live (vocal + a-cappella bias)',
+      'preset.music': 'Music-first',
       'cap.tip.partial_results': 'Requires vLLM mode (the current vad-offline backend emits per segment, not incrementally)',
       'diag.sent': 'Send rate', 'diag.recv': 'Recv rate', 'diag.buf': 'Send buffer',
       'diag.frame': 'Max frame', 'diag.stall': 'Render lag',
@@ -128,6 +138,22 @@
     },
   };
   const t = makeT(M);
+
+  // 派生场景：已知五桶给本地化标签 + 固定配色 class，未知值回退原文 + other 配色
+  const SCENE_KEYS = ['silence', 'speech', 'singing', 'music', 'other'];
+  function sceneLabel(s) { return SCENE_KEYS.includes(s) ? t('scene.' + s) : s; }
+  function sceneCls(s) { return 'scene-' + (SCENE_KEYS.includes(s) ? s : 'other'); }
+  function sceneTags(scores, exclude) {
+    if (!scores) return [];
+    return Object.entries(scores)
+      .filter(([k, v]) => v >= 0.10 && k !== exclude)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => ({ label: k, pct: Math.round(v * 100) }));
+  }
+  // 主场景桶的概率后缀（该桶有分即显示，含文本救回的低分歌声；非内容桶 silence/other 无分则只留标签）
+  function scenePct(scores, key) {
+    return (scores && scores[key] != null) ? ' ' + Math.round(scores[key] * 100) + '%' : '';
+  }
 
   const RT_SR = 16000;
   const FRAME = 3200;                 // 200ms @16k
@@ -179,7 +205,12 @@
       const canIdentify = ref(false);
       const identifySpeakers = ref(false);
       // —— 高级设置：能力门控标志（precheck 填充）+ 按会话覆盖值（null=不下发，用服务端默认）——
-      const srv = reactive({ punc: false, words: false, speaker: false, speakerDb: false, defaults: {} });
+      const srv = reactive({ punc: false, words: false, speaker: false, speakerDb: false, scene: false, defaults: {} });
+      // 场景预设（下拉，按会话覆盖）：默认随服务端生效预设；空列表=未暴露则隐藏
+      const scenePresets = ref([]);
+      const scenePreset = ref('');
+      const scenePresetOptions = computed(() =>
+        scenePresets.value.map(p => ({ value: p, label: t('preset.' + p) === 'preset.' + p ? p : t('preset.' + p) })));
       const adv = reactive({
         noiseFilter: false, energyFloor: null, snrMin: null,
         spkThreshold: null, spkMinSeg: null, spkMax: null, idThreshold: null, idMargin: null,
@@ -216,7 +247,7 @@
       const CAP_ORDER = [
         'languages_auto', 'partial_results', 'word_timestamps',
         'speaker_labels', 'speaker_identification',
-        'noise_filter_tunable', 'speaker_tunable', 'endpoint_tunable', 'output_toggles',
+        'noise_filter_tunable', 'speaker_tunable', 'endpoint_tunable', 'output_toggles', 'scene',
       ];
       const capFlags = computed(() => {
         const c = capParts.value && capParts.value.capabilities;
@@ -231,12 +262,12 @@
       });
 
       // —— 结果 ——
-      const finals = reactive([]);        // {key, start, text, words, speaker, speakerName}
+      const finals = reactive([]);        // {key, start, text, words, speaker, speakerName, scene, sceneScores}
       const partial = ref('');
       const appendMode = ref(false);      // 追加输出：开始新会话时不清空结果，按批次派生分隔线续写
       let finalSeq = 0, batchSeq = 0;     // batchSeq：每次追加新会话 +1，渲染层据相邻条目 batch 变化插分隔线
       function appendFinal(m) {
-        finals.push({ key: ++finalSeq, batch: batchSeq, start: m.start, text: m.text || '', words: (m.words && m.words.length) || 0, speaker: m.speaker || null, speakerName: m.speaker_name || null });
+        finals.push({ key: ++finalSeq, batch: batchSeq, start: m.start, text: m.text || '', words: (m.words && m.words.length) || 0, speaker: m.speaker || null, speakerName: m.speaker_name || null, sceneScores: m.scene_scores || null, scene: m.scene || null });
         if (finals.length > MAX_TRANSCRIPT_LINES) finals.shift();
       }
       function clearResults() { finals.length = 0; partial.value = ''; batchSeq = 0; }
@@ -338,6 +369,8 @@
         if (srv.punc && adv.withPunc === false) m.with_punc = false;
         if (srv.words && adv.withWords === false) m.with_words = false;
         if (srv.speaker && adv.diarize === false) m.diarize = false;
+        // 场景预设（按会话覆盖服务端默认）
+        if (srv.scene && scenePreset.value) m.scene_preset = scenePreset.value;
         return m;
       }
       function waitDrain() {
@@ -661,6 +694,9 @@
             srv.words = !!(c.stream && c.stream.word_timestamps);
             srv.speaker = !!c.speaker_labels;
             srv.speakerDb = !!c.speaker_identification;
+            srv.scene = !!(c.stream && c.stream.scene);
+            scenePresets.value = c.scene_presets || [];
+            scenePreset.value = c.scene_preset || (scenePresets.value[0] || '');
             srv.defaults = c.defaults || {};
           }
           const h = await fetch('/v2/health');     // punc 能力仅 health 暴露
@@ -678,9 +714,10 @@
       return {
         t,
         lang, canIdentify, identifySpeakers, appendMode, srv, adv, warn, ph,
+        scenePreset, scenePresetOptions,
         streamState, statusText, busy, source,
         capWarning, hint, capParts, capFlags, diag, vuRef,
-        finals, partial, fmtMs, transcriptRef, spkIdx,
+        finals, partial, sceneLabel, sceneCls, sceneTags, scenePct, fmtMs, transcriptRef, spkIdx,
         logs, logOpen, logRef,
         streamFile, streamFileList, streamFileSize, onStreamUploadChange,
         noThrottle, useFfmpeg, ffLoading, fileProgress, fileRunning,
@@ -709,6 +746,10 @@
             <n-card :bordered="false" class="panel" size="small">
               <template #header><span class="panel-title"><a-icon name="mic" size="15"></a-icon>{{ t('panel.input') }}</span></template>
               <n-input v-model:value="lang" size="small" :placeholder="t('input.langPlaceholder')" style="margin-bottom:12px;"></n-input>
+              <div v-if="srv.scene && scenePresetOptions.length" class="adv-field" style="margin-bottom:12px;">
+                <span class="lbl">{{ t('scene.preset') }}</span>
+                <n-select v-model:value="scenePreset" :options="scenePresetOptions" size="small" :disabled="busy" style="width:188px;"></n-select>
+              </div>
               <n-checkbox v-if="canIdentify" v-model:checked="identifySpeakers" size="small" :disabled="busy || !adv.diarize" style="margin-bottom:12px;">
                 {{ t('input.identify') }}
               </n-checkbox>
@@ -836,7 +877,7 @@
                   <div v-if="i > 0 && line.batch !== finals[i - 1].batch" class="transcript-divider"><span>{{ t('result.divider') }}</span></div>
                   <div class="transcript-line">
                     <span class="t">{{ line.start != null ? fmtMs(line.start) : '' }}</span>
-                    <span class="tx"><span v-if="line.speaker" class="speaker-badge" :class="'spk-' + spkIdx(line.speaker)">{{ line.speakerName || line.speaker }}</span>{{ line.text }}<n-text v-if="line.words" depth="3" style="font-size:.78em;"> {{ t('result.words', line.words) }}</n-text></span>
+                    <span class="tx"><span v-if="line.scene" class="scene-badge" :class="sceneCls(line.scene)" :title="sceneLabel(line.scene)">{{ sceneLabel(line.scene) }}{{ scenePct(line.sceneScores, line.scene) }}</span><span v-for="tag in sceneTags(line.sceneScores, line.scene)" :key="tag.label" class="scene-badge" :class="sceneCls(tag.label)" :title="sceneLabel(tag.label)">{{ sceneLabel(tag.label) }} {{ tag.pct }}%</span><span v-if="line.speaker" class="speaker-badge" :class="'spk-' + spkIdx(line.speaker)">{{ line.speakerName || line.speaker }}</span>{{ line.text }}<n-text v-if="line.words" depth="3" style="font-size:.78em;"> {{ t('result.words', line.words) }}</n-text></span>
                   </div>
                 </template>
                 <div v-if="partial" class="partial-line">{{ partial }}<span class="cursor-blk"></span></div>

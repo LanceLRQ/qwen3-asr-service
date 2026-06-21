@@ -211,6 +211,22 @@ def test_configure_accepts_valid_audio_fs(ok_fs):
     assert s.audio_fs == ok_fs
 
 
+@pytest.mark.parametrize("raw,expected", [
+    ("zh", "Chinese"),        # ISO 码
+    ("Zh", "Chinese"),        # 大小写不敏感
+    ("zh-CN", "Chinese"),     # 带地区子标签
+    ("Chinese", "Chinese"),   # 已是规范名
+    ("xx", None),             # 未识别 → None 交自动检测
+    ("", None),               # 空串 → None
+])
+def test_configure_normalizes_language(raw, expected):
+    """服务层把上游 language 归一成引擎规范名，避免非法 hint 击穿引擎抛 Unsupported language。"""
+    s = StreamSession("sid", FakeSVAD(), MagicMock(), None,
+                      ThreadPoolExecutor(max_workers=1), asyncio.Semaphore(1))
+    s.configure({"audio_fs": 16000, "language": raw})
+    assert s.language == expected
+
+
 # ─── 空帧 / 长静音 / flush 容错 ───
 
 async def test_empty_frame_skips_vad():

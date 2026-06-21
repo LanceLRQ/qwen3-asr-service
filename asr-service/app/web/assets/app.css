@@ -354,3 +354,28 @@ body.dark .spk-4 { color: #fb7185; }
 body.dark .spk-5 { color: #4ade80; }
 body.dark .spk-6 { color: #22d3ee; }
 body.dark .spk-7 { color: #fb923c; }
+
+/* 派生场景色标（离线 per-seg / 时间线 / 实时实况；五桶固定配色） */
+.scene-badge {
+  display: inline-block; min-width: 18px; padding: 0 6px; margin-right: 6px;
+  border-radius: 4px; font-size: .72em; font-weight: 700; line-height: 1.7;
+  text-align: center; vertical-align: 1px; white-space: nowrap;
+}
+.scene-silence { background: rgba(100, 116, 139, .14); color: #475569; }
+.scene-speech  { background: rgba(20, 184, 166, .14); color: #0d9488; }
+.scene-singing { background: rgba(139, 92, 246, .14); color: #7c3aed; }
+.scene-music   { background: rgba(59, 130, 246, .14); color: #2563eb; }
+.scene-other   { background: rgba(245, 158, 11, .16); color: #b45309; }
+body.dark .scene-silence { color: #94a3b8; }
+body.dark .scene-speech  { color: #2dd4bf; }
+body.dark .scene-singing { color: #a78bfa; }
+body.dark .scene-music   { color: #60a5fa; }
+body.dark .scene-other   { color: #fbbf24; }
+
+/* 音频事件时间轴行（离线 audio_events / 标注 scene_timeline 复用） */
+.event-row { display: flex; align-items: center; gap: 12px; padding: 5px 8px 5px 0; border-radius: 8px; }
+.event-row.seekable { cursor: pointer; }
+.event-row.seekable:hover { background: rgba(20, 184, 166, .07); }
+.event-span { font-size: .8em; color: #64748b; font-variant-numeric: tabular-nums; white-space: nowrap; }
+body.dark .event-span { color: #94a3b8; }
+.event-conf { margin-left: auto; font-size: .78em; color: #94a3b8; font-variant-numeric: tabular-nums; }

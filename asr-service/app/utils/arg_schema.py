@@ -361,6 +361,109 @@ ARG_SPECS = (
         negative_help_en="Do not keep enrollment sample audio",
     ),
     ArgSpec(
+        key="enable_audio_tagging", flags=("--enable-audio-tagging",),
+        default=False, type=bool, group="音频标注",
+        help="通用音频事件标注（AudioSet 全类）+ 派生场景：离线结果加 audio_events / segment.scene",
+        help_en="General audio event tagging (full AudioSet) + derived scene: adds "
+                "audio_events / segment.scene to offline results",
+        negative_flags=("--no-audio-tagging",), negative_help="关闭音频标注（覆盖配置文件）",
+        negative_help_en="Disable audio tagging (overrides config file)",
+    ),
+    ArgSpec(
+        key="audio_tagging_engine", flags=("--audio-tagging-engine",),
+        default="panns", choices=("panns", "yamnet"), group="音频标注",
+        help="打标引擎：panns(推荐) | yamnet(轻量备选) (default: panns)",
+        help_en="Tagging engine: panns (recommended) | yamnet (lightweight) (default: panns)",
+    ),
+    ArgSpec(
+        key="audio_tagging_panns_variant", flags=("--audio-tagging-panns-variant",),
+        default="16k", choices=("16k", "32k"), group="音频标注",
+        help="PANNs 变体：16k(原生,推荐) | 32k(HF+重采样) (default: 16k)",
+        help_en="PANNs variant: 16k (native, recommended) | 32k (HF + resample) (default: 16k)",
+    ),
+    ArgSpec(
+        key="audio_tagging_topk", flags=("--audio-tagging-topk",),
+        default=5, type=int, group="音频标注",
+        help="对外返回的 top-K 标签数 (default: 5)",
+        help_en="Number of top-K labels returned (default: 5)",
+    ),
+    ArgSpec(
+        key="audio_tagging_interval_ms", flags=("--audio-tagging-interval-ms",),
+        default=960, type=int, group="音频标注",
+        help="推理窗步长（毫秒），降频省算力 (default: 960)",
+        help_en="Inference window step in ms; lower frequency saves compute (default: 960)",
+    ),
+    ArgSpec(
+        key="scene_enable", flags=("--scene-enable",), default=True, type=bool,
+        group="音频标注",
+        help="输出派生场景视图（silence/speech/singing/music/other）(default)",
+        help_en="Output the derived scene view (silence/speech/singing/music/other) (default)",
+        negative_flags=("--no-scene",), negative_help="不输出场景，只给原始 audio_events 标签",
+        negative_help_en="Do not output scenes; emit raw audio_events only",
+    ),
+    ArgSpec(
+        key="scene_map_file", flags=("--scene-map-file",), default=None, group="音频标注",
+        help="自定义场景映射 yaml/json 路径（{桶: [AudioSet类名,...]}；缺省=内置 5 桶通用集）",
+        help_en="Custom scene-map yaml/json path ({bucket: [AudioSet labels,...]}; "
+                "default = built-in 5-bucket general set)",
+    ),
+    ArgSpec(
+        key="scene_enter_sec", flags=("--scene-enter-sec",), default=2.0, type=float,
+        group="音频标注",
+        help="迟滞（流式）：连续判定 N 秒才进入某场景 (default: 2.0)",
+        help_en="Hysteresis (streaming): N seconds of agreement to enter a scene (default: 2.0)",
+    ),
+    ArgSpec(
+        key="scene_exit_sec", flags=("--scene-exit-sec",), default=2.0, type=float,
+        group="音频标注",
+        help="迟滞（流式）：连续判定 M 秒才退出当前场景 (default: 2.0)",
+        help_en="Hysteresis (streaming): M seconds of agreement to exit a scene (default: 2.0)",
+    ),
+    ArgSpec(
+        key="scene_silence_dbfs", flags=("--scene-silence-dbfs",), default=-50.0, type=float,
+        group="音频标注",
+        help="静音判定能量底（dBFS），低于此判 silence (default: -50.0)",
+        help_en="Silence energy floor (dBFS); below this is judged silence (default: -50.0)",
+    ),
+    ArgSpec(
+        key="scene_preset", flags=("--scene-preset",), default="balanced",
+        choices=("balanced", "live", "music"), group="音频标注",
+        help="场景判定预设：balanced(均衡,人声优先) | live(直播,人声优先+清唱偏置) | music(音乐优先) (default: balanced)",
+        help_en="Scene preset: balanced (vocal-priority) | live (vocal-priority + a-cappella bias) | music (music-first) (default: balanced)",
+    ),
+    ArgSpec(
+        key="scene_singing_min", flags=("--scene-singing-min",), default=None, type=float,
+        group="音频标注",
+        help="演唱判定阈值（覆盖预设；留空=随预设）：演唱桶得分≥此值即可判 singing",
+        help_en="Singing threshold (overrides preset; empty = follow preset): classify as singing when the singing bucket scores ≥ this",
+    ),
+    ArgSpec(
+        key="scene_singing_bias", flags=("--scene-singing-bias",), default=None, type=float,
+        group="音频标注",
+        help="清唱偏置（覆盖预设；留空=随预设）：演唱与说话竞争时给演唱加的分，利于无伴奏清唱",
+        help_en="A-cappella bias (overrides preset; empty = follow preset): score added to singing when it competes with speech, helps unaccompanied singing",
+    ),
+    ArgSpec(
+        key="scene_weights", flags=(), default={}, type=dict,
+        group="音频标注",
+        help="每桶权重乘数（仅配置文件 dict，如 {music: 0.8, speech: 1.1}）：同时作用于判定与 scene_scores",
+        help_en="Per-bucket weight multipliers (config-file dict only, e.g. {music: 0.8, speech: 1.1}); applied to both decision and scene_scores",
+    ),
+    ArgSpec(
+        key="scene_lyrics_aware", flags=("--scene-lyrics-aware",), default=True, type=bool,
+        negative_flags=("--no-scene-lyrics-aware",), group="音频标注",
+        help="离线：用转写文本作人声证据修正歌声（带伴奏歌声 PANNs 常只给 music）",
+        help_en="Offline: use transcript text as vocal evidence to recover singing (PANNs often labels accompanied singing as music)",
+        negative_help="关闭文本感知歌声修正（纯按模型分判定）",
+        negative_help_en="Disable lyrics-aware singing recovery (decide purely by model scores)",
+    ),
+    ArgSpec(
+        key="scene_speech_min", flags=("--scene-speech-min",), default=0.30, type=float,
+        group="音频标注",
+        help="文本感知判别阈：有歌词段 speech 分≥此值判 speech，否则有伴奏判 singing (default: 0.30)",
+        help_en="Lyrics-aware threshold: for segments with text, speech score ≥ this → speech, else (with accompaniment) → singing (default: 0.30)",
+    ),
+    ArgSpec(
         key="enable_openai_api", flags=("--enable-openai-api",), default=False, type=bool,
         group="兼容接口",
         help="启用 OpenAI 兼容接口 /compat/openai/v1/*（drop-in 对接 OpenAI SDK）",
@@ -501,6 +604,8 @@ def build_parser(lang: str = "zh") -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(description=_DESCRIPTION["en" if en else "zh"])
     for spec in ARG_SPECS:
+        if spec.type is dict or not spec.flags:
+            continue                       # 仅配置文件项（如 dict 型 scene_weights），不上 CLI
         if spec.type is bool:
             parser.add_argument(
                 *spec.flags, dest=spec.attr, action="store_true",

@@ -60,6 +60,15 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
             for ev in fn(f):
                 await ws.send_json(ev)
             return
+        # scene（派生场景）为原生扩展信封：adapter 实现 translate_scene 才下发，否则跳过
+        # （兼容协议无对应字段，不能误当 final 翻译）
+        if f.get("type") == "scene":
+            fn = getattr(adapter, "translate_scene", None)
+            if fn is None:
+                return
+            for ev in fn(f):
+                await ws.send_json(ev)
+            return
         for ev in adapter.translate_finals(f):
             await ws.send_json(ev)
 

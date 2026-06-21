@@ -22,6 +22,9 @@ pyyaml
 soundfile
 librosa
 
+# 音频事件标注 PANNs CNN14 前端（logmel，纯 torch 微包，MIT；1:1 复现官方精度）
+torchlibrosa
+
 # 说话人分离聚类（AHC/谱聚类，CPU 轻量）
 scipy
 scikit-learn

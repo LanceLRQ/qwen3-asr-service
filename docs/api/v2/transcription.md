@@ -7,6 +7,8 @@
 ## 目录
 
 - [离线批处理 · 提交 ASR 任务 `POST /v2/asr`](#提交-asr-任务)
+  - [语言代码取值与归一化](#语言代码取值与归一化)
+- [音频标注 `POST /v2/audio/tag`](#音频标注)
 - [实时转写 `WS /v2/asr/stream`](#实时转写)
   - [鉴权](#鉴权)
   - [消息流程](#消息流程)
@@ -33,7 +35,7 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | file | 文件 | 必填 | 音频文件，支持 WAV/MP3/FLAC/M4A/AAC/OGG/WMA/AMR/OPUS |
-| language | string | null | 语言代码，null 为自动检测 |
+| language | string | null | 识别语言提示，`null`/省略=自动检测；取值与归一化规则见[下方说明](#语言代码取值与归一化) |
 | identify_speakers | bool | false | 对分离出的说话人做声纹识别（需说话人分离与[声纹库](speakers.md#说话人分离与声纹识别)均已启用） |
 | with_punc | bool | 服务端默认 | 是否做标点恢复（降级开关，只能关；服务端未加载标点模型则本就无标点） |
 | with_words | bool | 服务端默认 | 是否输出词级时间戳（需对齐模型已加载） |
@@ -43,6 +45,18 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | speaker_id_margin | float | 服务端默认 | 声纹 top1-top2 margin，范围 `[0, 1]`（需声纹库已启用） |
 
 > 数值越界 → 400；功能未启用的覆盖项不报错，转写结果的 `result.warnings`（字符串数组）列出被忽略项。
+
+#### 语言代码取值与归一化
+
+`language` 接受三种写法，服务端在送入引擎前统一归一为引擎语种名：
+
+- **ISO-639-1 码**：`zh` / `en` / `yue` / `ja` …
+- **规范英文名**（大小写不敏感）：`Chinese` / `English` / …
+- **带地区子标签**：`zh-CN` / `en_US`（按主标签解析）
+
+**无法识别的取值**（拼写错误、未支持语种、`Zh` 这类大小写变体）一律**降级为自动检测，不再报错**——既往直接透传导致引擎抛 `Unsupported language` 的行为已在服务层拦截。离线与[实时转写](#实时转写)共用同一归一化规则。
+
+支持语种（30）：`Chinese`、`English`、`Cantonese`、`Arabic`、`German`、`French`、`Spanish`、`Portuguese`、`Indonesian`、`Italian`、`Korean`、`Russian`、`Thai`、`Vietnamese`、`Japanese`、`Turkish`、`Hindi`、`Malay`、`Dutch`、`Swedish`、`Danish`、`Finnish`、`Polish`、`Czech`、`Filipino`、`Persian`、`Greek`、`Romanian`、`Hungarian`、`Macedonian`。
 
 响应：
 
@@ -61,6 +75,55 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | 401 | 认证失败 |
 | 413 | 文件过大（>1GB） |
 | 503 | 服务未就绪 / 任务队列已满 |
+
+## 音频标注
+
+```
+POST /v2/audio/tag
+Content-Type: multipart/form-data
+```
+
+**前置条件**：服务端启用音频标注（`--enable-audio-tagging`）。未启用时返回 `503`；可先 [`GET /v2/capabilities`](basics.md#能力查询) 预检 `audio_tagging`。
+
+仅做音频事件标注与场景识别，**不做转写**，同步返回结果（非任务异步）。
+
+```bash
+curl -X POST http://127.0.0.1:8765/v2/audio/tag \
+  -F "file=@/path/to/audio.mp3"
+```
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| file | 文件 | 必填 | 音频文件，格式同 `/v2/asr`（WAV/MP3/FLAC/M4A/AAC/OGG/WMA/AMR/OPUS） |
+| with_scene | bool | true | 是否输出场景时间线 `scene_timeline`；`false` 时该字段省略 / 为 `null` |
+| scene_preset | string | （服务端默认） | 按请求覆盖场景判定预设：`balanced` / `live` / `music` |
+
+> 配置了 API 密钥时同其他接口要求携带 Bearer Token（未配置密钥时免认证）。
+>
+> 注：本端点无转写文本，**文本感知歌声修正不生效**（详见[配置文档·音频标注](../../configuration.md#音频标注通用音频事件标注--派生场景)）；带伴奏歌声可能判为 `music`，逐句更准的场景请走 `/v2/asr`。
+
+响应：
+
+```json
+{
+  "audio_events": [{"label": "Speech", "start_ms": 0, "end_ms": 2000, "confidence": 0.9}],
+  "scene_timeline": [{"label": "speech", "start_ms": 0, "end_ms": 2000,
+                      "scene_scores": {"speech": 0.62, "music": 0.18, "singing": 0.03}}]
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `audio_events[]` | 按起止时间聚合的事件段：`label`（AudioSet 类别）、`start_ms` / `end_ms`（毫秒）、`confidence`（段内最大概率） |
+| `scene_timeline[]` | 连续场景段的游程合并列表：`label`（`silence`/`speech`/`singing`/`music`/`other` 或自定义桶）、`start_ms` / `end_ms`、`scene_scores`（该段各桶概率分布）；`with_scene=false` 时省略 / 为 `null` |
+
+| 状态码 | 含义 |
+|--------|------|
+| 200 | 标注成功 |
+| 400 | 不支持的音频格式 |
+| 401 | 认证失败 |
+| 413 | 文件过大（>1GB） |
+| 503 | 服务未就绪 / 未启用音频标注 |
 
 ## 实时转写
 
@@ -105,7 +168,7 @@ WS /v2/asr/stream
 | 字段 | 默认值 | 说明 |
 |------|--------|------|
 | audio_fs | 16000 | 音频采样率，允许 8000–96000，非 16k 时服务端自动重采样 |
-| language | null | 语言代码，null 为自动检测 |
+| language | null | 识别语言提示，`null`/省略=自动检测；取值与归一化规则同[离线提交](#语言代码取值与归一化)（非法/未识别码降级为自动检测，不报错） |
 | wav_name | "stream" | 会话名（展示用） |
 | identify_speakers | false | 对说话人标签做声纹识别（需 `session.created.capabilities.speaker_identification=true`） |
 | noise_filter | 服务端默认 | 本会话覆盖远场段级过滤开关（缺省沿用服务端配置；需 `capabilities.noise_filter_tunable=true`） |
@@ -135,9 +198,10 @@ WS /v2/asr/stream
 
 | type | 字段 | 说明 |
 |------|------|------|
-| `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` / `limits` | 连接建立即下发；`capabilities` 含 `partial_results` / `word_timestamps` / `languages_auto` / `speaker_labels` / `speaker_identification`，以及可调声明 `noise_filter_tunable` / `speaker_tunable` / `endpoint_tunable` / `output_toggles`（标示对应覆盖项本会话是否可调）；`limits` 含 `max_frame_bytes` / `max_backlog_bytes`，超实时推流的客户端应据此控速（参考 `final.end` 反馈的处理进度，保持未处理积压低于上限） |
+| `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` / `limits` | 连接建立即下发；`capabilities` 含 `partial_results` / `word_timestamps` / `languages_auto` / `speaker_labels` / `speaker_identification` / `scene`（实时场景通知是否下发），以及可调声明 `noise_filter_tunable` / `speaker_tunable` / `endpoint_tunable` / `output_toggles`（标示对应覆盖项本会话是否可调）；`limits` 含 `max_frame_bytes` / `max_backlog_bytes`，超实时推流的客户端应据此控速（参考 `final.end` 反馈的处理进度，保持未处理积压低于上限） |
 | `partial` | `seg_id` / `text` | 中间结果（仅 `partial_results=true` 的后端，vad-offline 不产生） |
-| `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` | 句级定稿结果；`start`/`end` 为毫秒；`words` 仅 `word_timestamps=true` 时存在；`speaker`（匿名标签 A/B/C…）仅 `speaker_labels=true` 且本段可判定时存在；`speaker_name` 仅 `identify_speakers=true` 且声纹命中时存在（说话人标签 / 真名语义见[说话人管理](speakers.md#说话人分离与声纹识别)） |
+| `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` / `scene` / `scene_scores` | 句级定稿结果；`start`/`end` 为毫秒；`words` 仅 `word_timestamps=true` 时存在；`speaker`（匿名标签 A/B/C…）仅 `speaker_labels=true` 且本段可判定时存在；`speaker_name` 仅 `identify_speakers=true` 且声纹命中时存在；`scene`（该段主场景）/`scene_scores`（各桶概率分布）仅 `capabilities.stream.scene=true` 时存在，语义同离线 `segments[].scene` / `scene_scores` |
+| `scene` | `label` / `confidence` / `since` / `scores` | 场景状态切换通知（仅 `capabilities.stream.scene=true` 时下发）：`label` 当前场景；`since` 该场景状态的起始时间戳（毫秒）；`scores` 各内容桶的代表性得分。仅在状态**发生变化**时推送（带迟滞平滑，连续状态只发一次）；逐句场景见 `final.scene` |
 | `error` | `code` / `message` / `seg_id` / `fatal` | `fatal=true` 后会话终止 |
 | `session.closed` | `reason` | 会话结束 |
 
@@ -145,6 +209,12 @@ WS /v2/asr/stream
 
 ```json
 {"type": "final", "seg_id": 0, "text": "甚至出现交易几乎停滞的情况。", "start": 320, "end": 3520, "words": null}
+```
+
+`scene` 示例：
+
+```json
+{"type": "scene", "label": "speech", "confidence": 0.86, "since": 1000, "scores": {"speech": 0.86, "singing": 0.0, "music": 0.04}}
 ```
 
 ### 错误码

@@ -28,12 +28,16 @@ class ASRPipeline:
         punc_engine: PuncEngine | None = None,
         speaker_engine=None,
         speaker_service=None,
+        tagger=None,
+        scene_map=None,
     ):
         self.asr = asr_engine
         self.vad = vad_engine
         self.punc = punc_engine
         self.speaker = speaker_engine
         self.speaker_service = speaker_service    # 声纹库联动（None = 未启用）
+        self.tagger = tagger                      # 音频打标引擎（None = 未启用）
+        self._scene_map = scene_map               # 自定义场景映射（None = 内置默认）
 
     def run(
         self,
@@ -216,6 +220,20 @@ class ASRPipeline:
             if speaker_active and progress_callback:
                 progress_callback(0.95)
 
+            # 4.8 通用音频标注（可选；容错旁路：失败只丢标签，不破坏转写）。
+            #     滑窗打标 → audio_events 事件段 + per-segment scene（复用阶段0的 16k wav）。
+            audio_events = None
+            tagging_active = (self.tagger is not None and segments
+                              and not (cancelled and cancelled()))
+            if tagging_active:
+                try:
+                    audio_events = self._run_tagging(
+                        wav_path, segments, scene_enable=cfg.SCENE_ENABLE,
+                        scene_preset=opts.get("scene_preset"))
+                except Exception as e:
+                    logger.warning(f"音频标注失败，跳过: {e}")
+                    audio_events = None
+
             # 5. 合并全文
             full_text = "".join(
                 seg["text"] for seg in segments
@@ -234,6 +252,8 @@ class ASRPipeline:
             }
             if speakers_result is not None:
                 result["speakers"] = speakers_result
+            if audio_events is not None:
+                result["audio_events"] = audio_events
             if warnings:
                 result["warnings"] = warnings
             return result
@@ -403,6 +423,70 @@ class ASRPipeline:
         embeddings = self.speaker.embed_windows(wav, windows)
         labels = cluster_offline(embeddings, max_speakers=cfg.SPEAKER_MAX)
         return DiarizationResult(windows, labels, embeddings)
+
+    def _run_tagging(self, wav_path: str, segments: list[dict],
+                     scene_enable: bool = True, scene_preset: str | None = None) -> list[dict]:
+        """通用音频打标：非重叠滑窗 predict_window → audio_events 事件段 + per-seg scene。
+
+        复用阶段0已保证的 16k 单声道 wav；逐窗 top-k 经 onset/offset 聚合成事件段
+        （不逐窗全量落库，规避 result/tasks.db 膨胀）。scene_enable 时按段时间窗投票
+        写 seg["scene"]。延迟导入：打标关闭时本路径零额外依赖。返回 audio_events。
+        """
+        from app.runtime import audio_tagging, scene_mapper
+
+        wav, sr = sf.read(wav_path, dtype="float32")   # 阶段 0 已保证 16k 单声道
+        if wav.ndim > 1:
+            wav = wav.mean(axis=1)
+        if len(wav) == 0:
+            return []
+
+        windows = audio_tagging.tag_windows(
+            self.tagger, wav, sr, cfg.AUDIO_TAGGING_INTERVAL_MS, cfg.AUDIO_TAGGING_TOPK)
+        audio_events = audio_tagging.events_from_windows(windows)
+
+        # per-segment scene：对每个 ASR 句，用其时间窗内各窗 scene 投票
+        if scene_enable and windows:
+            silence_dbfs = cfg.SCENE_SILENCE_DBFS
+            # per-request 预设覆盖服务端默认（缺省=服务端生效权重）
+            if scene_preset:
+                _p = scene_mapper.resolve_preset(scene_preset)
+                vocal_priority, singing_min, singing_bias = (
+                    _p["vocal_priority"], _p["singing_min"], _p["singing_bias"])
+            else:
+                vocal_priority = cfg.SCENE_VOCAL_PRIORITY
+                singing_min = cfg.SCENE_SINGING_MIN
+                singing_bias = cfg.SCENE_SINGING_BIAS
+            weights = cfg.SCENE_WEIGHTS or None
+            for s in segments:
+                s_start = int(s["start"] * 1000)
+                s_end = int(s["end"] * 1000)
+                # 与段重叠的窗 + 重叠时长权重：大部分落在段外的跨界窗按比例压低，
+                # 不让「说话结束后 BGM 恢复」的尾窗整窗拉高 music
+                seg_scores, seg_ov, dbfs_acc = [], [], 0.0
+                for (ws, we, _top, scores, dbfs) in windows:
+                    ov = min(we, s_end) - max(ws, s_start)
+                    if ov > 0:
+                        seg_scores.append(scores)
+                        seg_ov.append(ov)
+                        dbfs_acc += dbfs * ov
+                if seg_scores:
+                    bs = scene_mapper.mean_bucket_scores(                    # 各桶重叠加权平均（+桶权重）
+                        seg_scores, self._scene_map, weights=weights, window_weights=seg_ov)
+                    seg_dbfs = dbfs_acc / (sum(seg_ov) or 1.0)
+                    label, _ = scene_mapper.classify_buckets(               # 聚合后定主场景
+                        bs, seg_dbfs, silence_dbfs=silence_dbfs, vocal_priority=vocal_priority,
+                        singing_min=singing_min, singing_bias=singing_bias)
+                    if cfg.SCENE_LYRICS_AWARE:
+                        # 转写文本作人声证据：带伴奏歌声 PANNs 常只给 music，靠歌词救回 singing
+                        txt = (s.get("text") or "").strip()
+                        has_text = bool(txt) and txt != "[识别失败]"
+                        label = scene_mapper.refine_scene_with_text(
+                            label, bs, has_text, speech_min=cfg.SCENE_SPEECH_MIN)
+                    s["scene"] = label
+                    s["scene_scores"] = bs
+
+        logger.info(f"[Pipeline] 音频标注完成: {len(windows)} 窗 → {len(audio_events)} 事件段")
+        return audio_events
 
     def _merge_vad_segments(
         self,

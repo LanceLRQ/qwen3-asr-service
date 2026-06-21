@@ -3,6 +3,32 @@
 本项目所有重要变更记录于此。版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)，
 发布版本号经由 git tag（去掉 `v` 前缀）注入镜像 `APP_VERSION`，体现在 `/openapi.json` 的 `info.version`。
 
+## [2.3.0] - 2026-06-21
+
+通用音频事件标注（Audio Tagging）特性，以及原生端点语言归一化修复。
+
+### 新增 / 改进
+- **通用音频事件标注**：基于 AudioSet（PANNs 527 类 / YAMNet 521 类），并派生场景视图（静音 / 语音 / 歌唱 / 音乐 / 其它）。通过 `--enable-audio-tagging` 显式开启；未开启时零影响。
+- **离线结果增强**：离线转写结果新增 `audio_events`（带 onset/offset 的事件分段）、每段主场景 `scene` 及各场景桶概率分布 `scene_scores`（如 `{speech:0.62, music:0.31}`，各桶独立置信度，体现「说话+背景音乐」并存）。`/v2/audio/tag` 的 `scene_timeline` 各段同样附 `scene_scores`。
+- **段级场景重叠加权聚合**：段内各打标窗按其与该段的时间重叠比例加权后再判定/求 `scene_scores`，修复「说话结束后背景音乐恢复」被 ~1s 全局窗横跨、整窗拉高 `music` 的污染（短段尤甚）。
+- **可调每桶权重** `scene_weights`（配置文件 dict，如 `{music: 0.8, speech: 1.1}`）：同时作用于场景判定与 `scene_scores`，背景音乐易盖过说话时可下调 `music`。
+- **文本感知歌声修正**（离线）：PANNs 对「带伴奏的歌声」常只输出 `Music`、不给 `Singing`（演唱桶分接近零）。利用 ASR 已转写出歌词＝确有人声这一事实，对有歌词的段：`speech` 分 ≥ `--scene-speech-min`（默认 0.30）判说话，否则有伴奏判 `singing`——救回被识别成 music 的演唱段。`--no-scene-lyrics-aware` 可关闭。
+- **实时场景推送**：`/v2/asr/stream` WebSocket 的 `scene` 消息（迟滞平滑，仅状态切换时发出，连续状态只发一次）；并在每条 `final` 句级结果上附 `scene` / `scene_scores`（逐句场景，与离线一致，复用窗级打标不额外占 GPU）。
+- **新增标注端点**：`POST /v2/audio/tag`（仅标注，不做转写）。
+- **双引擎**：PANNs（推荐，16k / 32k 变体）与 YAMNet（轻量备选，可选依赖，vLLM 模式不可用）。
+- **可配置场景映射** `--scene-map-file`；新增 `THIRD_PARTY_NOTICES.md`。
+- **新增调优与排错文档**（中英 `docs/troubleshooting`）：实时 / 离线断句与过滤链路差异、实时降噪门控（`stream_noise_filter` / `stream_snr_min_db` / `stream_energy_floor_dbfs`）与 `vad_speech_noise_thres` 取舍、按内容类型推荐配置、排错速查；首个实战案例＝含 BGM 的演唱段在实时被自适应 SNR 门误杀（离线无此门）。
+
+### 修复
+- **场景分类准确性（人声优先 + 预设）**：场景判定改为「人声优先」模型——主播开背景音乐说话归 `speech`、演唱归 `singing`，纯器乐才归 `music`，不再被泛化的 `Music` 标签淹没。静音判定改为内容感知，仅在能量低 **且** 无明确语音/演唱信号时才判 `silence`，修复短促/轻声台词被打标窗（≈1s）能量稀释而误判静音。新增场景预设 `--scene-preset`（`balanced` 均衡 / `live` 直播含清唱偏置 / `music` 音乐优先），打包好权重，支持部署默认 + 按请求覆盖（`/v2/asr`、`/v2/audio/tag` 表单参数 `scene_preset`）+ WebUI 下拉选择；`--scene-singing-min` / `--scene-singing-bias` 可单项微调。
+
+### 评审修复（多 Agent 代码评审）
+- **短尾窗导致 PANNs 崩溃**（必修）：末尾不足整窗的尾片（< 4960 采样 / 约 310ms）经 CNN14 五次时间池化被压成 0，触发 `RuntimeError`——离线 `try/except` 静默丢弃整条音频的标注、`/v2/audio/tag` 返回 500。`predict_window` 对短输入补零到模型最小采样后修复，并补真实 CNN14 短窗回归测试。
+- **WebUI 场景徽标矛盾**（必修）：逐段徽标原从修正前的 `scene_scores` 渲染，文本感知救回的演唱段（label=`singing`、但桶分仍偏 `music`）被概率徽标顶替成「音乐」。改为恒显示权威主场景标签及其概率，其余并存桶按 ≥10% 追加显示。
+
+### 修复（其它）
+- **语言提示归一化（原生端点）**：原生离线 `/v2/asr` 与实时 `/v2/asr/stream` 现统一把上游 `language` 归一为引擎语种名——接受 ISO-639-1 码（`zh`）、规范英文名（`Chinese`）、带地区子标签（`zh-CN`），无法识别的取值降级为自动检测。修复客户端传 `zh` 时透传到引擎抛 `Unsupported language: Zh`、导致**实时逐句报 `feed_failed` 零文本 / 离线任务失败**的问题（兼容层早有此归一，原生端点此前漏做）。归一化逻辑下沉至中立的 `app/utils/language.py`，离线与实时共用，兼容层 `mappers.to_engine_language` 改为 re-export。
+
 ## [2.2.0] - 2026-06-19
 
 句子级准确分句能力（贡献者 PR #22「准确分句 + 修复处理切块边界重复识别」），叠加维护者评审修复。
@@ -102,6 +128,7 @@
 - Web UI + 可配置 VAD 段时长；Docker / docker-compose 支持。
 - Windows 内嵌 Python 安装/启动脚本；Ctrl+C 优雅退出。
 
+[2.3.0]: https://github.com/LanceLRQ/qwen3-asr-service/releases/tag/v2.3.0
 [2.2.0]: https://github.com/LanceLRQ/qwen3-asr-service/releases/tag/v2.2.0
 [2.1.0]: https://github.com/LanceLRQ/qwen3-asr-service/releases/tag/v2.1.0
 [2.0.2]: https://github.com/LanceLRQ/qwen3-asr-service/releases/tag/v2.0.2

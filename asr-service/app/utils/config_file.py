@@ -262,6 +262,12 @@ def validate_config(data: dict, source: str = "<config>") -> dict:
                 errors.append(f"{key}: 期望数值，实得 {value!r}{choices_hint}")
                 continue
             value = float(value)
+        elif spec.type is dict:
+            if not isinstance(value, dict) or not all(
+                    isinstance(v, (int, float)) and not isinstance(v, bool) for v in value.values()):
+                errors.append(f"{key}: 期望 dict[str, 数值]，实得 {value!r}")
+                continue
+            value = {str(k): float(v) for k, v in value.items()}
         else:
             if not isinstance(value, str):
                 errors.append(f"{key}: 期望字符串，实得 {value!r}{choices_hint}")

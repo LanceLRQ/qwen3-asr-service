@@ -1,0 +1,8 @@
+# YAMNet 音频标注引擎依赖（可选；非推荐的 CPU 轻量备选）。
+# 仅在以 --audio-tagging-engine yamnet 启用时需要；不污染默认安装，也不引入完整 TensorFlow。
+# 安装：pip install -r requirements-yamnet.txt
+#
+# 引擎自动探测 tflite_runtime / ai_edge_litert 两种 Interpreter：
+# py3.12 上 tflite-runtime 无官方 wheel，改用 Google 官方后继 ai-edge-litert。
+tflite-runtime; python_version < "3.12"
+ai-edge-litert; python_version >= "3.12"

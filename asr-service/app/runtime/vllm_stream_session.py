@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from app.utils.audio_resampler import pcm_bytes_to_array, resample_to_16k
 from app.runtime.noise_gate import rms_dbfs
 from app.utils.validation import coerce_num_in_range
+from app.utils.language import to_engine_language
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,8 @@ class VllmStreamSession:
                 f"audio_fs 必须在 [{_MIN_AUDIO_FS}, {_MAX_AUDIO_FS}] 范围内，收到 {audio_fs}")
         self.audio_fs = audio_fs
         if cfg_msg.get("language") is not None:
-            self.language = cfg_msg.get("language")
+            # 归一成引擎规范名（zh→Chinese）；未识别→None 交自动检测，避免击穿引擎抛错
+            self.language = to_engine_language(cfg_msg.get("language"))
         css = cfg_msg.get("chunk_size_sec")
         if css is not None:                    # 会话级覆盖（D6），越界抛 ValueError → invalid_config
             self._chunk_size_sec = coerce_num_in_range(css, CHUNK_SIZE_SEC_RANGE, "chunk_size_sec")

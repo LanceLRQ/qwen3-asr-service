@@ -12,6 +12,7 @@ from app.utils.validation import (
     coerce_num_in_range, MAX_SEGMENT_RANGE,
     SPK_ID_THRESHOLD_RANGE, SPK_ID_MARGIN_RANGE,
 )
+from app.utils.language import to_engine_language
 import app.config as cfg
 
 logger = logging.getLogger(__name__)
@@ -50,13 +51,49 @@ UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1MB
 # 运行时依赖，由 main.py 启动时注入
 _task_manager = None
 _task_store = None
+_tagger = None
+_scene_map = None
 
 
-def init_routes(task_manager, task_store=None):
-    """注入运行时依赖（task_store 可选：任务持久化关闭时为 None，读路径行为与现状一致）"""
-    global _task_manager, _task_store
+def init_routes(task_manager, task_store=None, tagger=None, scene_map=None):
+    """注入运行时依赖（task_store/tagger 可选：未启用时为 None，对应端点 503/读路径不变）"""
+    global _task_manager, _task_store, _tagger, _scene_map
     _task_manager = task_manager
     _task_store = task_store
+    _tagger = tagger
+    _scene_map = scene_map
+
+
+async def _save_upload(file: UploadFile) -> tuple[str, str]:
+    """校验扩展名 + 流式落盘（边写边查大小上限）。返回 (save_path, file_ext)。"""
+    file_ext = os.path.splitext(file.filename or "audio.wav")[1].lower() or ".wav"
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的音频格式 '{file_ext}'，支持：{', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    save_path = os.path.join(UPLOADS_DIR, f"{uuid.uuid4()}{file_ext}")
+    max_bytes = MAX_AUDIO_FILE_SIZE * 1024 * 1024
+    total_size = 0
+    try:
+        with open(save_path, "wb") as f:
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > max_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"文件过大（>{MAX_AUDIO_FILE_SIZE}MB），最大支持 {MAX_AUDIO_FILE_SIZE}MB",
+                    )
+                f.write(chunk)
+    except HTTPException:
+        if os.path.exists(save_path):
+            os.remove(save_path)
+        raise
+    return save_path, file_ext
 
 
 # ─── 离线批处理控制器（纯函数，v1/v2 共用同一组实现）───
@@ -71,6 +108,7 @@ async def submit_asr(
     max_segment: int | None = Form(None),
     speaker_id_threshold: float | None = Form(None),
     speaker_id_margin: float | None = Form(None),
+    scene_preset: str | None = Form(None),
 ) -> ASRResponse:
     """提交 ASR 任务。
 
@@ -99,48 +137,19 @@ async def submit_asr(
         if speaker_id_margin is not None:
             options["speaker_id_margin"] = coerce_num_in_range(
                 speaker_id_margin, SPK_ID_MARGIN_RANGE, "speaker_id_margin")
+        if scene_preset is not None:
+            options["scene_preset"] = scene_preset
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # 1. 校验文件扩展名
-    file_ext = os.path.splitext(file.filename or "audio.wav")[1].lower() or ".wav"
-    if file_ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"不支持的音频格式 '{file_ext}'，支持：{', '.join(sorted(ALLOWED_EXTENSIONS))}",
-        )
-
-    # 2. 流式保存上传文件，边写边检查大小
-    os.makedirs(UPLOADS_DIR, exist_ok=True)
-    file_id = str(uuid.uuid4())
-    save_path = os.path.join(UPLOADS_DIR, f"{file_id}{file_ext}")
-    max_bytes = MAX_AUDIO_FILE_SIZE * 1024 * 1024
-
-    total_size = 0
-    try:
-        with open(save_path, "wb") as f:
-            while True:
-                chunk = await file.read(UPLOAD_CHUNK_SIZE)
-                if not chunk:
-                    break
-                total_size += len(chunk)
-                if total_size > max_bytes:
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"文件过大（>{MAX_AUDIO_FILE_SIZE}MB），最大支持 {MAX_AUDIO_FILE_SIZE}MB",
-                    )
-                f.write(chunk)
-    except HTTPException:
-        # 清理已写入的文件
-        if os.path.exists(save_path):
-            os.remove(save_path)
-        raise
+    # 1+2. 校验扩展名 + 流式保存上传文件
+    save_path, file_ext = await _save_upload(file)
 
     # 3. 提交到任务队列
     try:
         task_id = _task_manager.submit(
             file_path=save_path,
-            language=language,
+            language=to_engine_language(language),
             wav_name=file.filename,
             identify_speakers=identify_speakers,
             options=options,
@@ -150,6 +159,57 @@ async def submit_asr(
         raise HTTPException(status_code=503, detail="任务队列已满，请稍后重试")
 
     return ASRResponse(task_id=task_id)
+
+
+async def tag_audio(
+    file: UploadFile = File(...),
+    with_scene: bool = Form(True),
+    scene_preset: str | None = Form(None),
+) -> dict:
+    """只打标不转写：解码音频 → 通用音频事件标注（audio_events 事件段）+ 可选 scene 时间线。
+
+    同步返回（解码 + 推理在线程内执行，不阻塞事件循环）。未启用音频标注时 503。
+    scene_preset 可按请求覆盖场景判定预设（缺省=服务端生效权重）。
+    """
+    if _tagger is None:
+        raise HTTPException(
+            status_code=503, detail="音频标注未启用（需以 --enable-audio-tagging 启动）")
+
+    save_path, _ = await _save_upload(file)
+
+    def _work():
+        import soundfile as sf
+        from app.pipeline.audio_preprocessor import convert_to_wav
+        from app.runtime import audio_tagging, scene_mapper
+        if scene_preset:
+            _p = scene_mapper.resolve_preset(scene_preset)
+            vocal_priority, singing_min, singing_bias = (
+                _p["vocal_priority"], _p["singing_min"], _p["singing_bias"])
+        else:
+            vocal_priority = cfg.SCENE_VOCAL_PRIORITY
+            singing_min = cfg.SCENE_SINGING_MIN
+            singing_bias = cfg.SCENE_SINGING_BIAS
+        wav_path = save_path + ".16k.wav"
+        try:
+            convert_to_wav(save_path, wav_path)
+            wav, sr = sf.read(wav_path, dtype="float32")
+            return audio_tagging.tag_wav(
+                _tagger, wav, sr,
+                interval_ms=cfg.AUDIO_TAGGING_INTERVAL_MS, topk=cfg.AUDIO_TAGGING_TOPK,
+                scene_enable=with_scene, scene_map=_scene_map,
+                silence_dbfs=cfg.SCENE_SILENCE_DBFS, vocal_priority=vocal_priority,
+                singing_min=singing_min, singing_bias=singing_bias,
+                weights=cfg.SCENE_WEIGHTS or None)
+        finally:
+            for p in (save_path, wav_path):
+                if os.path.exists(p):
+                    os.remove(p)
+
+    try:
+        return await asyncio.to_thread(_work)
+    except Exception as e:
+        logger.error(f"音频打标失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="音频打标失败")
 
 
 async def list_tasks(
@@ -260,6 +320,7 @@ def build_offline_router(prefix: str, *, include_deprecated: bool = False) -> AP
     dep = [Depends(verify_api_key)]
     r.add_api_route("/asr", submit_asr, methods=["POST"],
                     response_model=ASRResponse, dependencies=dep)
+    r.add_api_route("/audio/tag", tag_audio, methods=["POST"], dependencies=dep)
     r.add_api_route("/tasks", list_tasks, methods=["GET"],
                     response_model=TaskListResponse, dependencies=dep)
     r.add_api_route("/tasks/{task_id}", get_task_detail, methods=["GET"],

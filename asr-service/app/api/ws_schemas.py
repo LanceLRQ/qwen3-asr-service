@@ -68,6 +68,16 @@ class FinalMsg(BaseModel):
     words: list | None = None          # 仅 word_timestamps=true（路线 B 启用对齐）
     speaker: str | None = None         # 仅 speaker_labels=true（匿名标签 A/B/C…）
     speaker_name: str | None = None    # 仅 identify_speakers=true 且声纹库命中（以最新 final 为准）
+    scene: str | None = None           # 仅 scene=true：该段主场景（per-seg，同离线）
+    scene_scores: dict | None = None   # 仅 scene=true：该段各桶概率分布
+
+
+class SceneMsg(BaseModel):
+    type: Literal["scene"] = "scene"
+    label: str                         # silence | speech | singing | music | other
+    confidence: float
+    since: int                         # 该场景状态起始时间戳(ms)
+    scores: dict = {}                  # 各内容桶代表分（speech/singing/music），便于下游自定阈值
 
 
 class ErrorMsg(BaseModel):

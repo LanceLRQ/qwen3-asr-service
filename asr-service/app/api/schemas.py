@@ -100,6 +100,7 @@ class StreamCapabilities(BaseModel):
     partial_results: bool = False
     word_timestamps: bool = False
     speaker_labels: bool = False      # 实时 final.speaker（匿名 A/B/C…）
+    scene: bool = False               # 实时派生场景信封（scene 消息）
 
 
 class CapabilitiesResponse(BaseModel):
@@ -107,6 +108,10 @@ class CapabilitiesResponse(BaseModel):
     offline_api: bool
     speaker_labels: bool = False       # 说话人分离总开关（离线+实时同一开关）
     speaker_identification: bool = False   # 声纹库真名识别（enroll/identify 可用）
+    audio_tagging: bool = False        # 通用音频事件标注（离线 audio_events）
+    scene: bool = False                # 派生场景视图（segment.scene），需 audio_tagging
+    scene_preset: str | None = None    # 当前生效的场景判定预设
+    scene_presets: list[str] = []      # 可选预设列表（WebUI 下拉 / 按请求 scene_preset 覆盖）
     stream: StreamCapabilities
     defaults: dict = {}                # 可覆盖参数的当前生效默认值（Web UI 占位提示，反映实际配置）
     compat: dict = {}                  # 兼容接口已挂端点（vLLM Phase 3：openai/dashscope/realtime/realtime_partial）
@@ -123,6 +128,7 @@ class HealthResponse(BaseModel):
     punc_enabled: bool = False
     speaker_enabled: bool = False
     speaker_db_enabled: bool = False
+    audio_tagging_enabled: bool = False
     asr_backend: str | None = None     # "qwen_asr" | "openvino"
     vad_backend: str | None = None     # "pytorch" | "onnx"
     punc_backend: str | None = None    # "pytorch" | "onnx"
