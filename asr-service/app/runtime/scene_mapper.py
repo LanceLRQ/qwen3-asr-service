@@ -98,3 +98,48 @@ def aggregate_events(windows: list[tuple[int, int, list[tuple[str, float]]]],
         flush(label)
     events.sort(key=lambda e: (e["start_ms"], e["label"]))
     return events
+
+
+def bucket_scores(scores: dict[str, float],
+                  scene_map: dict[str, list[str]] | None = None) -> dict[str, float]:
+    """各内容桶的代表分（成员概率最大值），供流式 SceneMsg.scores 下发（小而有用）。"""
+    smap = scene_map or DEFAULT_SCENE_MAP
+    return {b: round(max((scores.get(m, 0.0) for m in members), default=0.0), 4)
+            for b, members in smap.items()}
+
+
+# 离开"内容场景"（回到 silence/other）的目标桶，退出用 exit_sec 阈值
+_LEAVE_TARGETS = frozenset({SCENE_SILENCE, SCENE_OTHER})
+
+
+class SceneSmoother:
+    """迟滞/双阈值场景平滑（流式必做）：候选场景须连续保持足够时长才确认切换，消除单帧横跳。
+
+    切入"内容场景"（speech/singing/music）需候选连续 ≥ enter_sec；
+    切到 silence/other（离开内容场景）需候选连续 ≥ exit_sec。
+    update(scene, conf, ts_ms) → 发生确认切换时返回新场景标签，否则 None；
+    当前确认态见 .current / .since_ms / .last_conf。
+    """
+
+    def __init__(self, enter_sec: float = 2.0, exit_sec: float = 2.0):
+        self.enter_ms = int(max(0.0, enter_sec) * 1000)
+        self.exit_ms = int(max(0.0, exit_sec) * 1000)
+        self.current: str | None = None
+        self.since_ms: int | None = None
+        self.last_conf: float = 0.0
+        self._cand: str | None = None
+        self._cand_start: int | None = None
+
+    def update(self, scene: str, conf: float, ts_ms: int) -> str | None:
+        if scene != self._cand:
+            self._cand = scene
+            self._cand_start = ts_ms
+        if scene == self.current:
+            return None
+        dwell = self.exit_ms if scene in _LEAVE_TARGETS else self.enter_ms
+        if ts_ms - self._cand_start >= dwell:
+            self.current = scene
+            self.since_ms = self._cand_start
+            self.last_conf = float(conf)
+            return scene
+        return None

@@ -461,6 +461,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
             "partial_results": False,
             "word_timestamps": enable_align if stream_enabled else False,
             "speaker_labels": speaker_enabled if stream_enabled else False,
+            "scene": tagging_enabled and cfg.SCENE_ENABLE if stream_enabled else False,
         },
         # 可覆盖参数的当前生效默认值（反映实际配置，供 Web UI 占位提示）
         "defaults": {
@@ -529,6 +530,13 @@ def _assemble_standard(app: FastAPI, args) -> None:
             noise_filter=cfg.STREAM_NOISE_FILTER,
             energy_floor_dbfs=cfg.STREAM_ENERGY_FLOOR_DBFS,
             snr_min_db=cfg.STREAM_SNR_MIN_DB,
+            tagger=tagger,
+            scene_enable=cfg.SCENE_ENABLE,
+            scene_enter_sec=cfg.SCENE_ENTER_SEC,
+            scene_exit_sec=cfg.SCENE_EXIT_SEC,
+            scene_silence_dbfs=cfg.SCENE_SILENCE_DBFS,
+            tag_interval_ms=cfg.AUDIO_TAGGING_INTERVAL_MS,
+            tag_topk=cfg.AUDIO_TAGGING_TOPK,
         )
         init_ws_stream(stream_backend)
         app.include_router(ws_router_stream)

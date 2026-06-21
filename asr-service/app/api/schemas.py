@@ -100,6 +100,7 @@ class StreamCapabilities(BaseModel):
     partial_results: bool = False
     word_timestamps: bool = False
     speaker_labels: bool = False      # 实时 final.speaker（匿名 A/B/C…）
+    scene: bool = False               # 实时派生场景信封（scene 消息）
 
 
 class CapabilitiesResponse(BaseModel):

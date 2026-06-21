@@ -70,6 +70,14 @@ class FinalMsg(BaseModel):
     speaker_name: str | None = None    # 仅 identify_speakers=true 且声纹库命中（以最新 final 为准）
 
 
+class SceneMsg(BaseModel):
+    type: Literal["scene"] = "scene"
+    label: str                         # silence | speech | singing | music | other
+    confidence: float
+    since: int                         # 该场景状态起始时间戳(ms)
+    scores: dict = {}                  # 各内容桶代表分（speech/singing/music），便于下游自定阈值
+
+
 class ErrorMsg(BaseModel):
     type: Literal["error"] = "error"
     code: str

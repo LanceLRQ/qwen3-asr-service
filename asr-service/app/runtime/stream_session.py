@@ -22,6 +22,8 @@ from app.utils.result_parser import extract_text, extract_words
 from app.engines.streaming_vad_engine import StreamingVADEngine
 from app.runtime.speaker_cluster import OnlineSpeakerClusterer
 from app.runtime.noise_gate import NoiseFloorTracker, rms_dbfs, should_gate
+from app.runtime import scene_mapper
+from app.runtime.scene_mapper import SceneSmoother
 from app.utils.validation import (
     coerce_num_in_range, parse_bool,
     SPK_THRESHOLD_RANGE, SPK_MIN_SEG_RANGE, SPK_MAX_RANGE,
@@ -97,7 +99,9 @@ class StreamSession:
     def __init__(self, sid, svad: StreamingVADEngine, asr, punc, executor, asr_sem,
                  *, language=None, max_segment_sec=30, enable_words=False, speaker=None,
                  speaker_service=None, noise_filter=False, energy_floor_dbfs=-50.0,
-                 snr_min_db=6.0):
+                 snr_min_db=6.0, tagger=None, scene_enable=True, scene_enter_sec=2.0,
+                 scene_exit_sec=2.0, scene_silence_dbfs=-50.0, tag_interval_ms=960,
+                 tag_topk=5):
         self.sid = sid
         self._svad = svad
         self._asr = asr
@@ -115,6 +119,18 @@ class StreamSession:
         self._energy_floor_dbfs = energy_floor_dbfs
         self._snr_min_db = snr_min_db
         self._noise_tracker = None               # configure() 时重建（会话域噪声底）
+
+        # 音频标注 / 场景（None tagger 或 scene_enable=False → 流式不产 scene）
+        self._tagger = tagger
+        self._scene_enable = scene_enable and tagger is not None
+        self._scene_enter_sec = scene_enter_sec
+        self._scene_exit_sec = scene_exit_sec
+        self._scene_silence_dbfs = scene_silence_dbfs
+        self._tag_topk = tag_topk
+        self._scene_step = max(1, int(_TARGET_SR * max(1, tag_interval_ms) / 1000))
+        self._scene_chunks: list[np.ndarray] = []   # 独立于 buffer（buffer 会被 final/idle 裁剪）
+        self._scene_samples = 0
+        self._scene_smoother = None              # configure() 时重建（会话域）
 
         # 会话级可覆盖参数（默认=服务端 cfg；configure() 经 _apply_session_override 覆盖）
         self._spk_threshold = cfg.SPEAKER_THRESHOLD
@@ -169,6 +185,11 @@ class StreamSession:
         self._identify = bool(cfg_msg.get("identify_speakers", False))
         self._spk_name_cache = {}
         self._noise_tracker = NoiseFloorTracker() if self._noise_filter else None
+        self._scene_chunks = []
+        self._scene_samples = 0
+        self._scene_smoother = (
+            SceneSmoother(self._scene_enter_sec, self._scene_exit_sec)
+            if self._scene_enable else None)
         self._warnings = self._collect_ignored_params(cfg_msg)
         logger.info(f"[stream] 会话配置 sid={self.sid[:8]} audio_fs={self.audio_fs} "
                     f"language={self.language} wav={self.wav_name} "
@@ -277,6 +298,11 @@ class StreamSession:
                          f"end_ms={self.buffer.end_ms} seg_start={self.seg_start_ms}")
         for ev in events:
             async for msg in self._on_event(ev):
+                yield msg
+
+        # 场景标注（独立于 VAD 断句的连续状态信号；buffer 会被 final/idle 裁剪故单独累积）
+        if self._scene_smoother is not None:
+            async for msg in self._maybe_emit_scene(arr):
                 yield msg
 
         # 长无停顿句兜底切分，避免缓冲无限增长
@@ -425,6 +451,43 @@ class StreamSession:
         self._spk_name_cache[spk] = {"name": name, "count": count, "ver": ver}
         return name
 
+    async def _maybe_emit_scene(self, arr):
+        """累积音频满一个推理窗即打标 → 迟滞平滑 → 状态切换时产出 scene 信封。
+
+        独立累积（不依赖 buffer——后者随 final/idle 裁剪）；推理在线程池内执行
+        （tagger 自带 _infer_lock 串行化），失败仅告警跳过，不影响转写主链路。
+        """
+        self._scene_chunks.append(arr)
+        self._scene_samples += arr.size
+        if self._scene_samples < self._scene_step:
+            return
+        block = np.concatenate(self._scene_chunks)
+        window = block[:self._scene_step]
+        rest = block[self._scene_step:]
+        self._scene_chunks = [rest] if rest.size else []
+        self._scene_samples = int(rest.size)
+
+        ts_ms = self.buffer.end_ms
+        try:
+            tr = await self._in_thread(
+                self._tagger.predict_window, window, _TARGET_SR, self._tag_topk)
+            scene, conf = scene_mapper.classify_window(
+                tr.scores, rms_dbfs(window), silence_dbfs=self._scene_silence_dbfs)
+        except Exception as e:
+            logger.warning(f"[stream] 场景打标失败，跳过: {e}")
+            return
+        changed = self._scene_smoother.update(scene, conf, ts_ms)
+        if changed is not None:
+            logger.info(f"[stream] scene → {changed} since={self._scene_smoother.since_ms} "
+                        f"conf={self._scene_smoother.last_conf:.2f}")
+            yield {
+                "type": "scene",
+                "label": changed,
+                "confidence": round(self._scene_smoother.last_conf, 4),
+                "since": int(self._scene_smoother.since_ms),
+                "scores": scene_mapper.bucket_scores(tr.scores),
+            }
+
 
 class VadOfflineBackend:
     """路线 B 活动后端：在线 VAD 断句 + 内存离线 Qwen ASR 解码。实现 StreamBackend 接口。"""
@@ -434,12 +497,21 @@ class VadOfflineBackend:
 
     def __init__(self, asr, vad, punc=None, *, speaker=None, speaker_service=None,
                  max_sessions=4, asr_concurrency=1, max_segment_sec=30, vad_chunk_ms=200,
-                 noise_filter=False, energy_floor_dbfs=-50.0, snr_min_db=6.0):
+                 noise_filter=False, energy_floor_dbfs=-50.0, snr_min_db=6.0, tagger=None,
+                 scene_enable=True, scene_enter_sec=2.0, scene_exit_sec=2.0,
+                 scene_silence_dbfs=-50.0, tag_interval_ms=960, tag_topk=5):
         self._svad = StreamingVADEngine(vad, chunk_ms=vad_chunk_ms)
         self._asr = asr
         self._punc = punc
         self._speaker = speaker
         self._speaker_service = speaker_service
+        self._tagger = tagger
+        self._scene_enable = scene_enable and tagger is not None
+        self._scene_enter_sec = scene_enter_sec
+        self._scene_exit_sec = scene_exit_sec
+        self._scene_silence_dbfs = scene_silence_dbfs
+        self._tag_interval_ms = tag_interval_ms
+        self._tag_topk = tag_topk
         self._max_sessions = max_sessions
         self._max_segment_sec = max_segment_sec
         self._noise_filter = noise_filter
@@ -466,6 +538,7 @@ class VadOfflineBackend:
             "speaker_tunable": speaker is not None,   # speaker_threshold/min_seg/max + id_threshold/margin
             "endpoint_tunable": True,                 # max_end_silence_ms（断句尾静音）/ max_segment_sec
             "output_toggles": True,                   # with_punc / with_words / diarize 可按会话关闭
+            "scene": self._scene_enable,              # 派生场景信封（scene 消息，迟滞平滑）
         }
 
     async def acquire(self) -> bool:
@@ -481,7 +554,10 @@ class VadOfflineBackend:
             max_segment_sec=self._max_segment_sec, enable_words=self._enable_words,
             speaker=self._speaker, speaker_service=self._speaker_service,
             noise_filter=self._noise_filter, energy_floor_dbfs=self._energy_floor_dbfs,
-            snr_min_db=self._snr_min_db,
+            snr_min_db=self._snr_min_db, tagger=self._tagger,
+            scene_enable=self._scene_enable, scene_enter_sec=self._scene_enter_sec,
+            scene_exit_sec=self._scene_exit_sec, scene_silence_dbfs=self._scene_silence_dbfs,
+            tag_interval_ms=self._tag_interval_ms, tag_topk=self._tag_topk,
         )
 
     def release(self, session):
@@ -492,6 +568,8 @@ class VadOfflineBackend:
                 session._spk_cluster = None    # 会话域语义：质心状态随会话释放
                 session._spk_name_cache = {}   # 声纹簇缓存同步清空
                 session._noise_tracker = None  # 噪声底估计随会话释放
+                session._scene_smoother = None # 场景平滑状态随会话释放
+                session._scene_chunks = []
         finally:
             with self._count_lock:
                 self._active = max(0, self._active - 1)

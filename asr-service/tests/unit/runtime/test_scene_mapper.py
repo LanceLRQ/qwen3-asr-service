@@ -97,3 +97,52 @@ def test_aggregate_events_sorted_by_start():
     ]
     events = sm.aggregate_events(windows, min_dur_ms=480)
     assert [e["start_ms"] for e in events] == sorted(e["start_ms"] for e in events)
+
+
+def test_bucket_scores_takes_member_max():
+    bs = sm.bucket_scores({"Singing": 0.6, "Choir": 0.8, "Speech": 0.3, "Music": 0.1})
+    assert bs["singing"] == pytest.approx(0.8)   # Choir 是 singing 成员
+    assert bs["speech"] == pytest.approx(0.3)
+    assert bs["music"] == pytest.approx(0.1)
+
+
+# ─── SceneSmoother（迟滞） ───
+
+def test_smoother_enter_dwell_required():
+    sm_ = sm.SceneSmoother(enter_sec=2.0, exit_sec=2.0)
+    assert sm_.update("speech", 0.8, 0) is None        # 候选起点
+    assert sm_.update("speech", 0.8, 1000) is None     # 1s < 2s
+    assert sm_.update("speech", 0.8, 2000) == "speech"  # 满 2s 确认
+    assert sm_.current == "speech" and sm_.since_ms == 0
+
+
+def test_smoother_same_as_current_returns_none():
+    sm_ = sm.SceneSmoother(enter_sec=0.0)
+    assert sm_.update("speech", 0.8, 0) == "speech"
+    assert sm_.update("speech", 0.9, 500) is None      # 已是 current
+
+
+def test_smoother_no_flicker_on_brief_candidate():
+    sm_ = sm.SceneSmoother(enter_sec=2.0, exit_sec=2.0)
+    sm_.update("speech", 0.8, 0)
+    sm_.update("speech", 0.8, 2000)                     # 确认 speech
+    assert sm_.update("music", 0.9, 2960) is None       # 偶发一帧 music 不切
+    assert sm_.update("speech", 0.8, 3920) is None
+    assert sm_.current == "speech"
+
+
+def test_smoother_exit_to_silence_uses_exit_sec():
+    sm_ = sm.SceneSmoother(enter_sec=10.0, exit_sec=1.0)
+    sm_.update("speech", 0.8, 0)
+    assert sm_.update("speech", 0.8, 10000) == "speech"  # 进内容场景需 enter=10s
+    assert sm_.update("silence", 1.0, 10500) is None     # 候选 silence 从 10500 起，0s
+    assert sm_.update("silence", 1.0, 11000) is None     # 0.5s < exit 1s
+    assert sm_.update("silence", 1.0, 11500) == "silence"  # 满 exit 1s
+
+
+def test_smoother_candidate_change_resets_timer():
+    sm_ = sm.SceneSmoother(enter_sec=2.0)
+    sm_.update("speech", 0.5, 0)
+    sm_.update("music", 0.5, 1000)                      # 候选改 music，计时从 1000 起
+    assert sm_.update("music", 0.5, 2500) is None       # 1.5s < 2s
+    assert sm_.update("music", 0.5, 3000) == "music"    # 满 2s
