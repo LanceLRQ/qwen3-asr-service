@@ -98,6 +98,30 @@
 | `--speaker-auto-enroll-min-sec` | 秒 | `10.0` | 自动登记的簇最短语音总时长（严于手动登记，降低噪声建档） |
 | `--speaker-store-audio` / `--no-speaker-store-audio` | - | 关闭 | 留存登记样本音频到 `data/speaker_audio/`（扩大合规面，默认关） |
 
+### 音频标注（通用音频事件标注 + 派生场景）
+
+开启后复用同一路音频额外输出 **AudioSet 通用事件标注**（PANNs 527 类 / YAMNet 521 类）与
+**派生场景**（`silence`/`speech`/`singing`/`music`/`other`）：离线结果加 `audio_events` 事件段与
+`segments[].scene`；实时流推 `scene` 消息；另有 `POST /v2/audio/tag` 只打标不转写。
+全程 opt-in + 惰性加载 + 失败降级，关闭时零侵入。
+
+| 参数 | 取值 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--enable-audio-tagging` / `--no-audio-tagging` | - | 关闭 | 总开关；开启后离线/实时附带音频事件标注与场景 |
+| `--audio-tagging-engine` | `panns` \| `yamnet` | `panns` | 引擎：**panns**（推荐，权重 ~320MB 首次自动下载）/ **yamnet**（轻量备选，需 `pip install -r requirements-yamnet.txt`，仅 standard 模式 CPU 可用） |
+| `--audio-tagging-panns-variant` | `16k` \| `32k` | `16k` | PANNs 变体：16k 原生（Zenodo 直链）/ 32k（HF `nicofarr` + 重采样） |
+| `--audio-tagging-topk` | 数字 | `5` | 对外返回的 top-K 标签数 |
+| `--audio-tagging-interval-ms` | 毫秒 | `960` | 推理窗步长（降频省算力） |
+| `--scene-enable` / `--no-scene` | - | 开启 | 输出派生场景；关闭则只给原始 `audio_events` 标签 |
+| `--scene-map-file` | 路径 | （内置 5 桶） | 自定义场景映射 yaml/json：`{桶: [AudioSet 类名, ...]}`；加载失败回退内置默认 |
+| `--scene-enter-sec` | 秒 | `2.0` | 迟滞（流式）：连续 N 秒判定才进入某场景 |
+| `--scene-exit-sec` | 秒 | `2.0` | 迟滞（流式）：连续 M 秒判定才退出当前场景 |
+| `--scene-silence-dbfs` | dBFS | `-50.0` | 静音判定能量底（低于此判 `silence`，不耗模型） |
+
+> 说明：`scene` 是**持续的主导内容状态**（迟滞平滑、互斥）；掌声/笑声/狗叫等**瞬时事件**不进
+> `scene`，统一进 `audio_events`。YAMNet 为非推荐轻量备选（精度低于 PANNs、vLLM 模式不可用），
+> 限制详见 README。
+
 ### vLLM 原生流式（仅 `--serve-mode vllm`）
 
 仅 vllm 模式生效；要求 CUDA GPU，须独立环境/镜像（见下方 [vLLM 原生流式模式](#vllm-原生流式模式)）。

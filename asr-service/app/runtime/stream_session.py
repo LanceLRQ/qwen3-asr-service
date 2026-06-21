@@ -101,7 +101,7 @@ class StreamSession:
                  speaker_service=None, noise_filter=False, energy_floor_dbfs=-50.0,
                  snr_min_db=6.0, tagger=None, scene_enable=True, scene_enter_sec=2.0,
                  scene_exit_sec=2.0, scene_silence_dbfs=-50.0, tag_interval_ms=960,
-                 tag_topk=5):
+                 tag_topk=5, scene_map=None):
         self.sid = sid
         self._svad = svad
         self._asr = asr
@@ -126,6 +126,7 @@ class StreamSession:
         self._scene_enter_sec = scene_enter_sec
         self._scene_exit_sec = scene_exit_sec
         self._scene_silence_dbfs = scene_silence_dbfs
+        self._scene_map = scene_map              # 自定义场景映射（None = 内置默认）
         self._tag_topk = tag_topk
         self._scene_step = max(1, int(_TARGET_SR * max(1, tag_interval_ms) / 1000))
         self._scene_chunks: list[np.ndarray] = []   # 独立于 buffer（buffer 会被 final/idle 裁剪）
@@ -472,7 +473,8 @@ class StreamSession:
             tr = await self._in_thread(
                 self._tagger.predict_window, window, _TARGET_SR, self._tag_topk)
             scene, conf = scene_mapper.classify_window(
-                tr.scores, rms_dbfs(window), silence_dbfs=self._scene_silence_dbfs)
+                tr.scores, rms_dbfs(window), scene_map=self._scene_map,
+                silence_dbfs=self._scene_silence_dbfs)
         except Exception as e:
             logger.warning(f"[stream] 场景打标失败，跳过: {e}")
             return
@@ -485,7 +487,7 @@ class StreamSession:
                 "label": changed,
                 "confidence": round(self._scene_smoother.last_conf, 4),
                 "since": int(self._scene_smoother.since_ms),
-                "scores": scene_mapper.bucket_scores(tr.scores),
+                "scores": scene_mapper.bucket_scores(tr.scores, self._scene_map),
             }
 
 
@@ -499,7 +501,7 @@ class VadOfflineBackend:
                  max_sessions=4, asr_concurrency=1, max_segment_sec=30, vad_chunk_ms=200,
                  noise_filter=False, energy_floor_dbfs=-50.0, snr_min_db=6.0, tagger=None,
                  scene_enable=True, scene_enter_sec=2.0, scene_exit_sec=2.0,
-                 scene_silence_dbfs=-50.0, tag_interval_ms=960, tag_topk=5):
+                 scene_silence_dbfs=-50.0, tag_interval_ms=960, tag_topk=5, scene_map=None):
         self._svad = StreamingVADEngine(vad, chunk_ms=vad_chunk_ms)
         self._asr = asr
         self._punc = punc
@@ -512,6 +514,7 @@ class VadOfflineBackend:
         self._scene_silence_dbfs = scene_silence_dbfs
         self._tag_interval_ms = tag_interval_ms
         self._tag_topk = tag_topk
+        self._scene_map = scene_map
         self._max_sessions = max_sessions
         self._max_segment_sec = max_segment_sec
         self._noise_filter = noise_filter
@@ -558,6 +561,7 @@ class VadOfflineBackend:
             scene_enable=self._scene_enable, scene_enter_sec=self._scene_enter_sec,
             scene_exit_sec=self._scene_exit_sec, scene_silence_dbfs=self._scene_silence_dbfs,
             tag_interval_ms=self._tag_interval_ms, tag_topk=self._tag_topk,
+            scene_map=self._scene_map,
         )
 
     def release(self, session):

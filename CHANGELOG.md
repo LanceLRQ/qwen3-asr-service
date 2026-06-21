@@ -3,6 +3,21 @@
 本项目所有重要变更记录于此。版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)，
 发布版本号经由 git tag（去掉 `v` 前缀）注入镜像 `APP_VERSION`，体现在 `/openapi.json` 的 `info.version`。
 
+## [2.3.0] - 2026-06-21
+
+通用音频事件标注（Audio Tagging）特性，以及原生端点语言归一化修复。
+
+### 新增 / 改进
+- **通用音频事件标注**：基于 AudioSet（PANNs 527 类 / YAMNet 521 类），并派生场景视图（静音 / 语音 / 歌唱 / 音乐 / 其它）。通过 `--enable-audio-tagging` 显式开启；未开启时零影响。
+- **离线结果增强**：离线转写结果新增 `audio_events`（带 onset/offset 的事件分段）及每段 `scene`。
+- **实时场景推送**：`/v2/asr/stream` WebSocket 推送 `scene` 消息（迟滞平滑，状态切换时发出）。
+- **新增标注端点**：`POST /v2/audio/tag`（仅标注，不做转写）。
+- **双引擎**：PANNs（推荐，16k / 32k 变体）与 YAMNet（轻量备选，可选依赖，vLLM 模式不可用）。
+- **可配置场景映射** `--scene-map-file`；新增 `THIRD_PARTY_NOTICES.md`。
+
+### 修复
+- **语言提示归一化（原生端点）**：原生离线 `/v2/asr` 与实时 `/v2/asr/stream` 现统一把上游 `language` 归一为引擎语种名——接受 ISO-639-1 码（`zh`）、规范英文名（`Chinese`）、带地区子标签（`zh-CN`），无法识别的取值降级为自动检测。修复客户端传 `zh` 时透传到引擎抛 `Unsupported language: Zh`、导致**实时逐句报 `feed_failed` 零文本 / 离线任务失败**的问题（兼容层早有此归一，原生端点此前漏做）。归一化逻辑下沉至中立的 `app/utils/language.py`，离线与实时共用，兼容层 `mappers.to_engine_language` 改为 re-export。
+
 ## [2.2.0] - 2026-06-19
 
 句子级准确分句能力（贡献者 PR #22「准确分句 + 修复处理切块边界重复识别」），叠加维护者评审修复。
@@ -102,6 +117,7 @@
 - Web UI + 可配置 VAD 段时长；Docker / docker-compose 支持。
 - Windows 内嵌 Python 安装/启动脚本；Ctrl+C 优雅退出。
 
+[2.3.0]: https://github.com/LanceLRQ/qwen3-asr-service/releases/tag/v2.3.0
 [2.2.0]: https://github.com/LanceLRQ/qwen3-asr-service/releases/tag/v2.2.0
 [2.1.0]: https://github.com/LanceLRQ/qwen3-asr-service/releases/tag/v2.1.0
 [2.0.2]: https://github.com/LanceLRQ/qwen3-asr-service/releases/tag/v2.0.2

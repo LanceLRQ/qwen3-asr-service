@@ -56,6 +56,7 @@ LEGACY_DEFAULTS = {
     "audio_tagging_topk": 5,
     "audio_tagging_interval_ms": 960,
     "scene_enable": True,
+    "scene_map_file": None,
     "scene_enter_sec": 2.0,
     "scene_exit_sec": 2.0,
     "scene_silence_dbfs": -50.0,

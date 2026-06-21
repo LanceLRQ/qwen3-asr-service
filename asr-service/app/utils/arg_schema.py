@@ -402,6 +402,12 @@ ARG_SPECS = (
         negative_help_en="Do not output scenes; emit raw audio_events only",
     ),
     ArgSpec(
+        key="scene_map_file", flags=("--scene-map-file",), default=None, group="音频标注",
+        help="自定义场景映射 yaml/json 路径（{桶: [AudioSet类名,...]}；缺省=内置 5 桶通用集）",
+        help_en="Custom scene-map yaml/json path ({bucket: [AudioSet labels,...]}; "
+                "default = built-in 5-bucket general set)",
+    ),
+    ArgSpec(
         key="scene_enter_sec", flags=("--scene-enter-sec",), default=2.0, type=float,
         group="音频标注",
         help="迟滞（流式）：连续判定 N 秒才进入某场景 (default: 2.0)",

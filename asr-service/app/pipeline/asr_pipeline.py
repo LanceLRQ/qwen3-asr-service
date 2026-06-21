@@ -29,6 +29,7 @@ class ASRPipeline:
         speaker_engine=None,
         speaker_service=None,
         tagger=None,
+        scene_map=None,
     ):
         self.asr = asr_engine
         self.vad = vad_engine
@@ -36,6 +37,7 @@ class ASRPipeline:
         self.speaker = speaker_engine
         self.speaker_service = speaker_service    # 声纹库联动（None = 未启用）
         self.tagger = tagger                      # 音频打标引擎（None = 未启用）
+        self._scene_map = scene_map               # 自定义场景映射（None = 内置默认）
 
     def run(
         self,
@@ -429,43 +431,30 @@ class ASRPipeline:
         （不逐窗全量落库，规避 result/tasks.db 膨胀）。scene_enable 时按段时间窗投票
         写 seg["scene"]。延迟导入：打标关闭时本路径零额外依赖。返回 audio_events。
         """
-        from app.runtime import scene_mapper
-        from app.runtime.noise_gate import rms_dbfs
+        from app.runtime import audio_tagging, scene_mapper
 
         wav, sr = sf.read(wav_path, dtype="float32")   # 阶段 0 已保证 16k 单声道
         if wav.ndim > 1:
             wav = wav.mean(axis=1)
-        total = len(wav)
-        if total == 0:
+        if len(wav) == 0:
             return []
 
-        step = max(1, int(sr * max(1, cfg.AUDIO_TAGGING_INTERVAL_MS) / 1000))
-        topk = cfg.AUDIO_TAGGING_TOPK
-        silence_dbfs = cfg.SCENE_SILENCE_DBFS
+        windows = audio_tagging.tag_windows(
+            self.tagger, wav, sr, cfg.AUDIO_TAGGING_INTERVAL_MS, cfg.AUDIO_TAGGING_TOPK)
+        audio_events = audio_tagging.events_from_windows(windows)
 
-        windows: list[tuple[int, int, list]] = []          # (start_ms, end_ms, top)
-        win_scenes: list[tuple[int, int, str, float]] = []  # (start_ms, end_ms, scene, conf)
-        for off in range(0, total, step):
-            clip = wav[off:off + step]
-            if clip.size == 0:
-                continue
-            start_ms = int(off * 1000 / sr)
-            end_ms = int(min(off + step, total) * 1000 / sr)
-            tr = self.tagger.predict_window(clip, sr, topk)
-            windows.append((start_ms, end_ms, tr.top))
-            if scene_enable:
-                scene, conf = scene_mapper.classify_window(
-                    tr.scores, rms_dbfs(clip), silence_dbfs=silence_dbfs)
-                win_scenes.append((start_ms, end_ms, scene, conf))
-
-        audio_events = scene_mapper.aggregate_events(windows)
-
-        if scene_enable and win_scenes:
+        # per-segment scene：对每个 ASR 句，用其时间窗内各窗 scene 投票
+        if scene_enable and windows:
+            silence_dbfs = cfg.SCENE_SILENCE_DBFS
             for s in segments:
                 s_start = int(s["start"] * 1000)
                 s_end = int(s["end"] * 1000)
-                overlap = [(sc, cf) for (ws, we, sc, cf) in win_scenes
-                           if we > s_start and ws < s_end]
+                overlap = [
+                    scene_mapper.classify_window(scores, dbfs, scene_map=self._scene_map,
+                                                 silence_dbfs=silence_dbfs)
+                    for (ws, we, _top, scores, dbfs) in windows
+                    if we > s_start and ws < s_end
+                ]
                 if overlap:
                     s["scene"] = scene_mapper.vote_scene(overlap)
 

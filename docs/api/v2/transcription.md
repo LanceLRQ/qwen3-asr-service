@@ -7,6 +7,7 @@
 ## 目录
 
 - [离线批处理 · 提交 ASR 任务 `POST /v2/asr`](#提交-asr-任务)
+- [音频标注 `POST /v2/audio/tag`](#音频标注)
 - [实时转写 `WS /v2/asr/stream`](#实时转写)
   - [鉴权](#鉴权)
   - [消息流程](#消息流程)
@@ -61,6 +62,51 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | 401 | 认证失败 |
 | 413 | 文件过大（>1GB） |
 | 503 | 服务未就绪 / 任务队列已满 |
+
+## 音频标注
+
+```
+POST /v2/audio/tag
+Content-Type: multipart/form-data
+```
+
+**前置条件**：服务端启用音频标注（`--enable-audio-tagging`）。未启用时返回 `503`；可先 [`GET /v2/capabilities`](basics.md#能力查询) 预检 `audio_tagging`。
+
+仅做音频事件标注与场景识别，**不做转写**，同步返回结果（非任务异步）。
+
+```bash
+curl -X POST http://127.0.0.1:8765/v2/audio/tag \
+  -F "file=@/path/to/audio.mp3"
+```
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| file | 文件 | 必填 | 音频文件，格式同 `/v2/asr`（WAV/MP3/FLAC/M4A/AAC/OGG/WMA/AMR/OPUS） |
+| with_scene | bool | true | 是否输出场景时间线 `scene_timeline`；`false` 时该字段省略 / 为 `null` |
+
+> 配置了 API 密钥时同其他接口要求携带 Bearer Token（未配置密钥时免认证）。
+
+响应：
+
+```json
+{
+  "audio_events": [{"label": "Speech", "start_ms": 0, "end_ms": 2000, "confidence": 0.9}],
+  "scene_timeline": [{"label": "speech", "start_ms": 0, "end_ms": 2000}]
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `audio_events[]` | 按起止时间聚合的事件段：`label`（AudioSet 类别）、`start_ms` / `end_ms`（毫秒）、`confidence`（段内最大概率） |
+| `scene_timeline[]` | 连续场景段的游程合并列表：`label`（`silence`/`speech`/`singing`/`music`/`other` 或自定义桶）、`start_ms` / `end_ms`；`with_scene=false` 时省略 / 为 `null` |
+
+| 状态码 | 含义 |
+|--------|------|
+| 200 | 标注成功 |
+| 400 | 不支持的音频格式 |
+| 401 | 认证失败 |
+| 413 | 文件过大（>1GB） |
+| 503 | 服务未就绪 / 未启用音频标注 |
 
 ## 实时转写
 
@@ -135,9 +181,10 @@ WS /v2/asr/stream
 
 | type | 字段 | 说明 |
 |------|------|------|
-| `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` / `limits` | 连接建立即下发；`capabilities` 含 `partial_results` / `word_timestamps` / `languages_auto` / `speaker_labels` / `speaker_identification`，以及可调声明 `noise_filter_tunable` / `speaker_tunable` / `endpoint_tunable` / `output_toggles`（标示对应覆盖项本会话是否可调）；`limits` 含 `max_frame_bytes` / `max_backlog_bytes`，超实时推流的客户端应据此控速（参考 `final.end` 反馈的处理进度，保持未处理积压低于上限） |
+| `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` / `limits` | 连接建立即下发；`capabilities` 含 `partial_results` / `word_timestamps` / `languages_auto` / `speaker_labels` / `speaker_identification` / `scene`（实时场景通知是否下发），以及可调声明 `noise_filter_tunable` / `speaker_tunable` / `endpoint_tunable` / `output_toggles`（标示对应覆盖项本会话是否可调）；`limits` 含 `max_frame_bytes` / `max_backlog_bytes`，超实时推流的客户端应据此控速（参考 `final.end` 反馈的处理进度，保持未处理积压低于上限） |
 | `partial` | `seg_id` / `text` | 中间结果（仅 `partial_results=true` 的后端，vad-offline 不产生） |
 | `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` | 句级定稿结果；`start`/`end` 为毫秒；`words` 仅 `word_timestamps=true` 时存在；`speaker`（匿名标签 A/B/C…）仅 `speaker_labels=true` 且本段可判定时存在；`speaker_name` 仅 `identify_speakers=true` 且声纹命中时存在（说话人标签 / 真名语义见[说话人管理](speakers.md#说话人分离与声纹识别)） |
+| `scene` | `label` / `confidence` / `since` / `scores` | 场景状态切换通知（仅 `capabilities.stream.scene=true` 时下发）：`label` 当前场景；`since` 该场景状态的起始时间戳（毫秒）；`scores` 各内容桶的代表性得分。仅在状态**发生变化**时推送（带迟滞平滑），不逐窗下发 |
 | `error` | `code` / `message` / `seg_id` / `fatal` | `fatal=true` 后会话终止 |
 | `session.closed` | `reason` | 会话结束 |
 
@@ -145,6 +192,12 @@ WS /v2/asr/stream
 
 ```json
 {"type": "final", "seg_id": 0, "text": "甚至出现交易几乎停滞的情况。", "start": 320, "end": 3520, "words": null}
+```
+
+`scene` 示例：
+
+```json
+{"type": "scene", "label": "speech", "confidence": 0.86, "since": 1000, "scores": {"speech": 0.86, "singing": 0.0, "music": 0.04}}
 ```
 
 ### 错误码

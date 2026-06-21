@@ -21,6 +21,7 @@ A simple, fast and efficient speech recognition API service based on Qwen3-ASR. 
 - **vLLM Native Streaming Engine** *(new in v2.1.0, optional)* - a separate GPU-only serving mode (`--serve-mode vllm`) with real-time incremental partial→final decoding within each sentence, plus long-audio chunked transcription — see [vLLM vs Standard](docs/vllm-vs-standard_EN.md)
 - **Speaker Diarization** - Offline / real-time transcripts annotated with anonymous speaker labels A/B/C… (CAM++ voiceprint model, CPU inference)
 - **Voiceprint Database** - Enrolled speakers show their real names in transcripts; unknown speakers are auto-enrolled with placeholder names, with one-click rename in the Web management page (speakers.db, authentication required)
+- **Audio Tagging** *(optional)* - General audio event tagging (full AudioSet via PANNs 527-class / YAMNet 521-class) + derived scene (silence/speech/singing/music/other): offline results add `audio_events` + per-segment `scene`; the realtime stream pushes `scene` messages; plus a tagging-only `POST /v2/audio/tag`. Toggleable, dual-engine, with a configurable scene map. Enable with `--enable-audio-tagging`. (YAMNet is a non-recommended lightweight fallback: lower accuracy than PANNs, requires an extra optional dependency (`pip install -r requirements-yamnet.txt`), and is unavailable in vLLM mode.)
 - **Far-field Filtering / Tunable Params** - Real-time segment-level energy/SNR gating reduces far-field and ambient false triggers; speaker, endpointing and output params can be overridden per request/session
 - **OpenAI / DashScope Compatible APIs** - Point your base_url at this service to integrate the OpenAI / Alibaba Cloud DashScope ecosystem (offline + realtime) — no business-code changes
 - **Async Tasks + Persistence** - Submit and poll for results; task results queryable across restarts (tasks.db)
@@ -90,6 +91,7 @@ docker run -d --gpus all -p 8765:8765 \
 | [Compatibility APIs](docs/api/compat_EN.md) | OpenAI / Alibaba Cloud DashScope drop-in compatibility (offline + realtime), just change base_url |
 | [Architecture](docs/architecture_EN.md) | Project structure, processing pipeline, key design decisions |
 | [Development Guide](docs/development_EN.md) | Dev environment, testing, E2E smoke, single-schema / docs / compat-layer conventions |
+| [Third-Party Notices](THIRD_PARTY_NOTICES.md) | Licenses and attributions for bundled models and dependencies |
 
 ---
 

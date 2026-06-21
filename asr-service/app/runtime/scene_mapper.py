@@ -31,6 +31,29 @@ DEFAULT_SCENE_MAP: dict[str, list[str]] = {
 SCENE_MIN_SCORE = 0.10
 
 
+def load_scene_map(path: str) -> dict[str, list[str]]:
+    """从 yaml/json 读取自定义场景映射 {bucket: [AudioSet display_name, ...]}。
+
+    校验为非空 dict[str, list[str]]；格式非法或读取失败抛 ValueError（调用方决定降级）。
+    """
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    try:
+        import yaml
+        data = yaml.safe_load(text)
+    except ImportError:
+        import json
+        data = json.loads(text)
+    if not isinstance(data, dict) or not data:
+        raise ValueError(f"场景映射须为非空 dict: {path}")
+    out: dict[str, list[str]] = {}
+    for k, v in data.items():
+        if not isinstance(v, (list, tuple)) or not all(isinstance(x, str) for x in v):
+            raise ValueError(f"场景桶 '{k}' 的成员须为字符串列表: {path}")
+        out[str(k)] = list(v)
+    return out
+
+
 def classify_window(scores: dict[str, float], dbfs: float | None,
                     scene_map: dict[str, list[str]] | None = None,
                     silence_dbfs: float = -50.0,

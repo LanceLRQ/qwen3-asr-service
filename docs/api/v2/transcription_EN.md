@@ -7,6 +7,7 @@ Two ways to transcribe: **offline batch** (upload a whole clip, get the result a
 ## Table of Contents
 
 - [Offline Batch · Submit ASR Task `POST /v2/asr`](#submit-asr-task)
+- [Audio Tagging `POST /v2/audio/tag`](#audio-tagging)
 - [Real-time Transcription `WS /v2/asr/stream`](#real-time-transcription)
   - [Authentication](#authentication)
   - [Message Flow](#message-flow)
@@ -61,6 +62,47 @@ A successful submission returns only the `task_id`; **the recognition result is 
 | 401 | Authentication failed |
 | 413 | File too large (>1GB) |
 | 503 | Service not ready / task queue full |
+
+## Audio Tagging
+
+```
+POST /v2/audio/tag
+Content-Type: multipart/form-data
+```
+
+Tagging only — detects audio events and the scene timeline without transcribing speech. Requires audio tagging to be enabled on the server (`--enable-audio-tagging`).
+
+```bash
+curl -X POST http://127.0.0.1:8765/v2/audio/tag \
+  -F "file=@/path/to/audio.mp3" \
+  -F "with_scene=true"
+```
+
+**Authentication**: when an API key is configured, a Bearer Token is required (otherwise `401`); open when no `api_key` is set.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| file | File | Required | Audio file: same formats as [`POST /v2/asr`](#submit-asr-task) |
+| with_scene | bool | true | Whether to return the scene timeline |
+
+Response (200):
+
+```json
+{
+  "audio_events": [{"label": "Speech", "start_ms": 0, "end_ms": 2000, "confidence": 0.9}],
+  "scene_timeline": [{"label": "speech", "start_ms": 0, "end_ms": 2000}]
+}
+```
+
+- `audio_events`: onset/offset-aggregated event segments (see [Result Structure](tasks_EN.md#result-structure) for the field semantics).
+- `scene_timeline`: run-length-merged contiguous scene segments; omitted / `null` when `with_scene=false`.
+
+| Status Code | Meaning |
+|-------------|---------|
+| 200 | Tagging result returned |
+| 400 | Unsupported audio format |
+| 401 | Authentication failed |
+| 503 | Audio tagging is not enabled on the server |
 
 ## Real-time Transcription
 
@@ -138,6 +180,7 @@ All server-to-client messages use a uniform envelope and carry a `type`:
 | `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` / `limits` | Sent on connect; `capabilities` contains `partial_results` / `word_timestamps` / `languages_auto` / `speaker_labels` / `speaker_identification`, plus tunability flags `noise_filter_tunable` / `speaker_tunable` / `endpoint_tunable` / `output_toggles` (whether the corresponding overrides can be tuned in this session); `limits` contains `max_frame_bytes` / `max_backlog_bytes` — clients pushing faster than real time should pace themselves accordingly (use `final.end` as processing-progress feedback and keep the unprocessed backlog below the limit) |
 | `partial` | `seg_id` / `text` | Intermediate result (only for backends with `partial_results=true`; vad-offline does not produce them) |
 | `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` | Finalized sentence-level result; `start`/`end` in milliseconds; `words` only when `word_timestamps=true`; `speaker` (anonymous label A/B/C…) only when `speaker_labels=true` and this segment is decidable; `speaker_name` only when `identify_speakers=true` and a voiceprint matches (speaker label / real-name semantics in [Speaker Management](speakers_EN.md#speaker-diarization--voiceprint-identification)) |
+| `scene` | `label` / `confidence` / `since` / `scores` | Current scene update (only when `capabilities.stream.scene=true`); `label` is the current scene; `since` is the start timestamp in milliseconds; `scores` holds per-content-bucket representative scores. Emitted only on a state **change** (hysteresis-smoothed) |
 | `error` | `code` / `message` / `seg_id` / `fatal` | The session terminates when `fatal=true` |
 | `session.closed` | `reason` | Session ended |
 
@@ -145,6 +188,12 @@ All server-to-client messages use a uniform envelope and carry a `type`:
 
 ```json
 {"type": "final", "seg_id": 0, "text": "甚至出现交易几乎停滞的情况。", "start": 320, "end": 3520, "words": null}
+```
+
+`scene` example:
+
+```json
+{"type": "scene", "label": "speech", "confidence": 0.86, "since": 1000, "scores": {"speech": 0.86, "singing": 0.0, "music": 0.04}}
 ```
 
 ### Error Codes

@@ -199,6 +199,7 @@ AUDIO_TAGGING_PANNS_VARIANT = "16k" # PANNs 变体："16k"(原生,推荐) | "32k
 AUDIO_TAGGING_TOPK = 5              # 对外返回的 top-K 标签数
 AUDIO_TAGGING_INTERVAL_MS = 960     # 推理窗步长（≈YAMNet 帧；降频省算力）
 SCENE_ENABLE = True                 # 是否输出派生场景视图（关=只给原始 audio_events 标签）
+SCENE_MAP_FILE = None               # 自定义场景映射 yaml/json 路径（None=内置 5 桶通用集）
 SCENE_ENTER_SEC = 2.0              # 迟滞（流式 Phase B）：连续判定 N 秒才进入某场景
 SCENE_EXIT_SEC = 2.0              # 迟滞（流式 Phase B）：连续判定 M 秒才退出
 SCENE_SILENCE_DBFS = -50.0         # 静音判定能量底（复用 noise_gate.rms_dbfs）

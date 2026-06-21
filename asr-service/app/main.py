@@ -183,6 +183,8 @@ def _apply_cli_config(args):
     if getattr(args, "audio_tagging_interval_ms", None) is not None:
         cfg.AUDIO_TAGGING_INTERVAL_MS = args.audio_tagging_interval_ms
     cfg.SCENE_ENABLE = getattr(args, "scene_enable", True)
+    if getattr(args, "scene_map_file", None) is not None:
+        cfg.SCENE_MAP_FILE = args.scene_map_file
     if getattr(args, "scene_enter_sec", None) is not None:
         cfg.SCENE_ENTER_SEC = args.scene_enter_sec
     if getattr(args, "scene_exit_sec", None) is not None:
@@ -218,7 +220,7 @@ def create_app(args=None) -> FastAPI:
     _apply_cli_config(args)
 
     serve_mode = getattr(args, "serve_mode", "standard")
-    app = FastAPI(title="Qwen3-ASR Service", version=os.environ.get("APP_VERSION", "2.2.0"))
+    app = FastAPI(title="Qwen3-ASR Service", version=os.environ.get("APP_VERSION", "2.3.0"))
     # 响应压缩（vendored 前端库 1.7MB → ~426KB；仅作用于 HTTP，WS 不受影响）
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
@@ -363,6 +365,16 @@ def _assemble_standard(app: FastAPI, args) -> None:
                 tagger = None
     tagging_enabled = tagger is not None
 
+    # 自定义场景映射（可选）：加载失败回退内置默认，不中断启动
+    scene_map = None
+    if tagging_enabled and cfg.SCENE_MAP_FILE:
+        from app.runtime import scene_mapper
+        try:
+            scene_map = scene_mapper.load_scene_map(cfg.SCENE_MAP_FILE)
+            logger.info(f"已加载自定义场景映射: {cfg.SCENE_MAP_FILE}（{len(scene_map)} 桶）")
+        except Exception as e:
+            logger.error(f"自定义场景映射加载失败，回退内置默认: {e}")
+
     # 声纹库（可选）：降级矩阵按序检查，任一失败 = ERROR 日志 + 模块关闭、服务继续启动
     speaker_service = None
     speaker_store = None
@@ -406,6 +418,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
         speaker_engine=speaker_engine,
         speaker_service=linked_speaker_service,
         tagger=tagger,
+        scene_map=scene_map,
     )
 
     # 任务持久化（可选）：建库失败只告警不中断启动（附属能力不拖垮主链路）
@@ -504,7 +517,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
     app.include_router(build_common_router("/v2"))
 
     # 离线路由：v1（含 deprecated 别名）+ v2（同名复用）
-    init_routes(task_manager, task_store)
+    init_routes(task_manager, task_store, tagger=tagger, scene_map=scene_map)
     app.include_router(build_offline_router("/v1", include_deprecated=True))
     app.include_router(build_offline_router("/v2"))
 
@@ -539,6 +552,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
             scene_silence_dbfs=cfg.SCENE_SILENCE_DBFS,
             tag_interval_ms=cfg.AUDIO_TAGGING_INTERVAL_MS,
             tag_topk=cfg.AUDIO_TAGGING_TOPK,
+            scene_map=scene_map,
         )
         init_ws_stream(stream_backend)
         app.include_router(ws_router_stream)

@@ -117,13 +117,16 @@ Returns the current serving mode and capability declaration (clients can use it 
   "offline_api": true,
   "speaker_labels": true,
   "speaker_identification": false,
+  "audio_tagging": false,
+  "scene": false,
   "stream": {
     "enabled": true,
     "backend": "vad-offline",
     "path": "/v2/asr/stream",
     "partial_results": false,
     "word_timestamps": true,
-    "speaker_labels": true
+    "speaker_labels": true,
+    "scene": false
   },
   "defaults": {
     "max_segment": 5, "max_end_silence_ms": 800, "max_segment_sec": 12,
@@ -137,9 +140,12 @@ Returns the current serving mode and capability declaration (clients can use it 
 |-------|-------------|
 | speaker_labels | Whether speaker diarization is enabled (offline and real-time share the same switch) |
 | speaker_identification | Whether voiceprint real-name identification is available (enrollment / identify / transcription integration) |
+| audio_tagging | Whether audio tagging is enabled (`--enable-audio-tagging`; gates `POST /v2/audio/tag` and the offline `audio_events` field) |
+| scene | Whether scene detection is available (the offline `segments[].scene` field) |
 | stream.enabled | Whether the real-time endpoint is mounted (requires `--enable-stream`) |
 | stream.backend | `vad-offline` / `vllm-native` (not yet implemented) |
 | stream.partial_results | Whether intermediate `partial` results are produced (false for vad-offline) |
 | stream.word_timestamps | Whether `final` carries word-level timestamps (follows the alignment switch) |
 | stream.speaker_labels | Whether real-time `final` carries speaker labels |
+| stream.scene | Whether the real-time stream emits `scene` messages |
 | defaults | Current effective defaults of the overridable params (real-time `start` fields / offline Form fields), reflecting actual config; used by the Web UI for input placeholders |

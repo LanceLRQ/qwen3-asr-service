@@ -99,6 +99,34 @@ def test_aggregate_events_sorted_by_start():
     assert [e["start_ms"] for e in events] == sorted(e["start_ms"] for e in events)
 
 
+def test_load_scene_map_yaml(tmp_path):
+    p = tmp_path / "m.yaml"
+    p.write_text("speech:\n  - Speech\n  - Conversation\nmusic:\n  - Music\n", encoding="utf-8")
+    m = sm.load_scene_map(str(p))
+    assert m == {"speech": ["Speech", "Conversation"], "music": ["Music"]}
+
+
+def test_load_scene_map_rejects_non_list_member(tmp_path):
+    p = tmp_path / "bad.yaml"
+    p.write_text("speech: not_a_list\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        sm.load_scene_map(str(p))
+
+
+def test_load_scene_map_rejects_empty(tmp_path):
+    p = tmp_path / "empty.yaml"
+    p.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        sm.load_scene_map(str(p))
+
+
+def test_classify_window_honors_custom_map():
+    # 自定义把 Dog 归入 animal 桶
+    custom = {"animal": ["Dog", "Cat"]}
+    label, _ = sm.classify_window({"Dog": 0.8}, dbfs=-20.0, scene_map=custom)
+    assert label == "animal"
+
+
 def test_bucket_scores_takes_member_max():
     bs = sm.bucket_scores({"Singing": 0.6, "Choir": 0.8, "Speech": 0.3, "Music": 0.1})
     assert bs["singing"] == pytest.approx(0.8)   # Choir 是 singing 成员
