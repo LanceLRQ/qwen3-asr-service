@@ -150,6 +150,10 @@
       .sort((a, b) => b[1] - a[1])
       .map(([k, v]) => ({ label: k, pct: Math.round(v * 100) }));
   }
+  // 主场景桶的概率后缀（该桶有分即显示，含文本救回的低分歌声；非内容桶 silence/other 无分则只留标签）
+  function scenePct(scores, key) {
+    return (scores && scores[key] != null) ? ' ' + Math.round(scores[key] * 100) + '%' : '';
+  }
 
   const RT_SR = 16000;
   const FRAME = 3200;                 // 200ms @16k
@@ -713,7 +717,7 @@
         scenePreset, scenePresetOptions,
         streamState, statusText, busy, source,
         capWarning, hint, capParts, capFlags, diag, vuRef,
-        finals, partial, sceneLabel, sceneCls, sceneTags, fmtMs, transcriptRef, spkIdx,
+        finals, partial, sceneLabel, sceneCls, sceneTags, scenePct, fmtMs, transcriptRef, spkIdx,
         logs, logOpen, logRef,
         streamFile, streamFileList, streamFileSize, onStreamUploadChange,
         noThrottle, useFfmpeg, ffLoading, fileProgress, fileRunning,
@@ -873,7 +877,7 @@
                   <div v-if="i > 0 && line.batch !== finals[i - 1].batch" class="transcript-divider"><span>{{ t('result.divider') }}</span></div>
                   <div class="transcript-line">
                     <span class="t">{{ line.start != null ? fmtMs(line.start) : '' }}</span>
-                    <span class="tx"><span v-if="line.scene" class="scene-badge" :class="sceneCls(line.scene)" :title="sceneLabel(line.scene)">{{ sceneLabel(line.scene) }}</span><span v-for="tag in sceneTags(line.sceneScores, line.scene)" :key="tag.label" class="scene-badge" :class="sceneCls(tag.label)" :title="sceneLabel(tag.label)">{{ sceneLabel(tag.label) }} {{ tag.pct }}%</span><span v-if="line.speaker" class="speaker-badge" :class="'spk-' + spkIdx(line.speaker)">{{ line.speakerName || line.speaker }}</span>{{ line.text }}<n-text v-if="line.words" depth="3" style="font-size:.78em;"> {{ t('result.words', line.words) }}</n-text></span>
+                    <span class="tx"><span v-if="line.scene" class="scene-badge" :class="sceneCls(line.scene)" :title="sceneLabel(line.scene)">{{ sceneLabel(line.scene) }}{{ scenePct(line.sceneScores, line.scene) }}</span><span v-for="tag in sceneTags(line.sceneScores, line.scene)" :key="tag.label" class="scene-badge" :class="sceneCls(tag.label)" :title="sceneLabel(tag.label)">{{ sceneLabel(tag.label) }} {{ tag.pct }}%</span><span v-if="line.speaker" class="speaker-badge" :class="'spk-' + spkIdx(line.speaker)">{{ line.speakerName || line.speaker }}</span>{{ line.text }}<n-text v-if="line.words" depth="3" style="font-size:.78em;"> {{ t('result.words', line.words) }}</n-text></span>
                   </div>
                 </template>
                 <div v-if="partial" class="partial-line">{{ partial }}<span class="cursor-blk"></span></div>

@@ -141,6 +141,10 @@
       .sort((a, b) => b[1] - a[1])
       .map(([k, v]) => ({ label: k, pct: Math.round(v * 100) }));
   }
+  // 主场景桶的概率后缀（该桶有分即显示，含文本救回的低分歌声；非内容桶 silence/other 无分则只留标签）
+  function scenePct(scores, key) {
+    return (scores && scores[key] != null) ? ' ' + Math.round(scores[key] * 100) + '%' : '';
+  }
 
   const STATUS_TAG_TYPES = { pending: 'warning', processing: 'info', completed: 'success', failed: 'error', cancelled: 'default' };
   function statusLabel(s) { const v = t('status.' + s); return v === 'status.' + s ? s : v; }
@@ -190,7 +194,7 @@
         return m.score != null ? t('spk.similarity', m.score.toFixed(2)) : '';
       }
       return { result, segments, audioEvents, sceneTimeline, isEmpty, metaTags, jsonText, downloadJson,
-               seek, seekEvent, fmtTime, fmtMs, spkIdx, spkTitle, sceneLabel, sceneCls, sceneTags, t };
+               seek, seekEvent, fmtTime, fmtMs, spkIdx, spkTitle, sceneLabel, sceneCls, sceneTags, scenePct, t };
     },
     template: `
       <div>
@@ -205,7 +209,7 @@
           <div>
             <div v-for="(seg, i) in segments" :key="i" class="seg-row" :class="{ static: !onSeek }" @click="seek(seg)">
               <span class="seg-time">{{ fmtTime(seg.start) }}</span>
-              <span class="seg-text"><span v-if="seg.scene" class="scene-badge" :class="sceneCls(seg.scene)" :title="sceneLabel(seg.scene)">{{ sceneLabel(seg.scene) }}</span><span v-for="tag in sceneTags(seg.scene_scores, seg.scene)" :key="tag.label" class="scene-badge" :class="sceneCls(tag.label)" :title="sceneLabel(tag.label)">{{ sceneLabel(tag.label) }} {{ tag.pct }}%</span><span v-if="seg.speaker" class="speaker-badge" :class="'spk-' + spkIdx(seg.speaker)" :title="spkTitle(seg)">{{ seg.speaker_name || seg.speaker }}</span>{{ seg.text }}</span>
+              <span class="seg-text"><span v-if="seg.scene" class="scene-badge" :class="sceneCls(seg.scene)" :title="sceneLabel(seg.scene)">{{ sceneLabel(seg.scene) }}{{ scenePct(seg.scene_scores, seg.scene) }}</span><span v-for="tag in sceneTags(seg.scene_scores, seg.scene)" :key="tag.label" class="scene-badge" :class="sceneCls(tag.label)" :title="sceneLabel(tag.label)">{{ sceneLabel(tag.label) }} {{ tag.pct }}%</span><span v-if="seg.speaker" class="speaker-badge" :class="'spk-' + spkIdx(seg.speaker)" :title="spkTitle(seg)">{{ seg.speaker_name || seg.speaker }}</span>{{ seg.text }}</span>
               <span v-if="onSeek" class="seg-play"><a-icon name="play" size="14"></a-icon></span>
             </div>
           </div>
