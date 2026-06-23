@@ -37,6 +37,7 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | file | 文件 | 必填 | 音频文件，支持 WAV/MP3/FLAC/M4A/AAC/OGG/WMA/AMR/OPUS |
 | language | string | null | 识别语言提示，`null`/省略=自动检测；取值与归一化规则见[下方说明](#语言代码取值与归一化) |
 | identify_speakers | bool | false | 对分离出的说话人做声纹识别（需说话人分离与[声纹库](speakers.md#说话人分离与声纹识别)均已启用） |
+| return_speaker_id | bool | false | 命中/登记的说话人在 `segments[].speaker_id` 回传声纹库 uuid（供客户端记忆声纹；`result.speakers[]` 映射恒含 `speaker_id`，本开关仅控制是否落到段级） |
 | with_punc | bool | 服务端默认 | 是否做标点恢复（降级开关，只能关；服务端未加载标点模型则本就无标点） |
 | with_words | bool | 服务端默认 | 是否输出词级时间戳（需对齐模型已加载） |
 | diarize | bool | 服务端默认 | 是否做说话人分离（关闭可省算力；需说话人引擎已加载） |
@@ -171,6 +172,7 @@ WS /v2/asr/stream
 | language | null | 识别语言提示，`null`/省略=自动检测；取值与归一化规则同[离线提交](#语言代码取值与归一化)（非法/未识别码降级为自动检测，不报错） |
 | wav_name | "stream" | 会话名（展示用） |
 | identify_speakers | false | 对说话人标签做声纹识别（需 `session.created.capabilities.speaker_identification=true`） |
+| return_speaker_id | false | 命中/登记的说话人在 `final.speaker_id` 回传声纹库 uuid（供客户端记忆声纹）；需同时 `identify_speakers=true` 生效，否则被忽略 |
 | noise_filter | 服务端默认 | 本会话覆盖远场段级过滤开关（缺省沿用服务端配置；需 `capabilities.noise_filter_tunable=true`） |
 | energy_floor_dbfs | 服务端默认 | 本会话覆盖绝对能量门（dBFS），范围 `[-90, 0]`，越界回 `invalid_config` |
 | snr_min_db | 服务端默认 | 本会话覆盖自适应信噪比门（dB），范围 `[0, 40]`，`0`=关闭该门 |
@@ -192,6 +194,20 @@ WS /v2/asr/stream
 
 **`stop`（JSON 文本帧）**：`{"type": "stop"}` —— 冲刷末句后服务端回 `session.closed` 并正常关闭。
 
+**`enroll`（JSON 文本帧，可选）**：会话进行中把某说话人簇显式登记入声纹库，让客户端拿到稳定 uuid。
+
+```json
+{"type": "enroll", "label": "B", "name": "张三", "consent": true}
+```
+
+| 字段 | 说明 |
+|------|------|
+| label | 会话内匿名标签（`final.speaker` 的 A/B/C…） |
+| name | 登记显示名 |
+| consent | 必须为 `true`（声纹属生物识别信息）；否则回 `enroll_failed` |
+
+> 需 `capabilities.speaker_identification=true` 且本会话已开启说话人分离。服务端取该 label 的当前会话质心作单模板登记，成功回 `enroll.ack`（含 `speaker_id`）；该 label 后续 `final` 即带 `speaker_name`/`speaker_id`。登记失败回非致命 `error`（`code="enroll_failed"`，不断连）。也可由服务端开启 `stream_speaker_auto_enroll` 对未命中簇自动登记（默认关）。
+
 ### 服务端 → 客户端
 
 服务端下发的消息均为统一信封，均带 `type`：
@@ -200,7 +216,8 @@ WS /v2/asr/stream
 |------|------|------|
 | `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` / `limits` | 连接建立即下发；`capabilities` 含 `partial_results` / `word_timestamps` / `languages_auto` / `speaker_labels` / `speaker_identification` / `scene`（实时场景通知是否下发），以及可调声明 `noise_filter_tunable` / `speaker_tunable` / `endpoint_tunable` / `output_toggles`（标示对应覆盖项本会话是否可调）；`limits` 含 `max_frame_bytes` / `max_backlog_bytes`，超实时推流的客户端应据此控速（参考 `final.end` 反馈的处理进度，保持未处理积压低于上限） |
 | `partial` | `seg_id` / `text` | 中间结果（仅 `partial_results=true` 的后端，vad-offline 不产生） |
-| `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` / `scene` / `scene_scores` | 句级定稿结果；`start`/`end` 为毫秒；`words` 仅 `word_timestamps=true` 时存在；`speaker`（匿名标签 A/B/C…）仅 `speaker_labels=true` 且本段可判定时存在；`speaker_name` 仅 `identify_speakers=true` 且声纹命中时存在；`scene`（该段主场景）/`scene_scores`（各桶概率分布）仅 `capabilities.stream.scene=true` 时存在，语义同离线 `segments[].scene` / `scene_scores` |
+| `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` / `speaker_id` / `scene` / `scene_scores` | 句级定稿结果；`start`/`end` 为毫秒；`words` 仅 `word_timestamps=true` 时存在；`speaker`（匿名标签 A/B/C…）仅 `speaker_labels=true` 且本段可判定时存在；`speaker_name` 仅 `identify_speakers=true` 且声纹命中时存在；`speaker_id`（声纹库 uuid）仅 `return_speaker_id=true` 且命中/已登记时存在；`scene`（该段主场景）/`scene_scores`（各桶概率分布）仅 `capabilities.stream.scene=true` 时存在，语义同离线 `segments[].scene` / `scene_scores` |
+| `enroll.ack` | `label` / `speaker_id` / `name` | 显式 `enroll` 成功回执：该 label 已登记入库，`speaker_id` 为新分配 uuid |
 | `scene` | `label` / `confidence` / `since` / `scores` | 场景状态切换通知（仅 `capabilities.stream.scene=true` 时下发）：`label` 当前场景；`since` 该场景状态的起始时间戳（毫秒）；`scores` 各内容桶的代表性得分。仅在状态**发生变化**时推送（带迟滞平滑，连续状态只发一次）；逐句场景见 `final.scene` |
 | `error` | `code` / `message` / `seg_id` / `fatal` | `fatal=true` 后会话终止 |
 | `session.closed` | `reason` | 会话结束 |
@@ -227,6 +244,7 @@ WS /v2/asr/stream
 | `frame_too_large` | 否 | 单帧超过 2MB，该帧被丢弃 |
 | `backlog_overflow` | 是 | 处理积压超过 8MB（约 4 分钟音频），会话断开 |
 | `feed_failed` | 否 | 某段音频处理失败，跳过该段继续 |
+| `enroll_failed` | 否 | `enroll` 消息登记失败（缺 consent / 未知 label / 功能未启用 / 库故障），不断连 |
 | `session_timeout` | 是 | 会话超过最长时长（默认 1 小时） |
 | `internal` | 是 | 内部错误 |
 

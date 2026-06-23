@@ -44,7 +44,15 @@
       // 输入源面板
       'panel.input': '输入源', 'input.langPlaceholder': '语言（默认 auto，如 zh / en）',
       'input.identify': '声纹识别（真名标注）',
+      'input.returnId': '返回声纹 ID（UUID，供客户端记忆）',
       'input.appendMode': '追加输出（保留上次结果，分隔续写）',
+      // 声纹登记面板
+      'spk.panel': '声纹登记', 'spk.empty': '说话后此处列出本场说话人',
+      'spk.consent': '我已获得说话人同意（声纹属生物识别信息）',
+      'spk.namePlaceholder': '输入姓名',
+      'spk.enroll': '登记', 'spk.enrolled': '已登记',
+      'spk.needConsent': '请先勾选「已获得说话人同意」',
+      'spk.idTip': '点击复制 UUID', 'spk.copied': '已复制 UUID',
       // 高级设置（随 start 消息按会话覆盖）
       'adv.title': '高级设置（可选覆盖）',
       'adv.hint': '留空＝用服务端默认；关闭开关＝本次会话不执行该步骤。会话进行中不可改。',
@@ -107,7 +115,14 @@
       'diag.unit.sample': 'samples', 'diag.unit.ms': 'ms',
       'panel.input': 'Input source', 'input.langPlaceholder': 'Language (default auto, e.g. zh / en)',
       'input.identify': 'Speaker identification (label real names)',
+      'input.returnId': 'Return voiceprint ID (UUID, for the client to remember)',
       'input.appendMode': 'Append output (keep previous results, continue after a divider)',
+      'spk.panel': 'Voiceprint enrollment', 'spk.empty': 'Speakers will be listed here once they talk',
+      'spk.consent': 'I have the speaker’s consent (voiceprint is biometric data)',
+      'spk.namePlaceholder': 'Enter a name',
+      'spk.enroll': 'Enroll', 'spk.enrolled': 'Enrolled',
+      'spk.needConsent': 'Please confirm consent first',
+      'spk.idTip': 'Click to copy UUID', 'spk.copied': 'UUID copied',
       'adv.title': 'Advanced (optional overrides)',
       'adv.hint': 'Empty = server default; turning a switch off skips that step. Locked while a session is active.',
       'adv.farfield': 'Far-field denoise', 'adv.noiseFilter': 'Segment denoise gate', 'adv.energyFloor': 'Energy gate (dBFS)', 'adv.snrMin': 'SNR gate (dB)',
@@ -204,6 +219,13 @@
       // —— 声纹识别（随 start 消息发送；capabilities 探测到 speaker_identification 才显示开关）——
       const canIdentify = ref(false);
       const identifySpeakers = ref(false);
+      // 返回声纹 UUID（仅 identify 开启才有意义）+ 显式登记所需的同意与命名
+      const returnSpeakerId = ref(false);
+      const consent = ref(false);
+      const enrollName = reactive({});    // label -> 输入框姓名
+      const enrolledMap = reactive({});   // label -> {name, speakerId}（命中/登记后回填，含历史行）
+      // identify 关闭时联动复位 returnSpeakerId（无识别即无 id 可回传）
+      watch(identifySpeakers, (on) => { if (!on) returnSpeakerId.value = false; });
       // —— 高级设置：能力门控标志（precheck 填充）+ 按会话覆盖值（null=不下发，用服务端默认）——
       const srv = reactive({ punc: false, words: false, speaker: false, speakerDb: false, scene: false, defaults: {} });
       // 场景预设（下拉，按会话覆盖）：默认随服务端生效预设；空列表=未暴露则隐藏
@@ -267,10 +289,34 @@
       const appendMode = ref(false);      // 追加输出：开始新会话时不清空结果，按批次派生分隔线续写
       let finalSeq = 0, batchSeq = 0;     // batchSeq：每次追加新会话 +1，渲染层据相邻条目 batch 变化插分隔线
       function appendFinal(m) {
-        finals.push({ key: ++finalSeq, batch: batchSeq, start: m.start, text: m.text || '', words: (m.words && m.words.length) || 0, speaker: m.speaker || null, speakerName: m.speaker_name || null, sceneScores: m.scene_scores || null, scene: m.scene || null });
+        finals.push({ key: ++finalSeq, batch: batchSeq, start: m.start, text: m.text || '', words: (m.words && m.words.length) || 0, speaker: m.speaker || null, speakerName: m.speaker_name || null, speakerId: m.speaker_id || null, sceneScores: m.scene_scores || null, scene: m.scene || null });
+        // 命中/已登记的簇回填会话级映射（驱动登记面板与历史行真名展示）
+        if (m.speaker && (m.speaker_name || m.speaker_id)) {
+          const prev = enrolledMap[m.speaker] || {};
+          enrolledMap[m.speaker] = { name: m.speaker_name || prev.name || null, speakerId: m.speaker_id || prev.speakerId || null };
+        }
         if (finals.length > MAX_TRANSCRIPT_LINES) finals.shift();
       }
-      function clearResults() { finals.length = 0; partial.value = ''; batchSeq = 0; }
+      function clearResults() { finals.length = 0; partial.value = ''; batchSeq = 0; Object.keys(enrolledMap).forEach(k => delete enrolledMap[k]); Object.keys(enrollName).forEach(k => delete enrollName[k]); }
+      // 本场说话人（按 finals 出现去重）+ 命中/登记态，驱动登记面板
+      const sessionSpeakers = computed(() => {
+        const seen = new Map();
+        for (const f of finals) {
+          if (!f.speaker) continue;
+          const e = enrolledMap[f.speaker] || {};
+          seen.set(f.speaker, { label: f.speaker, name: e.name || f.speakerName || null, speakerId: e.speakerId || f.speakerId || null });
+        }
+        return Array.from(seen.values());
+      });
+      function enrollSpeaker(label) {
+        if (!consent.value) { hint.value = t('spk.needConsent'); return; }
+        const name = (enrollName[label] || '').trim();
+        if (!name) return;
+        wsSendJson({ type: 'enroll', label, name, consent: true });
+      }
+      function copyId(id) {
+        if (id && navigator.clipboard) navigator.clipboard.writeText(id).then(() => { hint.value = ''; }).catch(() => {});
+      }
 
       // 满高布局下转写区内部滚动：新 final/partial 到达时跟随滚底
       const transcriptRef = ref(null);
@@ -352,6 +398,7 @@
         const m = { type: 'start', audio_fs: RT_SR, wav_name: 'web-test' };
         if (l && l !== 'auto') m.language = l;
         if (identifySpeakers.value) m.identify_speakers = true;
+        if (returnSpeakerId.value) m.return_speaker_id = true;
         // 远场降噪
         if (adv.noiseFilter) m.noise_filter = true;
         if (adv.energyFloor != null) m.energy_floor_dbfs = adv.energyFloor;
@@ -422,6 +469,11 @@
             if (m.end != null && m.end > procEndMs) procEndMs = m.end;   // 服务端处理进度反馈
             appendFinal(m);
             partial.value = '';
+          } else if (m.type === 'enroll.ack') {
+            // 登记成功：回填映射与历史行（同会话同标签即时显示真名/UUID）
+            enrolledMap[m.label] = { name: m.name, speakerId: m.speaker_id };
+            for (const f of finals) if (f.speaker === m.label) { f.speakerName = m.name; f.speakerId = m.speaker_id; }
+            enrollName[m.label] = '';
           } else if (m.type === 'error') {
             // 仅 params_ignored（功能未启用的覆盖项）为软提示，单独展示；其余 error
             // （含非致命的 feed_failed 等）一律走错误提示，避免真实错误被伪装成警告
@@ -713,7 +765,9 @@
 
       return {
         t,
-        lang, canIdentify, identifySpeakers, appendMode, srv, adv, warn, ph,
+        lang, canIdentify, identifySpeakers, returnSpeakerId, consent, enrollName, enrolledMap,
+        sessionSpeakers, enrollSpeaker, copyId,
+        appendMode, srv, adv, warn, ph,
         scenePreset, scenePresetOptions,
         streamState, statusText, busy, source,
         capWarning, hint, capParts, capFlags, diag, vuRef,
@@ -752,6 +806,9 @@
               </div>
               <n-checkbox v-if="canIdentify" v-model:checked="identifySpeakers" size="small" :disabled="busy || !adv.diarize" style="margin-bottom:12px;">
                 {{ t('input.identify') }}
+              </n-checkbox>
+              <n-checkbox v-if="canIdentify && identifySpeakers" v-model:checked="returnSpeakerId" size="small" :disabled="busy" style="margin-bottom:12px;">
+                {{ t('input.returnId') }}
               </n-checkbox>
               <n-checkbox v-model:checked="appendMode" size="small" :disabled="busy" style="margin-bottom:12px;">
                 {{ t('input.appendMode') }}
@@ -845,6 +902,23 @@
               <n-alert v-if="warn" type="warning" :show-icon="true" :bordered="false" style="margin-top:12px;">{{ t('warn.ignored', warn) }}</n-alert>
             </n-card>
 
+            <n-card v-if="canIdentify && identifySpeakers" :bordered="false" class="panel" size="small">
+              <template #header><span class="panel-title"><a-icon name="mic" size="15"></a-icon>{{ t('spk.panel') }}</span></template>
+              <n-checkbox v-model:checked="consent" size="small" style="margin-bottom:10px;">{{ t('spk.consent') }}</n-checkbox>
+              <n-empty v-if="!sessionSpeakers.length" :description="t('spk.empty')" size="small" style="margin:8px 0;"></n-empty>
+              <div v-for="sp in sessionSpeakers" :key="sp.label" class="spk-enroll-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <span class="speaker-badge" :class="'spk-' + spkIdx(sp.label)">{{ sp.name || sp.label }}</span>
+                <template v-if="sp.name">
+                  <n-tag size="tiny" type="success" :bordered="false">{{ t('spk.enrolled') }}</n-tag>
+                  <n-text v-if="sp.speakerId" depth="3" :title="t('spk.idTip')" style="font-size:.72em;cursor:pointer;font-family:monospace;" @click="copyId(sp.speakerId)">{{ sp.speakerId.slice(0, 8) }}…</n-text>
+                </template>
+                <template v-else>
+                  <n-input v-model:value="enrollName[sp.label]" size="tiny" :placeholder="t('spk.namePlaceholder')" style="flex:1;min-width:80px;"></n-input>
+                  <n-button size="tiny" type="primary" :disabled="!consent || !(enrollName[sp.label] || '').trim()" @click="enrollSpeaker(sp.label)">{{ t('spk.enroll') }}</n-button>
+                </template>
+              </div>
+            </n-card>
+
             <n-card v-if="capParts" :bordered="false" class="panel sess-card" size="small">
               <template #header><span class="panel-title"><a-icon name="chip" size="15"></a-icon>{{ t('sess.title') }}</span></template>
               <div class="sess-proto">
@@ -877,7 +951,7 @@
                   <div v-if="i > 0 && line.batch !== finals[i - 1].batch" class="transcript-divider"><span>{{ t('result.divider') }}</span></div>
                   <div class="transcript-line">
                     <span class="t">{{ line.start != null ? fmtMs(line.start) : '' }}</span>
-                    <span class="tx"><span v-if="line.scene" class="scene-badge" :class="sceneCls(line.scene)" :title="sceneLabel(line.scene)">{{ sceneLabel(line.scene) }}{{ scenePct(line.sceneScores, line.scene) }}</span><span v-for="tag in sceneTags(line.sceneScores, line.scene)" :key="tag.label" class="scene-badge" :class="sceneCls(tag.label)" :title="sceneLabel(tag.label)">{{ sceneLabel(tag.label) }} {{ tag.pct }}%</span><span v-if="line.speaker" class="speaker-badge" :class="'spk-' + spkIdx(line.speaker)">{{ line.speakerName || line.speaker }}</span>{{ line.text }}<n-text v-if="line.words" depth="3" style="font-size:.78em;"> {{ t('result.words', line.words) }}</n-text></span>
+                    <span class="tx"><span v-if="line.scene" class="scene-badge" :class="sceneCls(line.scene)" :title="sceneLabel(line.scene)">{{ sceneLabel(line.scene) }}{{ scenePct(line.sceneScores, line.scene) }}</span><span v-for="tag in sceneTags(line.sceneScores, line.scene)" :key="tag.label" class="scene-badge" :class="sceneCls(tag.label)" :title="sceneLabel(tag.label)">{{ sceneLabel(tag.label) }} {{ tag.pct }}%</span><span v-if="line.speaker" class="speaker-badge" :class="'spk-' + spkIdx(line.speaker)" :title="line.speakerId ? line.speakerId + ' · ' + t('spk.idTip') : ''" :style="line.speakerId ? 'cursor:pointer' : ''" @click="line.speakerId && copyId(line.speakerId)">{{ line.speakerName || line.speaker }}</span>{{ line.text }}<n-text v-if="line.words" depth="3" style="font-size:.78em;"> {{ t('result.words', line.words) }}</n-text></span>
                   </div>
                 </template>
                 <div v-if="partial" class="partial-line">{{ partial }}<span class="cursor-blk"></span></div>

@@ -13,7 +13,7 @@ from uuid import uuid4
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 import app.config as cfg
-from app.api.ws_schemas import SessionCreated, SessionClosed, ErrorMsg
+from app.api.ws_schemas import SessionCreated, SessionClosed, ErrorMsg, EnrollAck
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,20 @@ async def stream(ws: WebSocket):
                         await ws.send_json(r)
                         sent_msgs += 1
                     return
+                if isinstance(item, tuple) and item[0] == "enroll":
+                    # 声纹登记走消费协程（与 final 同一发送方，避免并发写 WS）
+                    try:
+                        ack = await session.handle_enroll(item[1])
+                        await ws.send_json(EnrollAck(**ack).model_dump())
+                    except ValueError as e:
+                        await ws.send_json(ErrorMsg(
+                            code="enroll_failed", message=str(e)).model_dump())
+                    except Exception as e:
+                        logger.warning(f"声纹登记失败: {e}", exc_info=True)
+                        await ws.send_json(ErrorMsg(
+                            code="enroll_failed", message="声纹登记失败").model_dump())
+                    sent_msgs += 1
+                    continue
                 try:
                     async for r in session.feed_audio(item):
                         await ws.send_json(r)
@@ -169,6 +183,9 @@ async def stream(ws: WebSocket):
                     frame_q.put_nowait(None)
                     await consume_task              # 消费完积压并冲刷末句
                     break
+                if typ == "enroll":
+                    # 入队交消费协程处理（保持单一发送方）；payload 解析失败已被上面 try 吞掉
+                    frame_q.put_nowait(("enroll", json.loads(m["text"])))
     except WebSocketDisconnect:
         pass
     except asyncio.TimeoutError:

@@ -22,14 +22,16 @@
 | 层 | 开关 | 产出 |
 |----|------|------|
 | **说话人分离**（匿名） | `enable_speaker` | 离线 `segments[].speaker` 与顶层 `speakers`、实时 `final.speaker`——标签 `A`/`B`/`C`… 按首次开口顺序，**作用域为单文件/单会话**（跨任务不保证同人同标签） |
-| **声纹识别**（真名） | `enable_speaker_db`（依赖上一层 + 必须配置 `api_key`） | 请求级 `identify_speakers=true` 时比对声纹库：命中输出 `speaker_name`；离线未命中且语音足量（默认 ≥10s）的说话人**自动登记**为「说话人_NN」占位名（`speaker_auto_enroll`，可关），改名见[列表 / 详情 / 改名备注 / 删除](#列表--详情--改名备注--删除) |
+| **声纹识别**（真名） | `enable_speaker_db`（依赖上一层 + 必须配置 `api_key`） | 请求级 `identify_speakers=true` 时比对声纹库：命中输出 `speaker_name`；未命中且语音足量（默认 ≥10s）的说话人**自动登记**为「说话人_NN」占位名（离线 `speaker_auto_enroll` 默认开；实时 `stream_speaker_auto_enroll` 默认关），改名见[列表 / 详情 / 改名备注 / 删除](#列表--详情--改名备注--删除) |
 
 要点：
 
 - **失败永远优雅降级**：分离/识别任一环节失败只丢标签/真名，转写结果不受影响。
-- **实时识别"以最新 final 为准"**：早期 final 可能无 `speaker_name`（质心未稳定），后续命中后新 final 携带真名，**不回改历史消息**；实时路径不自动登记。
+- **实时识别"以最新 final 为准"**：早期 final 可能无 `speaker_name`（质心未稳定），后续命中后新 final 携带真名，**不回改历史消息**。
+- **回传声纹 uuid 供客户端记忆**：请求级 `return_speaker_id=true` 时，命中/登记的说话人在离线 `segments[].speaker_id`、实时 `final.speaker_id` 回传声纹库 uuid（实时需同时 `identify_speakers=true`）。离线 `result.speakers[]` 映射恒含 `speaker_id`，本开关仅控制是否落到段级。
+- **实时登记声纹**：除服务端 `stream_speaker_auto_enroll` 自动登记外，客户端可在会话中发 `enroll` 消息把某 `final.speaker` 标签显式登记入库（须 `consent=true`），服务端回 `enroll.ack` 带新 `speaker_id`，该标签后续 final 即带真名/uuid。协议见[转写 · 客户端 → 服务端](transcription.md#客户端--服务端)。
 - `speakers[].speaker_id` 为**纯值快照**：与任务库无关联，说话人被删除后历史任务中的 id 悬空（`GET /v2/speakers/{id}` 返回 404 即"已删除"），调用方需容忍。
-- 自动登记的 consent 语义：开启 `speaker_auto_enroll` 即部署方声明已获得数据主体对声纹登记的同意（与手动登记 `consent=true` 同一责任归属）。
+- 自动登记的 consent 语义：开启 `speaker_auto_enroll` / `stream_speaker_auto_enroll` 即部署方声明已获得数据主体对声纹登记的同意（与手动登记 `consent=true` 同一责任归属）。
 
 转写如何携带 `identify_speakers`：离线见[转写 · 提交 ASR 任务](transcription.md#提交-asr-任务)，实时见[转写 · 客户端 → 服务端](transcription.md#客户端--服务端)；离线结果中的说话人字段见[任务管理 · 结果结构](tasks.md#结果结构)。
 

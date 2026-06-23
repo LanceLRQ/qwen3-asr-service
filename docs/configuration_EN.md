@@ -95,8 +95,11 @@ Reduces false triggers from far-field sounds and ambient noise. `--vad-speech-no
 | `--speaker-id-margin` | 0–1 | `0.10` | top1-top2 margin; if the gap is smaller than this, the result is `unknown` (when neighbors compete, prefer omission over error) |
 | `--speaker-enroll-min-sec` | Seconds | `3.0` | Minimum effective speech per sample for manual enrollment (after VAD) |
 | `--speaker-auto-enroll` / `--no-speaker-auto-enroll` | - | Enabled | Auto-enroll unmatched speakers from offline identification as `Speaker_NN` (**enabling auto-enroll = the deployer declares data-subject consent has been obtained**) |
-| `--speaker-auto-enroll-min-sec` | Seconds | `10.0` | Minimum total speech duration of a cluster for auto-enrollment (stricter than manual enrollment, to reduce noisy records) |
+| `--speaker-auto-enroll-min-sec` | Seconds | `10.0` | Minimum total speech duration of a cluster for auto-enrollment (stricter than manual enrollment, to reduce noisy records); shared by offline and real-time auto-enrollment |
+| `--stream-speaker-auto-enroll` / `--no-stream-speaker-auto-enroll` | - | Disabled | Auto-enroll unmatched speakers from real-time identification (off by default; **enabling = the deployer declares consent has been obtained**). Regardless of this switch, clients can always enroll explicitly via the WS `enroll` message, see [Transcription API](api/v2/transcription_EN.md#client--server) |
 | `--speaker-store-audio` / `--no-speaker-store-audio` | - | Disabled | Retain enrollment sample audio in `data/speaker_audio/` (widens the compliance surface, off by default) |
+
+> **Returning the voiceprint uuid**: per-request switches (no server config needed) — real-time `start` with `return_speaker_id:true` → `final.speaker_id`; offline form `return_speaker_id=true` → `segments[].speaker_id`. Lets clients remember voiceprints across sessions.
 
 ### Audio Tagging (general audio event tagging + derived scene)
 
@@ -201,7 +204,7 @@ bash start.sh --no-config
 
 - YAML only, flat key-value mapping at the top level; all available keys are listed in [`asr-service/config.example.yaml`](../asr-service/config.example.yaml).
 - **Hard validation at startup**: unknown keys (with did-you-mean hints), null values, type errors, out-of-range values and duplicate keys all abort startup with readable errors — typos never take effect silently; all errors are reported at once.
-- Boolean switches set to `true` in the file can be overridden from the CLI with negative flags (`--no-punc` / `--no-web` / `--no-stream` / `--no-align` / `--no-task-store` / `--no-speaker` / `--no-speaker-db` / `--no-speaker-auto-enroll` / `--no-speaker-store-audio`).
+- Boolean switches set to `true` in the file can be overridden from the CLI with negative flags (`--no-punc` / `--no-web` / `--no-stream` / `--no-align` / `--no-task-store` / `--no-speaker` / `--no-speaker-db` / `--no-speaker-auto-enroll` / `--no-stream-speaker-auto-enroll` / `--no-speaker-store-audio`).
 
 ### Security
 

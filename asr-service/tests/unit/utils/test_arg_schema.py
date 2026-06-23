@@ -48,6 +48,7 @@ LEGACY_DEFAULTS = {
     "speaker_enroll_min_sec": 3.0,
     "speaker_auto_enroll": True,
     "speaker_auto_enroll_min_sec": 10.0,
+    "stream_speaker_auto_enroll": False,
     "speaker_store_audio": False,
     # ── 音频标注（Audio Tagging）新增，非重构前遗留 ──
     "enable_audio_tagging": False,
@@ -137,6 +138,7 @@ def test_explicit_default_value_still_present():
     ("--no-speaker", "enable_speaker"),
     ("--no-speaker-db", "enable_speaker_db"),
     ("--no-speaker-auto-enroll", "speaker_auto_enroll"),
+    ("--no-stream-speaker-auto-enroll", "stream_speaker_auto_enroll"),
     ("--no-speaker-store-audio", "speaker_store_audio"),
 ])
 def test_negative_flags_force_false(flag, attr):

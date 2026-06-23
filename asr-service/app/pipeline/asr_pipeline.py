@@ -75,6 +75,7 @@ class ASRPipeline:
         max_segment = opts.get("max_segment")            # None → cfg
         id_threshold = opts.get("speaker_id_threshold")
         id_margin = opts.get("speaker_id_margin")
+        return_speaker_id = bool(opts.get("return_speaker_id", False))
         # 合法但功能未启用的参数 → 软提示（不报错），随 result 返回
         warnings = []
         if opts.get("with_punc") is True and self.punc is None:
@@ -214,6 +215,9 @@ class ASRPipeline:
                         m = name_of.get(seg.get("speaker"))
                         if m and m.get("name"):
                             seg["speaker_name"] = m["name"]
+                        # speaker_id 仅在客户端请求时落到段级（speakers[] 映射恒含 id）
+                        if return_speaker_id and m and m.get("speaker_id"):
+                            seg["speaker_id"] = m["speaker_id"]
                     speakers_result = mapping
                     named = sum(1 for m in mapping if m.get("name"))
                     logger.info(f"[Pipeline] 声纹识别完成: {named}/{len(mapping)} 簇有名")

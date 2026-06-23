@@ -26,6 +26,7 @@
       'upload.title': '上传音频', 'upload.hint': '点击或拖拽上传音频文件',
       'upload.formats': 'wav / mp3 / flac / m4a / aac / ogg / wma / amr / opus',
       'upload.identify': '声纹识别（标注真名，未知说话人自动登记）',
+      'upload.returnId': '返回声纹 ID（UUID，供客户端记忆）',
       'upload.tagOnly': '仅标注（不转写）', 'upload.tagScene': '包含场景时间线',
       'action.tagging': '标注中…', 'action.tag': '开始标注',
       'scene.preset': '场景预设',
@@ -87,6 +88,7 @@
       'upload.title': 'Upload audio', 'upload.hint': 'Click or drag to upload an audio file',
       'upload.formats': 'wav / mp3 / flac / m4a / aac / ogg / wma / amr / opus',
       'upload.identify': 'Speaker identification (label real names, auto-enroll unknowns)',
+      'upload.returnId': 'Return voiceprint ID (UUID, for the client to remember)',
       'upload.tagOnly': 'Tag only (no transcription)', 'upload.tagScene': 'Include scene timeline',
       'action.tagging': 'Tagging…', 'action.tag': 'Start tagging',
       'scene.preset': 'Scene preset',
@@ -189,9 +191,13 @@
       });
       function spkTitle(seg) {
         const m = spkMeta.value[seg.speaker];
-        if (!m) return seg.speaker_name ? '' : t('spk.anonymous');
-        if (m.auto_enrolled) return t('spk.autoEnrolled');
-        return m.score != null ? t('spk.similarity', m.score.toFixed(2)) : '';
+        const id = (m && m.speaker_id) || seg.speaker_id || null;   // 声纹库 uuid（命中/登记才有）
+        const idPart = id ? 'UUID: ' + id : '';
+        let base;
+        if (!m) base = seg.speaker_name ? '' : t('spk.anonymous');
+        else if (m.auto_enrolled) base = t('spk.autoEnrolled');
+        else base = m.score != null ? t('spk.similarity', m.score.toFixed(2)) : '';
+        return [base, idPart].filter(Boolean).join(' · ');
       }
       return { result, segments, audioEvents, sceneTimeline, isEmpty, metaTags, jsonText, downloadJson,
                seek, seekEvent, fmtTime, fmtMs, spkIdx, spkTitle, sceneLabel, sceneCls, sceneTags, scenePct, t };
@@ -280,6 +286,8 @@
       // —— 声纹识别（请求级 opt-in；capabilities 探测到 speaker_identification 才显示开关）——
       const canIdentify = ref(false);
       const identifySpeakers = ref(false);
+      const returnSpeakerId = ref(false);      // 段级回传声纹库 uuid（result.speakers[] 恒含 id）
+      watch(identifySpeakers, (on) => { if (!on) returnSpeakerId.value = false; });
       // —— 高级设置门控标志（/v2/health）+ 按请求覆盖值（null=不下发，用服务端默认）——
       const srv = reactive({ punc: false, align: false, speaker: false, speakerDb: false, tagging: false, defaults: {} });
       // 仅标注（不转写）：勾选后改调 /v2/audio/tag 同步返回事件/场景；tagScene 控制是否带场景时间线
@@ -363,6 +371,7 @@
         const form = new FormData();
         form.append('file', selectedFile.value);
         if (identifySpeakers.value) form.append('identify_speakers', 'true');
+        if (returnSpeakerId.value) form.append('return_speaker_id', 'true');
         // 降级开关：仅在功能已加载且用户关闭时下发 false（不下发＝沿用服务端默认）
         if (srv.punc && adv.withPunc === false) form.append('with_punc', 'false');
         if (srv.align && adv.withWords === false) form.append('with_words', 'false');
@@ -590,7 +599,7 @@
 
       return {
         uploadFileList, onUploadChange, fileSize, audioSrc, audioRef, selectedFile,
-        canIdentify, identifySpeakers, srv, adv, ph, tagOnly, tagScene,
+        canIdentify, identifySpeakers, returnSpeakerId, srv, adv, ph, tagOnly, tagScene,
         scenePreset, scenePresets, scenePresetOptions,
         current, progressPct, submit, cancelTask, seekAudio,
         taskList, toggleTaskList, manualRefresh, filterOptions, columns, rowProps,
@@ -632,6 +641,9 @@
                 </div>
                 <n-checkbox v-if="canIdentify && !tagOnly" v-model:checked="identifySpeakers" size="small" :disabled="!adv.diarize" style="margin-top:12px;">
                   {{ t('upload.identify') }}
+                </n-checkbox>
+                <n-checkbox v-if="canIdentify && !tagOnly && identifySpeakers" v-model:checked="returnSpeakerId" size="small" style="margin-top:8px;">
+                  {{ t('upload.returnId') }}
                 </n-checkbox>
                 <n-collapse v-if="!tagOnly" style="margin-top:12px;">
                   <n-collapse-item :title="t('adv.title')" name="adv">

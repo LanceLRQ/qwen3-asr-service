@@ -102,6 +102,7 @@ async def submit_asr(
     file: UploadFile = File(...),
     language: str | None = Form(None),
     identify_speakers: bool = Form(False),
+    return_speaker_id: bool = Form(False),
     with_punc: bool | None = Form(None),
     with_words: bool | None = Form(None),
     diarize: bool | None = Form(None),
@@ -128,6 +129,8 @@ async def submit_asr(
             options["with_words"] = with_words
         if diarize is not None:
             options["diarize"] = diarize
+        if return_speaker_id:
+            options["return_speaker_id"] = True
         if max_segment is not None:
             options["max_segment"] = coerce_num_in_range(
                 max_segment, MAX_SEGMENT_RANGE, "max_segment", cast=int)

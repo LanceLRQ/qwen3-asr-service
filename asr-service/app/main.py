@@ -171,6 +171,7 @@ def _apply_cli_config(args):
     cfg.SPEAKER_AUTO_ENROLL = getattr(args, "speaker_auto_enroll", True)
     if getattr(args, "speaker_auto_enroll_min_sec", None) is not None:
         cfg.SPEAKER_AUTO_ENROLL_MIN_SEC = args.speaker_auto_enroll_min_sec
+    cfg.STREAM_SPEAKER_AUTO_ENROLL = getattr(args, "stream_speaker_auto_enroll", False)
     cfg.SPEAKER_STORE_AUDIO = getattr(args, "speaker_store_audio", False)
     # 音频标注
     cfg.ENABLE_AUDIO_TAGGING = getattr(args, "enable_audio_tagging", False)

@@ -95,8 +95,11 @@
 | `--speaker-id-margin` | 0–1 | `0.10` | top1-top2 margin，差距小于此判 unknown（近邻打架宁缺勿错） |
 | `--speaker-enroll-min-sec` | 秒 | `3.0` | 手动登记单样本最短有效语音（VAD 后） |
 | `--speaker-auto-enroll` / `--no-speaker-auto-enroll` | - | 开启 | 离线识别未命中的说话人自动以「说话人_NN」登记（**开启 = 部署方声明已获数据主体同意**） |
-| `--speaker-auto-enroll-min-sec` | 秒 | `10.0` | 自动登记的簇最短语音总时长（严于手动登记，降低噪声建档） |
+| `--speaker-auto-enroll-min-sec` | 秒 | `10.0` | 自动登记的簇最短语音总时长（严于手动登记，降低噪声建档），离线/实时自动登记共用 |
+| `--stream-speaker-auto-enroll` / `--no-stream-speaker-auto-enroll` | - | 关闭 | 实时识别未命中的说话人自动登记（默认关；**开启 = 部署方声明已获同意**）。无论开关，客户端始终可经 WS `enroll` 消息显式登记，详见 [转写 API](api/v2/transcription.md#客户端--服务端) |
 | `--speaker-store-audio` / `--no-speaker-store-audio` | - | 关闭 | 留存登记样本音频到 `data/speaker_audio/`（扩大合规面，默认关） |
+
+> **回传声纹 uuid**：请求级开关（无需服务端配置）——实时 `start` 带 `return_speaker_id:true` → `final.speaker_id`；离线表单 `return_speaker_id=true` → `segments[].speaker_id`。供客户端跨会话记忆声纹。
 
 ### 音频标注（通用音频事件标注 + 派生场景）
 
@@ -212,7 +215,7 @@ bash start.sh --no-config
 
 - 仅支持 YAML，顶层为扁平键值映射；全部可配键见 [`asr-service/config.example.yaml`](../asr-service/config.example.yaml)。
 - **启动时硬校验**：未知键（带近似拼写提示）、空值、类型错误、取值越界、重复键均直接报错退出，防止拼写错误静默生效；多处错误一次性全部报出。
-- 布尔开关在配置文件设 `true` 后，命令行可用反向参数覆盖（`--no-punc` / `--no-web` / `--no-stream` / `--no-align` / `--no-task-store` / `--no-speaker` / `--no-speaker-db` / `--no-speaker-auto-enroll` / `--no-speaker-store-audio`）。
+- 布尔开关在配置文件设 `true` 后，命令行可用反向参数覆盖（`--no-punc` / `--no-web` / `--no-stream` / `--no-align` / `--no-task-store` / `--no-speaker` / `--no-speaker-db` / `--no-speaker-auto-enroll` / `--no-stream-speaker-auto-enroll` / `--no-speaker-store-audio`）。
 
 ### 安全
 

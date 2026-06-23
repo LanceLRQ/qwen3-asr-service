@@ -41,6 +41,7 @@ def run_vllm_offline(engine, task, *, progress_callback=None, cancelled=None,
     diarize = opts.get("diarize", True)
     id_threshold = opts.get("speaker_id_threshold")
     id_margin = opts.get("speaker_id_margin")
+    return_speaker_id = bool(opts.get("return_speaker_id", False))
 
     speaker_enabled = speaker_engine is not None
     # 声纹识别真正能跑的前提：声纹库 + 说话人引擎 + diarize 同时就位（对齐 asr_pipeline）
@@ -83,7 +84,7 @@ def run_vllm_offline(engine, task, *, progress_callback=None, cancelled=None,
             speakers = _diarize_and_identify(
                 speaker_engine, speaker_service, energy_vad, wav_path, segments, duration,
                 identify_speakers=identify_speakers, id_threshold=id_threshold, id_margin=id_margin,
-                progress_callback=progress_callback)
+                return_speaker_id=return_speaker_id, progress_callback=progress_callback)
 
         if progress_callback:
             progress_callback(1.0)
@@ -156,7 +157,7 @@ def _collect_warnings(engine, opts: dict, identify_speakers: bool, *,
 
 def _diarize_and_identify(speaker_engine, speaker_service, energy_vad, wav_path, segments,
                           duration, *, identify_speakers, id_threshold, id_margin,
-                          progress_callback=None):
+                          return_speaker_id=False, progress_callback=None):
     """说话人分离（+可选声纹识别/自动登记），就地给 segments 叠加 speaker/speaker_name。
 
     返回 speakers（labels_in_order 列表，或识别后带 speaker_id/name 的簇映射），无法分离
@@ -211,6 +212,9 @@ def _diarize_and_identify(speaker_engine, speaker_service, energy_vad, wav_path,
                 m = name_of.get(seg.get("speaker"))
                 if m and m.get("name"):
                     seg["speaker_name"] = m["name"]
+                # speaker_id 仅在客户端请求时落到段级（speakers[] 映射恒含 id）
+                if return_speaker_id and m and m.get("speaker_id"):
+                    seg["speaker_id"] = m["speaker_id"]
             speakers = mapping
             named = sum(1 for m in mapping if m.get("name"))
             logger.info(f"[vllm-offline] 声纹识别完成: {named}/{len(mapping)} 簇有名")

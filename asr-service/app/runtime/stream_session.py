@@ -116,7 +116,9 @@ class StreamSession:
         self._spk_cluster = None                 # configure() 时重建（会话域）
         self._speaker_service = speaker_service  # None = 声纹库未启用
         self._identify = False                   # start 消息 identify_speakers 开关
-        self._spk_name_cache = {}                # label -> {"name", "count", "ver"}（会话级簇缓存）
+        self._return_speaker_id = False          # start 消息 return_speaker_id：final 回传 uuid
+        self._spk_name_cache = {}                # label -> {"name", "speaker_id", "count", "ver"}（会话级簇缓存）
+        self._spk_dur_ms = {}                    # label -> 累计语音 ms（自动/显式登记的时长门槛与模板 dur）
         self._noise_filter = noise_filter        # 段级远场/环境音门控开关（opt-in）
         self._energy_floor_dbfs = energy_floor_dbfs
         self._snr_min_db = snr_min_db
@@ -193,7 +195,9 @@ class StreamSession:
         else:
             self._spk_cluster = None
         self._identify = bool(cfg_msg.get("identify_speakers", False))
+        self._return_speaker_id = bool(cfg_msg.get("return_speaker_id", False))
         self._spk_name_cache = {}
+        self._spk_dur_ms = {}
         self._noise_tracker = NoiseFloorTracker() if self._noise_filter else None
         self._scene_chunks = []
         self._scene_samples = 0
@@ -283,6 +287,10 @@ class StreamSession:
                 ignored.append(k)
         if cfg_msg.get("identify_speakers") is True and not spk_id_ready:
             ignored.append("identify_speakers")
+        # return_speaker_id 依赖 identify 实际生效（命中/登记才有 id 可回传）
+        if cfg_msg.get("return_speaker_id") is True and not (
+                spk_id_ready and cfg_msg.get("identify_speakers") is True):
+            ignored.append("return_speaker_id")
         if cfg_msg.get("with_words") is True and not self._enable_words:
             ignored.append("with_words")
         if cfg_msg.get("with_punc") is True and self._punc is None:
@@ -409,16 +417,23 @@ class StreamSession:
         # 说话人判定：CPU 任务，在 _asr_sem 之外、线程池内执行（体例同标点）
         spk = None
         spk_name = None
+        spk_id = None
         if self._spk_cluster is not None:
             try:
                 emb = await self._in_thread(self._speaker.embed_segment, seg)
                 spk = self._spk_cluster.assign(emb, int(end_ms - start_ms))
             except Exception as e:
                 logger.warning(f"说话人判定失败，本段不标注: {e}")
+            # 累计本簇语音时长：供显式/自动登记的时长门槛与模板 dur（短段也算入归属簇）
+            if spk is not None:
+                self._spk_dur_ms[spk] = self._spk_dur_ms.get(spk, 0) + int(end_ms - start_ms)
             # 声纹识别（可选）：以"当时"质心查库，不回改历史（以最新 final 为准）
             if spk is not None and self._identify and self._speaker_service is not None:
                 try:
-                    spk_name = await self._in_thread(self._lookup_speaker_name, spk)
+                    hit = await self._in_thread(self._lookup_speaker, spk)
+                    if hit:
+                        spk_name = hit.get("name")
+                        spk_id = hit.get("speaker_id")
                 except Exception as e:
                     logger.warning(f"声纹识别失败，本段不带真名: {e}")
         logger.info(f"[stream] final#{self.seg_id} 段[{int(start_ms)},{int(end_ms)}]"
@@ -438,6 +453,8 @@ class StreamSession:
             msg["speaker"] = spk
         if spk_name is not None:
             msg["speaker_name"] = spk_name
+        if self._return_speaker_id and spk_id is not None:
+            msg["speaker_id"] = spk_id
         # per-seg scene（与离线同款：重叠加权聚合 + 文本感知歌声修正），复用已留存的窗级分数
         if self._scene_enable and self._scene_window_log:
             self._attach_scene(msg, start_ms, end_ms, text)
@@ -476,13 +493,15 @@ class StreamSession:
         msg["scene"] = label
         msg["scene_scores"] = bs
 
-    def _lookup_speaker_name(self, spk: str) -> str | None:
-        """会话级簇缓存的声纹查询（同步，线程池内执行）。
+    def _lookup_speaker(self, spk: str) -> dict | None:
+        """会话级簇缓存的声纹查询 + 可选自动登记（同步，线程池内执行）。
 
-        缓存失效（满足任一即重查）：
+        返回 {"name", "speaker_id"}（任一可为 None）或 None。缓存失效（满足任一即重查）：
         ① 簇质心累计段数达上次查询的 2 倍——早期 unknown 随质心稳定升级命中；
         ② 声纹库 cache_version 变化——外部登记/改名/删除即时可见。
-        均不回改历史 final。
+        未命中且 STREAM_SPEAKER_AUTO_ENROLL 开启且簇语音总时长过门槛 → 自动以「说话人_NN」
+        登记并回传新 speaker_id（部署方开关声明已获同意，与离线 map_and_enroll 同责）。
+        显式登记（enroll 消息）写入的 id 经缓存命中即时生效。均不回改历史 final。
         """
         cluster = self._spk_cluster      # 本地引用：release() 并发置 None 防护
         if cluster is None:
@@ -492,16 +511,63 @@ class StreamSession:
         cached = self._spk_name_cache.get(spk)
         if (cached is not None and cached["ver"] == ver
                 and count < cached["count"] * 2):
-            return cached["name"]
+            return cached
         centroid = cluster.centroid_of(spk)
         if centroid is None:
-            return cached["name"] if cached else None
+            return cached
         mapping = self._speaker_service.map_clusters(
             [{"label": spk, "centroid": centroid}],
             id_threshold=self._spk_id_threshold, id_margin=self._spk_id_margin)
-        name = mapping[0]["name"] if mapping else None
-        self._spk_name_cache[spk] = {"name": name, "count": count, "ver": ver}
-        return name
+        hit = mapping[0] if mapping else None
+        result = ({"name": hit.get("name"), "speaker_id": hit.get("speaker_id")}
+                  if hit and hit.get("speaker_id") else {"name": None, "speaker_id": None})
+        # 未命中 + 实时自动登记开启 + 簇时长过门槛 → 登记占位名（一次性，登记后经缓存复用）
+        if (result["speaker_id"] is None and cfg.STREAM_SPEAKER_AUTO_ENROLL
+                and self._spk_dur_ms.get(spk, 0) >= cfg.SPEAKER_AUTO_ENROLL_MIN_SEC * 1000):
+            try:
+                name = self._speaker_service.store.alloc_auto_name()
+                sid = self._speaker_service.enroll_cluster(
+                    name, centroid, self._spk_dur_ms.get(spk, 0) / 1000.0,
+                    consent=True, source="auto")
+                result = {"name": name, "speaker_id": sid}
+                ver = self._speaker_service.store.cache_version
+                logger.info(f"[stream] 自动登记说话人 {spk}→{name} id={sid[:8]}")
+            except Exception as e:
+                logger.warning(f"实时自动登记失败，退回匿名: {e}")
+        self._spk_name_cache[spk] = {**result, "count": count, "ver": ver}
+        return result
+
+    async def handle_enroll(self, payload: dict) -> dict:
+        """处理客户端 enroll 消息：把会话内某 label 的当前质心登记入声纹库。
+
+        校验 → 线程池内同步登记 → 返回 enroll.ack 体（label/speaker_id/name）。
+        校验失败抛 ValueError（路由转 enroll_failed 软错误，不断连）。
+        """
+        label = payload.get("label")
+        name = (payload.get("name") or "").strip()
+        if not label or not name:
+            raise ValueError("enroll 需要 label 和 name")
+        if payload.get("consent") is not True:
+            raise ValueError("登记必须携带 consent=true（确认已获数据主体同意）")
+        if self._speaker_service is None or self._spk_cluster is None:
+            raise ValueError("声纹登记不可用：需开启说话人分离 + 声纹库")
+        return await self._in_thread(self._enroll_cluster_sync, label, name)
+
+    def _enroll_cluster_sync(self, label: str, name: str) -> dict:
+        cluster = self._spk_cluster      # 本地引用：release() 并发置 None 防护
+        centroid = cluster.centroid_of(label) if cluster is not None else None
+        if centroid is None:
+            raise ValueError(f"未知说话人标签: {label}")
+        dur = self._spk_dur_ms.get(label, 0) / 1000.0
+        sid = self._speaker_service.enroll_cluster(
+            name, centroid, dur, consent=True, source="manual")
+        self._spk_name_cache[label] = {
+            "name": name, "speaker_id": sid,
+            "count": max(cluster.count_of(label), 1),
+            "ver": self._speaker_service.store.cache_version,
+        }
+        logger.info(f"[stream] 显式登记说话人 {label}→{name} id={sid[:8]}")
+        return {"label": label, "speaker_id": sid, "name": name}
 
     async def _maybe_emit_scene(self, arr):
         """累积音频满一个推理窗即打标 → 迟滞平滑 → 状态切换时产出 scene 信封。
@@ -639,6 +705,7 @@ class VadOfflineBackend:
                 session.vad_cache = None
                 session._spk_cluster = None    # 会话域语义：质心状态随会话释放
                 session._spk_name_cache = {}   # 声纹簇缓存同步清空
+                session._spk_dur_ms = {}       # 簇时长累计随会话释放
                 session._noise_tracker = None  # 噪声底估计随会话释放
                 session._scene_smoother = None # 场景平滑状态随会话释放
                 session._scene_chunks = []

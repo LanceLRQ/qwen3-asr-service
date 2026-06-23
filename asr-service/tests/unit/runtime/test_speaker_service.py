@@ -219,3 +219,25 @@ def test_auto_enroll_failure_falls_back_anonymous(env, store):
     store.close()                                        # alloc/enroll 将失败
     out = svc.map_and_enroll_clusters([_cluster("A", unit(0), 12.0)])
     assert out[0]["speaker_id"] is None                  # 退回匿名，不抛错
+
+
+# ─── enroll_cluster：实时显式/自动登记从会话质心入库（本特性）───
+
+def test_enroll_cluster_creates_speaker(env, store):
+    svc = make_service(store)
+    sid = svc.enroll_cluster("李四", unit(3), 8.0, consent=True, source="manual")
+    info = store.get_speaker(sid)
+    assert info["name"] == "李四"
+    assert info["source"] == "manual"
+    assert len(info["templates"]) == 1
+    # 入库质心可被 1:N 识别回命中
+    hit = store.identify(unit(3), threshold=cfg.SPEAKER_ID_THRESHOLD,
+                         margin=cfg.SPEAKER_ID_MARGIN)
+    assert hit is not None and hit["speaker_id"] == sid
+
+
+def test_enroll_cluster_requires_consent(env, store):
+    svc = make_service(store)
+    with pytest.raises(Exception):
+        svc.enroll_cluster("李四", unit(3), 8.0, consent=False)
+    assert store.speaker_count == 0

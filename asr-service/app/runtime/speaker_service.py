@@ -185,6 +185,17 @@ class SpeakerService:
                 out.append(self._anon(label))
         return out
 
+    def enroll_cluster(self, name: str, centroid: np.ndarray, dur_sec: float,
+                       consent: bool, source: str = "manual") -> str:
+        """以会话簇质心作单模板登记说话人，返回 speaker_id（实时显式/自动登记共用）。
+
+        centroid 须 L2 归一 [192]（OnlineSpeakerClusterer 质心天然满足）；consent 由调用方
+        把关（显式登记=客户端勾选，自动登记=部署方开关声明）。后续可经 HTTP add_template 补样本。
+        """
+        vec = np.asarray(centroid, dtype=np.float32).reshape(-1)
+        return self.store.enroll_speaker(
+            name, None, [vec], [float(dur_sec)], consent=consent, source=source)
+
     def map_and_enroll_clusters(self, clusters: list[dict], *,
                                 id_threshold: float | None = None,
                                 id_margin: float | None = None) -> list[dict]:

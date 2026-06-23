@@ -352,6 +352,18 @@ ARG_SPECS = (
                 "(stricter than manual) (default: 10.0)",
     ),
     ArgSpec(
+        key="stream_speaker_auto_enroll", flags=("--stream-speaker-auto-enroll",),
+        default=False, type=bool, group="声纹库",
+        help="实时识别未命中的簇自动以「说话人_NN」登记（默认关；开启=部署方声明已获同意）；"
+             "客户端始终可经 WS enroll 消息显式登记",
+        help_en="Auto-enroll unmatched realtime clusters as 'Speaker_NN' (off by default; "
+                "enabling = deployer asserts consent); clients can always enroll explicitly "
+                "via the WS enroll message",
+        negative_flags=("--no-stream-speaker-auto-enroll",),
+        negative_help="关闭实时自动登记（覆盖配置文件）",
+        negative_help_en="Disable realtime auto-enrollment (overrides config file)",
+    ),
+    ArgSpec(
         key="speaker_store_audio", flags=("--speaker-store-audio",), default=False, type=bool,
         group="声纹库",
         help="留存登记样本音频到 data/speaker_audio/（扩大合规面，默认关）",
