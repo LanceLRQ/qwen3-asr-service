@@ -202,11 +202,14 @@ WS /v2/asr/stream
 
 | 字段 | 说明 |
 |------|------|
-| label | 会话内匿名标签（`final.speaker` 的 A/B/C…） |
-| name | 登记显示名 |
+| label | 会话内匿名标签（`final.speaker` 的 A/B/C…），最长 32 字符 |
+| name | 登记显示名，最长 128 字符 |
 | consent | 必须为 `true`（声纹属生物识别信息）；否则回 `enroll_failed` |
 
-> 需 `capabilities.speaker_identification=true` 且本会话已开启说话人分离。服务端取该 label 的当前会话质心作单模板登记，成功回 `enroll.ack`（含 `speaker_id`）；该 label 后续 `final` 即带 `speaker_name`/`speaker_id`。登记失败回非致命 `error`（`code="enroll_failed"`，不断连）。也可由服务端开启 `stream_speaker_auto_enroll` 对未命中簇自动登记（默认关）。
+> 需 `capabilities.speaker_identification=true` 且本会话已开启说话人分离。服务端取该 label 的当前会话质心作单模板登记，成功回 `enroll.ack`（含 `speaker_id`）；该 label 后续 `final` 即带 `speaker_name`/`speaker_id`。
+> 质量门槛：该 label 已累计的有效语音须 ≥ `speaker_enroll_min_sec`（默认 3s，与离线手动登记一致），不足则回 `enroll_failed`，请让该说话人多说几句后再试。
+> 查重：若该 label 的质心已匹配库中既有说话人，则**追加模板复用其 `speaker_id`**（不重复建档；既有为占位名「说话人_NN」时自动改为本次 `name`），`enroll.ack.matched_existing=true`。
+> 登记失败一律回非致命 `error`（`code="enroll_failed"`，不断连）。也可由服务端开启 `stream_speaker_auto_enroll` 对未命中簇自动登记（默认关）。
 
 ### 服务端 → 客户端
 
@@ -217,7 +220,7 @@ WS /v2/asr/stream
 | `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` / `limits` | 连接建立即下发；`capabilities` 含 `partial_results` / `word_timestamps` / `languages_auto` / `speaker_labels` / `speaker_identification` / `scene`（实时场景通知是否下发），以及可调声明 `noise_filter_tunable` / `speaker_tunable` / `endpoint_tunable` / `output_toggles`（标示对应覆盖项本会话是否可调）；`limits` 含 `max_frame_bytes` / `max_backlog_bytes`，超实时推流的客户端应据此控速（参考 `final.end` 反馈的处理进度，保持未处理积压低于上限） |
 | `partial` | `seg_id` / `text` | 中间结果（仅 `partial_results=true` 的后端，vad-offline 不产生） |
 | `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` / `speaker_id` / `scene` / `scene_scores` | 句级定稿结果；`start`/`end` 为毫秒；`words` 仅 `word_timestamps=true` 时存在；`speaker`（匿名标签 A/B/C…）仅 `speaker_labels=true` 且本段可判定时存在；`speaker_name` 仅 `identify_speakers=true` 且声纹命中时存在；`speaker_id`（声纹库 uuid）仅 `return_speaker_id=true` 且命中/已登记时存在；`scene`（该段主场景）/`scene_scores`（各桶概率分布）仅 `capabilities.stream.scene=true` 时存在，语义同离线 `segments[].scene` / `scene_scores` |
-| `enroll.ack` | `label` / `speaker_id` / `name` | 显式 `enroll` 成功回执：该 label 已登记入库，`speaker_id` 为新分配 uuid |
+| `enroll.ack` | `label` / `speaker_id` / `name` / `matched_existing` | 显式 `enroll` 成功回执：`speaker_id` 为该说话人 uuid，`name` 为最终显示名；`matched_existing=true` 表示命中既有说话人并追加模板（未新建） |
 | `scene` | `label` / `confidence` / `since` / `scores` | 场景状态切换通知（仅 `capabilities.stream.scene=true` 时下发）：`label` 当前场景；`since` 该场景状态的起始时间戳（毫秒）；`scores` 各内容桶的代表性得分。仅在状态**发生变化**时推送（带迟滞平滑，连续状态只发一次）；逐句场景见 `final.scene` |
 | `error` | `code` / `message` / `seg_id` / `fatal` | `fatal=true` 后会话终止 |
 | `session.closed` | `reason` | 会话结束 |
@@ -244,7 +247,7 @@ WS /v2/asr/stream
 | `frame_too_large` | 否 | 单帧超过 2MB，该帧被丢弃 |
 | `backlog_overflow` | 是 | 处理积压超过 8MB（约 4 分钟音频），会话断开 |
 | `feed_failed` | 否 | 某段音频处理失败，跳过该段继续 |
-| `enroll_failed` | 否 | `enroll` 消息登记失败（缺 consent / 未知 label / 功能未启用 / 库故障），不断连 |
+| `enroll_failed` | 否 | `enroll` 消息登记失败（格式不合法 / 缺 consent / 未知 label / 样本时长不足 / 功能未启用 / 库故障），不断连 |
 | `session_timeout` | 是 | 会话超过最长时长（默认 1 小时） |
 | `internal` | 是 | 内部错误 |
 

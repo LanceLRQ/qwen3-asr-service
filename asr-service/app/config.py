@@ -162,6 +162,7 @@ STREAM_ASR_CONCURRENCY = 1      # ASR 解码并发上限（模型层有推理锁
 STREAM_MAX_SEGMENT_SEC = 12     # 长无停顿句兜底切分阈值（秒）
 STREAM_MAX_SESSION_SECONDS = 3600   # 单会话最长时长（秒），超时回 session_timeout 并关闭
 STREAM_MAX_FRAME_BYTES = 2 * 1024 * 1024    # 单条二进制帧上限（字节），超限拒帧不断连
+STREAM_MAX_TEXT_BYTES = 8 * 1024            # 单条控制文本帧上限（字节）：start/stop/enroll 均为小 JSON，超限丢弃
 STREAM_MAX_BACKLOG_BYTES = 8 * 1024 * 1024  # 会话处理积压上限（字节），超限回 backlog_overflow 断开
                                             # （16kHz PCM16 约合 4 分钟积压；离线/流式争抢推理时的保护阀）
 STREAM_SAMPLE_RATE = 16000      # 内部统一采样率

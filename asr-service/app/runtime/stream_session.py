@@ -119,6 +119,7 @@ class StreamSession:
         self._return_speaker_id = False          # start 消息 return_speaker_id：final 回传 uuid
         self._spk_name_cache = {}                # label -> {"name", "speaker_id", "count", "ver"}（会话级簇缓存）
         self._spk_dur_ms = {}                    # label -> 累计语音 ms（自动/显式登记的时长门槛与模板 dur）
+        self._auto_enrolled = set()              # 本会话已自动登记的 label（幂等：不重复自动登记同一人）
         self._noise_filter = noise_filter        # 段级远场/环境音门控开关（opt-in）
         self._energy_floor_dbfs = energy_floor_dbfs
         self._snr_min_db = snr_min_db
@@ -198,6 +199,7 @@ class StreamSession:
         self._return_speaker_id = bool(cfg_msg.get("return_speaker_id", False))
         self._spk_name_cache = {}
         self._spk_dur_ms = {}
+        self._auto_enrolled = set()
         self._noise_tracker = NoiseFloorTracker() if self._noise_filter else None
         self._scene_chunks = []
         self._scene_samples = 0
@@ -424,8 +426,9 @@ class StreamSession:
                 spk = self._spk_cluster.assign(emb, int(end_ms - start_ms))
             except Exception as e:
                 logger.warning(f"说话人判定失败，本段不标注: {e}")
-            # 累计本簇语音时长：供显式/自动登记的时长门槛与模板 dur（短段也算入归属簇）
-            if spk is not None:
+            # 累计本簇语音时长（仅计 ≥min_seg 的段——这些才真正更新了质心；短段只挂靠不建簇，
+            # 计入会灌水登记时长门槛与模板 dur）：供显式/自动登记的时长门槛与模板 dur
+            if spk is not None and int(end_ms - start_ms) >= self._spk_min_seg_ms:
                 self._spk_dur_ms[spk] = self._spk_dur_ms.get(spk, 0) + int(end_ms - start_ms)
             # 声纹识别（可选）：以"当时"质心查库，不回改历史（以最新 final 为准）
             if spk is not None and self._identify and self._speaker_service is not None:
@@ -521,8 +524,12 @@ class StreamSession:
         hit = mapping[0] if mapping else None
         result = ({"name": hit.get("name"), "speaker_id": hit.get("speaker_id")}
                   if hit and hit.get("speaker_id") else {"name": None, "speaker_id": None})
-        # 未命中 + 实时自动登记开启 + 簇时长过门槛 → 登记占位名（一次性，登记后经缓存复用）
+        # 未命中 + 实时自动登记开启 + 本会话该簇未登记过 + 簇时长过门槛 → 登记占位名。
+        # 与离线 SpeakerService.map_and_enroll_clusters 同"未命中→占位登记"语义（改其一须同步）。
+        # _auto_enrolled 幂等守卫：缓存失效重查后若 identify 偶因质心漂移未命中刚登记的模板，
+        # 不再二次登记（否则同一人产生多条「说话人_NN」、回传 uuid 跳变）。
         if (result["speaker_id"] is None and cfg.STREAM_SPEAKER_AUTO_ENROLL
+                and spk not in self._auto_enrolled
                 and self._spk_dur_ms.get(spk, 0) >= cfg.SPEAKER_AUTO_ENROLL_MIN_SEC * 1000):
             try:
                 name = self._speaker_service.store.alloc_auto_name()
@@ -531,6 +538,7 @@ class StreamSession:
                     consent=True, source="auto")
                 result = {"name": name, "speaker_id": sid}
                 ver = self._speaker_service.store.cache_version
+                self._auto_enrolled.add(spk)
                 logger.info(f"[stream] 自动登记说话人 {spk}→{name} id={sid[:8]}")
             except Exception as e:
                 logger.warning(f"实时自动登记失败，退回匿名: {e}")
@@ -559,15 +567,25 @@ class StreamSession:
         if centroid is None:
             raise ValueError(f"未知说话人标签: {label}")
         dur = self._spk_dur_ms.get(label, 0) / 1000.0
-        sid = self._speaker_service.enroll_cluster(
-            name, centroid, dur, consent=True, source="manual")
+        # 质量门槛：对齐离线手动登记的 SPEAKER_ENROLL_MIN_SEC，避免短样本质心污染声纹库
+        if dur < cfg.SPEAKER_ENROLL_MIN_SEC:
+            raise ValueError(
+                f"登记样本有效语音不足（{dur:.1f}s < {cfg.SPEAKER_ENROLL_MIN_SEC}s），"
+                "请让该说话人多说几句后再登记")
+        # 先查重：命中既有人则追加模板复用其 id（避免重复建档撑裂 margin），否则新建
+        res = self._speaker_service.enroll_or_merge_cluster(
+            name, centroid, dur, id_threshold=self._spk_id_threshold,
+            id_margin=self._spk_id_margin, consent=True)
         self._spk_name_cache[label] = {
-            "name": name, "speaker_id": sid,
+            "name": res["name"], "speaker_id": res["speaker_id"],
             "count": max(cluster.count_of(label), 1),
             "ver": self._speaker_service.store.cache_version,
         }
-        logger.info(f"[stream] 显式登记说话人 {label}→{name} id={sid[:8]}")
-        return {"label": label, "speaker_id": sid, "name": name}
+        self._auto_enrolled.add(label)   # 已显式登记，避免后续自动登记对同簇重入
+        logger.info(f"[stream] {'合并到既有' if res['matched_existing'] else '新建'}"
+                    f"说话人 {label}→{res['name']} id={res['speaker_id'][:8]}")
+        return {"label": label, "speaker_id": res["speaker_id"], "name": res["name"],
+                "matched_existing": res["matched_existing"]}
 
     async def _maybe_emit_scene(self, arr):
         """累积音频满一个推理窗即打标 → 迟滞平滑 → 状态切换时产出 scene 信封。
@@ -706,6 +724,7 @@ class VadOfflineBackend:
                 session._spk_cluster = None    # 会话域语义：质心状态随会话释放
                 session._spk_name_cache = {}   # 声纹簇缓存同步清空
                 session._spk_dur_ms = {}       # 簇时长累计随会话释放
+                session._auto_enrolled = set() # 自动登记幂等标记随会话释放
                 session._noise_tracker = None  # 噪声底估计随会话释放
                 session._scene_smoother = None # 场景平滑状态随会话释放
                 session._scene_chunks = []

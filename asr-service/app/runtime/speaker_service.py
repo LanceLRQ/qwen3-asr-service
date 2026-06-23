@@ -196,6 +196,33 @@ class SpeakerService:
         return self.store.enroll_speaker(
             name, None, [vec], [float(dur_sec)], consent=consent, source=source)
 
+    def enroll_or_merge_cluster(self, name: str, centroid: np.ndarray, dur_sec: float, *,
+                                id_threshold: float, id_margin: float,
+                                consent: bool) -> dict:
+        """显式登记前先 1:N 查重：命中既有人 → 追加模板（占位名自动改为给定名），返回既有 id；
+        未命中 → 新建。返回 {speaker_id, name, matched_existing}。
+
+        查重避免同一人重复建档——两条近似质心会缩小 1:N 的 top1-top2 margin，反致后续 identify
+        判 unknown（识别比登记前更差）。命中即追加模板=补样本提质（仅显式登记触发，离线/实时
+        自动路径仍不追加，防投毒）。
+        """
+        vec = np.asarray(centroid, dtype=np.float32).reshape(-1)
+        hit = self.store.identify(vec, threshold=id_threshold, margin=id_margin)
+        if hit:
+            sid = hit["speaker_id"]
+            try:
+                self.store.add_template(sid, vec, dur_sec)
+            except SpeakerStoreError as e:
+                logger.warning(f"命中既有说话人但追加模板失败（仍返回既有身份）: {e}")
+            final_name = hit["name"]
+            info = self.store.get_speaker(sid)
+            if info and info.get("source") == "auto":   # 占位名「说话人_NN」→ 客户端给定真名
+                self.store.update_speaker(sid, name=name)
+                final_name = name
+            return {"speaker_id": sid, "name": final_name, "matched_existing": True}
+        sid = self.enroll_cluster(name, vec, dur_sec, consent=consent, source="manual")
+        return {"speaker_id": sid, "name": name, "matched_existing": False}
+
     def map_and_enroll_clusters(self, clusters: list[dict], *,
                                 id_threshold: float | None = None,
                                 id_margin: float | None = None) -> list[dict]:
@@ -206,6 +233,10 @@ class SpeakerService:
         （source='auto'；开启自动登记 = 部署方声明已获数据主体同意，consent 同责）。
         已命中的说话人不自动追加模板（防投毒）。登记失败退回匿名，不影响转写。
         id_threshold/id_margin 缺省=服务端 cfg（支持按请求覆盖）。
+
+        ★ 实时孪生：stream_session._lookup_speaker 的自动登记分支共用同一"未命中→占位登记"
+          语义（开关换成 STREAM_SPEAKER_AUTO_ENROLL，外加会话缓存/幂等守卫）。审计/命名/consent
+          都落在 store 层共享，但改本处的占位登记决策时记得同步那一处。
         """
         thr = cfg.SPEAKER_ID_THRESHOLD if id_threshold is None else id_threshold
         mgn = cfg.SPEAKER_ID_MARGIN if id_margin is None else id_margin

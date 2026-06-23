@@ -198,11 +198,14 @@ Client                                  Server
 
 | Field | Description |
 |-------|-------------|
-| label | In-session anonymous label (the A/B/C… of `final.speaker`) |
-| name | Display name to enroll |
+| label | In-session anonymous label (the A/B/C… of `final.speaker`), max 32 chars |
+| name | Display name to enroll, max 128 chars |
 | consent | Must be `true` (voiceprint is biometric data); otherwise returns `enroll_failed` |
 
-> Requires `capabilities.speaker_identification=true` and diarization enabled for this session. The server enrolls the label's current session centroid as a single template and replies with `enroll.ack` (carrying `speaker_id`); subsequent `final`s for that label then carry `speaker_name`/`speaker_id`. On failure it replies with a non-fatal `error` (`code="enroll_failed"`, no disconnect). The server can also auto-enroll unmatched clusters via `stream_speaker_auto_enroll` (off by default).
+> Requires `capabilities.speaker_identification=true` and diarization enabled for this session. The server enrolls the label's current session centroid as a single template and replies with `enroll.ack` (carrying `speaker_id`); subsequent `final`s for that label then carry `speaker_name`/`speaker_id`.
+> Quality gate: the label's accumulated effective speech must be ≥ `speaker_enroll_min_sec` (default 3s, same as offline manual enrollment); otherwise it returns `enroll_failed` — let the speaker talk a bit more and retry.
+> Dedup: if the label's centroid already matches an existing speaker, the server **adds a template and reuses that `speaker_id`** (no duplicate row; a placeholder name `说话人_NN` is renamed to this `name`), and `enroll.ack.matched_existing=true`.
+> Any failure returns a non-fatal `error` (`code="enroll_failed"`, no disconnect). The server can also auto-enroll unmatched clusters via `stream_speaker_auto_enroll` (off by default).
 
 ### Server → Client
 
@@ -213,7 +216,7 @@ All server-to-client messages use a uniform envelope and carry a `type`:
 | `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` / `limits` | Sent on connect; `capabilities` contains `partial_results` / `word_timestamps` / `languages_auto` / `speaker_labels` / `speaker_identification`, plus tunability flags `noise_filter_tunable` / `speaker_tunable` / `endpoint_tunable` / `output_toggles` (whether the corresponding overrides can be tuned in this session); `limits` contains `max_frame_bytes` / `max_backlog_bytes` — clients pushing faster than real time should pace themselves accordingly (use `final.end` as processing-progress feedback and keep the unprocessed backlog below the limit) |
 | `partial` | `seg_id` / `text` | Intermediate result (only for backends with `partial_results=true`; vad-offline does not produce them) |
 | `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` / `speaker_id` / `scene` / `scene_scores` | Finalized sentence-level result; `start`/`end` in milliseconds; `words` only when `word_timestamps=true`; `speaker` (anonymous label A/B/C…) only when `speaker_labels=true` and this segment is decidable; `speaker_name` only when `identify_speakers=true` and a voiceprint matches; `speaker_id` (voiceprint-DB uuid) only when `return_speaker_id=true` and matched/enrolled; `scene` (segment's dominant scene) / `scene_scores` (per-bucket distribution) only when `capabilities.stream.scene=true`, semantics identical to offline `segments[].scene` / `scene_scores` |
-| `enroll.ack` | `label` / `speaker_id` / `name` | Acknowledgement of a successful explicit `enroll`: the label is now in the DB, `speaker_id` is the newly assigned uuid |
+| `enroll.ack` | `label` / `speaker_id` / `name` / `matched_existing` | Acknowledgement of a successful explicit `enroll`: `speaker_id` is the speaker's uuid, `name` the final display name; `matched_existing=true` means it matched an existing speaker and appended a template (no new row) |
 | `scene` | `label` / `confidence` / `since` / `scores` | Current scene update (only when `capabilities.stream.scene=true`); `label` is the current scene; `since` is the start timestamp in milliseconds; `scores` holds per-content-bucket representative scores. Emitted only on a state **change** (hysteresis-smoothed; a continuous state is emitted once) — for per-sentence scene use `final.scene` |
 | `error` | `code` / `message` / `seg_id` / `fatal` | The session terminates when `fatal=true` |
 | `session.closed` | `reason` | Session ended |
@@ -240,7 +243,7 @@ Values of `code` in the uniform `error` envelope:
 | `frame_too_large` | no | Frame exceeds 2MB; the frame is dropped |
 | `backlog_overflow` | yes | Processing backlog exceeds 8MB (~4 minutes of audio); session disconnected |
 | `feed_failed` | no | A segment failed to process; skipped, session continues |
-| `enroll_failed` | no | An `enroll` message failed (missing consent / unknown label / feature not enabled / DB error); no disconnect |
+| `enroll_failed` | no | An `enroll` message failed (malformed / missing consent / unknown label / insufficient sample duration / feature not enabled / DB error); no disconnect |
 | `session_timeout` | yes | Session exceeded the max duration (default 1 hour) |
 | `internal` | yes | Internal error |
 

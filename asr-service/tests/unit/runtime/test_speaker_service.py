@@ -241,3 +241,40 @@ def test_enroll_cluster_requires_consent(env, store):
     with pytest.raises(Exception):
         svc.enroll_cluster("李四", unit(3), 8.0, consent=False)
     assert store.speaker_count == 0
+
+
+# ─── enroll_or_merge_cluster：显式登记查重（命中追加模板，未命中新建）───
+
+def test_enroll_or_merge_creates_when_no_match(env, store):
+    svc = make_service(store)
+    res = svc.enroll_or_merge_cluster("张三", unit(0), 5.0,
+                                      id_threshold=cfg.SPEAKER_ID_THRESHOLD,
+                                      id_margin=cfg.SPEAKER_ID_MARGIN, consent=True)
+    assert res["matched_existing"] is False
+    assert store.get_speaker(res["speaker_id"])["name"] == "张三"
+    assert store.speaker_count == 1
+
+
+def test_enroll_or_merge_merges_and_renames_auto(env, store):
+    svc = make_service(store)
+    sid0 = svc.enroll_cluster("说话人_01", unit(0), 12.0, consent=True, source="auto")
+    res = svc.enroll_or_merge_cluster("张三", unit(0), 6.0,
+                                      id_threshold=cfg.SPEAKER_ID_THRESHOLD,
+                                      id_margin=cfg.SPEAKER_ID_MARGIN, consent=True)
+    assert res["matched_existing"] is True
+    assert res["speaker_id"] == sid0                  # 命中同一人，不新建
+    assert res["name"] == "张三"                       # 占位名被改为给定真名
+    info = store.get_speaker(sid0)
+    assert len(info["templates"]) == 2                # 追加了一条模板
+    assert store.speaker_count == 1                   # 无重复建档
+
+
+def test_enroll_or_merge_keeps_manual_name(env, store):
+    svc = make_service(store)
+    sid0 = svc.enroll_cluster("李雷", unit(0), 12.0, consent=True, source="manual")
+    res = svc.enroll_or_merge_cluster("韩梅梅", unit(0), 6.0,
+                                      id_threshold=cfg.SPEAKER_ID_THRESHOLD,
+                                      id_margin=cfg.SPEAKER_ID_MARGIN, consent=True)
+    assert res["matched_existing"] is True and res["speaker_id"] == sid0
+    assert res["name"] == "李雷"                       # 既有具名不被覆盖
+    assert store.speaker_count == 1

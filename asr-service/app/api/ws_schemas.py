@@ -6,7 +6,7 @@
 """
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ── 客户端 → 服务端 ──
@@ -48,9 +48,9 @@ class EnrollMsg(BaseModel):
     服务端取该 label 的当前会话质心作模板登记，回 enroll.ack 带 speaker_id。
     """
     type: Literal["enroll"] = "enroll"
-    label: str                         # 会话内匿名标签 A/B/C…
-    name: str                          # 登记显示名
-    consent: bool = False              # 数据主体同意（硬约束，false 一律拒绝）
+    label: str = Field(max_length=32)          # 会话内匿名标签 A/B/C…（限长防滥用）
+    name: str = Field(max_length=128)          # 登记显示名（限长：避免超长串写入声纹库）
+    consent: bool = False                      # 数据主体同意（硬约束，false 一律拒绝）
 
 
 # ── 服务端 → 客户端（全部带 type）──
@@ -97,8 +97,9 @@ class SceneMsg(BaseModel):
 class EnrollAck(BaseModel):
     type: Literal["enroll.ack"] = "enroll.ack"
     label: str                         # 被登记的会话标签
-    speaker_id: str                    # 新登记的声纹库 uuid
-    name: str                          # 登记显示名
+    speaker_id: str                    # 登记/命中的声纹库 uuid
+    name: str                          # 最终显示名（命中既有具名则为既有名）
+    matched_existing: bool = False     # true=命中既有说话人并追加模板（未新建，避免重复建档）
 
 
 class ErrorMsg(BaseModel):
