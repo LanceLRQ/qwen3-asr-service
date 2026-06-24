@@ -3,6 +3,27 @@
 本项目所有重要变更记录于此。版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)，
 发布版本号经由 git tag（去掉 `v` 前缀）注入镜像 `APP_VERSION`，体现在 `/openapi.json` 的 `info.version`。
 
+## [2.4.0] - 2026-06-24
+
+实时声纹登记 + 离线/实时回传 speaker_id（客户端跨会话记忆声纹）。
+
+### 新增 / 改进
+- **按请求回传 speaker_id**：表单 / 握手参数 `return_speaker_id`（纯请求开关，无服务端配置）——实时 `start` 开启后 `final` 结果附 `speaker_id`（需同时启用声纹识别），离线结果 `segments[].speaker_id`。回传的是声纹库 UUID，供客户端跨会话记忆同一声纹。
+- **实时声纹登记**：客户端经 WebSocket `enroll` 消息显式登记当前会话说话人（`consent` 硬约束）→ `enroll.ack` 回传 `speaker_id`；服务端 `stream_speaker_auto_enroll` 自动登记开关（默认关）。`SpeakerService.enroll_cluster` 从会话质心建单模板，离线 auto / 实时共用。
+- **WebUI**：实时页新增声纹登记面板（登记 + UUID 复制）；离线页新增 speaker_id 回传勾选。
+- 离线两路（standard / vLLM）段级 `speaker_id` 同步贯通；`enroll` 经 `frame_q` 单一发送方，避免与 `final` 并发写 WS。
+
+### 评审修复（多 Agent 代码评审）
+- **登记输入限长**：文本帧 `enroll` 限大小（`STREAM_MAX_TEXT_BYTES`）+ `EnrollMsg.label/name` 限长，防超长串写入声纹库与队列无界增长。
+- **短样本门槛**：显式 `enroll` 加 `SPEAKER_ENROLL_MIN_SEC` 时长门槛（对齐离线手动登记）拒短样本；`_spk_dur_ms` 仅累计 ≥ `min_seg` 的段（短段只挂靠不建簇），不灌水登记门槛与模板时长。
+- **幂等守卫**：实时自动登记加会话级 `_auto_enrolled` 守卫，避免缓存失效重查后重复建档。
+- **登记先查重**：显式 `enroll` 先 1:N 查重（`enroll_or_merge_cluster`），命中既有人则追加模板复用其 id（占位名自动改真名），避免重复模板撑裂 `id_margin` 致后续误判 unknown；`EnrollAck` 加 `matched_existing`。
+- 接收侧用 `EnrollMsg` 校验（类型 / 限长），失败经队列回 `enroll_error`（保持单发送方）。
+
+### 文档 / 测试
+- 中英双语文档同步（`transcription` / `speakers` / `configuration`）。
+- 新增 18 项单测；全量 **1036 通过**。
+
 ## [2.3.0] - 2026-06-21
 
 通用音频事件标注（Audio Tagging）特性，以及原生端点语言归一化修复。
@@ -128,6 +149,7 @@
 - Web UI + 可配置 VAD 段时长；Docker / docker-compose 支持。
 - Windows 内嵌 Python 安装/启动脚本；Ctrl+C 优雅退出。
 
+[2.4.0]: https://github.com/LanceLRQ/qwen3-asr-service/releases/tag/v2.4.0
 [2.3.0]: https://github.com/LanceLRQ/qwen3-asr-service/releases/tag/v2.3.0
 [2.2.0]: https://github.com/LanceLRQ/qwen3-asr-service/releases/tag/v2.2.0
 [2.1.0]: https://github.com/LanceLRQ/qwen3-asr-service/releases/tag/v2.1.0

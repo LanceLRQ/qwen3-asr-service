@@ -7,15 +7,15 @@ A simple, fast and efficient speech recognition API service based on Qwen3-ASR. 
 ### Supported tags and respective Dockerfile links
 
 **GPU** (CUDA 12.1, requires NVIDIA GPU and nvidia-docker)
-- [`latest`, `2.3.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile)
+- [`latest`, `2.4.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile)
 - [`2.2.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile) — previous release
 
 **CPU** (multi-arch: amd64 + arm64, no GPU required — for standard Linux/Windows servers, Apple Silicon and ARM64 Linux servers)
-- [`latest-cpu`, `2.3.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — multi-arch manifest; Docker auto-selects amd64 or arm64 by host
+- [`latest-cpu`, `2.4.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — multi-arch manifest; Docker auto-selects amd64 or arm64 by host
 - [`2.2.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — previous release
 
 **vLLM** (GPU-native streaming, amd64, requires NVIDIA GPU and nvidia-docker) — *new in 2.1.0*
-- [`latest-vllm`, `2.3.0-vllm`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.vllm) — vLLM-native engine (based on `vllm/vllm-openai`); adds real-time incremental partial→final streaming
+- [`latest-vllm`, `2.4.0-vllm`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.vllm) — vLLM-native engine (based on `vllm/vllm-openai`); adds real-time incremental partial→final streaming
 
 > Note: separate `*-arm64` tags are deprecated since 2.0.2 — arm64 is now folded into the multi-arch `*-cpu` tag. Older `2.0.0-arm64` / `1.2.0-arm64` tags remain available for existing users.
 > The `*-vllm` image is an independent, optional GPU-only variant — it does not replace `latest`; standard mode behavior is unchanged. See [vLLM vs Standard](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/vllm-vs-standard_EN.md).
@@ -24,9 +24,9 @@ A simple, fast and efficient speech recognition API service based on Qwen3-ASR. 
 
 | Tag | Base Image | Arch | Inference Engine | NVIDIA GPU | Image Size (compressed / on-disk) |
 |-----|-----------|------|-----------------|-----------|-----------|
-| `latest` / `2.3.0` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | PyTorch (CUDA) | Required | ~4.9GB / ~8-10GB |
-| `latest-cpu` / `2.3.0-cpu` | `ubuntu:22.04` | amd64 + arm64 (multi-arch) | OpenVINO (amd64: INT8 / arm64: FP32, selected at runtime) | Not required | ~2GB / ~3-4GB |
-| `latest-vllm` / `2.3.0-vllm` | `vllm/vllm-openai:v0.14.0` | amd64 | vLLM (CUDA, native streaming) | Required | ~9GB / very large |
+| `latest` / `2.4.0` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | PyTorch (CUDA) | Required | ~4.9GB / ~8-10GB |
+| `latest-cpu` / `2.4.0-cpu` | `ubuntu:22.04` | amd64 + arm64 (multi-arch) | OpenVINO (amd64: INT8 / arm64: FP32, selected at runtime) | Not required | ~2GB / ~3-4GB |
+| `latest-vllm` / `2.4.0-vllm` | `vllm/vllm-openai:v0.14.0` | amd64 | vLLM (CUDA, native streaming) | Required | ~9GB / very large |
 
 ### Features
 
@@ -38,6 +38,7 @@ A simple, fast and efficient speech recognition API service based on Qwen3-ASR. 
 - Optional punctuation restoration (CT-Transformer)
 - **Speaker diarization** with anonymous labels (A/B/C…), enabled via `--enable-speaker`
 - **Voiceprint library** for real-name speaker identification (`/v2/speakers*`), enabled via `--enable-speaker-db` (requires an API key)
+- **Real-time voiceprint enrollment / speaker_id return** *(new in 2.4.0)* — a per-request `return_speaker_id` switch returns voiceprint-DB UUIDs (offline `segments[].speaker_id`, real-time `final.speaker_id`) for cross-session client-side memory; real-time also supports an `enroll` WebSocket message to enroll the current speaker, with an optional server-side `stream_speaker_auto_enroll`
 - **Audio tagging** *(new in 2.3.0, optional)* — general audio event tagging (full AudioSet, PANNs 527-class / YAMNet 521-class) + derived scene (silence/speech/singing/music/other): offline results gain `audio_events` + per-segment `scene`, the realtime stream pushes `scene` messages, plus a tagging-only `POST /v2/audio/tag`. Enable with `--enable-audio-tagging`
 - **Real-time speech transcription** (WebSocket endpoint, enabled via `--enable-stream`)
 - **vLLM native-streaming engine** *(new in 2.1.0, optional)* — a separate GPU-only serving mode (`latest-vllm` image) with real-time incremental `partial`→`final` decoding within each sentence, plus long-audio chunked transcription; see [vLLM vs Standard](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/vllm-vs-standard_EN.md)
@@ -230,15 +231,15 @@ If you find this project helpful, please consider giving a ⭐ on [GitHub](https
 ### Supported tags and respective Dockerfile links
 
 **GPU 版本**（CUDA 12.1，需要 NVIDIA GPU 和 nvidia-docker）
-- [`latest`, `2.3.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile)
+- [`latest`, `2.4.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile)
 - [`2.2.0`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile) — 历史版本
 
 **CPU 版本**（多架构：amd64 + arm64，无需 GPU，适用于普通 Linux/Windows 服务器、Apple Silicon、ARM64 Linux 服务器）
-- [`latest-cpu`, `2.3.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — 多架构 manifest，Docker 按本机架构自动选择 amd64 或 arm64
+- [`latest-cpu`, `2.4.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — 多架构 manifest，Docker 按本机架构自动选择 amd64 或 arm64
 - [`2.2.0-cpu`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.cpu) — 历史版本
 
 **vLLM 版本**（GPU 原生流式，amd64，需要 NVIDIA GPU 和 nvidia-docker）— *2.1.0 新增*
-- [`latest-vllm`, `2.3.0-vllm`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.vllm) — vLLM 原生引擎（基底 `vllm/vllm-openai`），新增实时逐句 partial→final 增量流式
+- [`latest-vllm`, `2.4.0-vllm`](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docker/Dockerfile.vllm) — vLLM 原生引擎（基底 `vllm/vllm-openai`），新增实时逐句 partial→final 增量流式
 
 > 说明：自 2.0.2 起独立 `*-arm64` tag 已弃用，arm64 已并入多架构 `*-cpu` tag。历史 `2.0.0-arm64` / `1.2.0-arm64` 仍保留供存量用户使用。
 > `*-vllm` 镜像是独立、可选的纯 GPU 变体，不替代 `latest`；standard 模式行为不变。详见 [vLLM 与 standard 差异](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/vllm-vs-standard.md)。
@@ -247,9 +248,9 @@ If you find this project helpful, please consider giving a ⭐ on [GitHub](https
 
 | Tag | 基础镜像 | 架构 | 推理引擎 | NVIDIA GPU | 镜像体积（压缩 / 解压） |
 |-----|---------|------|---------|-----------|---------|
-| `latest` / `2.3.0` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | PyTorch (CUDA) | 需要 | ~4.9GB / ~8-10GB |
-| `latest-cpu` / `2.3.0-cpu` | `ubuntu:22.04` | amd64 + arm64（多架构） | OpenVINO（amd64: INT8 / arm64: FP32，运行时自选） | 不需要 | ~2GB / ~3-4GB |
-| `latest-vllm` / `2.3.0-vllm` | `vllm/vllm-openai:v0.14.0` | amd64 | vLLM（CUDA，原生流式） | 需要 | ~9GB / 体积较大 |
+| `latest` / `2.4.0` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | amd64 | PyTorch (CUDA) | 需要 | ~4.9GB / ~8-10GB |
+| `latest-cpu` / `2.4.0-cpu` | `ubuntu:22.04` | amd64 + arm64（多架构） | OpenVINO（amd64: INT8 / arm64: FP32，运行时自选） | 不需要 | ~2GB / ~3-4GB |
+| `latest-vllm` / `2.4.0-vllm` | `vllm/vllm-openai:v0.14.0` | amd64 | vLLM（CUDA，原生流式） | 需要 | ~9GB / 体积较大 |
 
 ### 特性
 
@@ -261,6 +262,7 @@ If you find this project helpful, please consider giving a ⭐ on [GitHub](https
 - 可选标点恢复（CT-Transformer）
 - **说话人分离**：匿名标签（A/B/C…），`--enable-speaker` 开启
 - **声纹库识别**：真名识别接口 `/v2/speakers*`，`--enable-speaker-db` 开启（需配置 API 密钥）
+- **实时声纹登记 / speaker_id 回传** *（2.4.0 新增）*：按请求开关 `return_speaker_id` 回传声纹库 UUID（离线 `segments[].speaker_id`、实时 `final.speaker_id`），供客户端跨会话记忆声纹；实时另支持经 WebSocket `enroll` 消息登记当前说话人，服务端可选 `stream_speaker_auto_enroll` 自动登记
 - **音频标注** *（2.3.0 新增，可选）*：通用音频事件标注（AudioSet 全类，PANNs 527 类 / YAMNet 521 类）+ 派生场景（静音/说话/唱歌/音乐/其他）：离线结果加 `audio_events` 与每段 `scene`，实时流推 `scene` 消息，另有只打标不转写的 `POST /v2/audio/tag`。`--enable-audio-tagging` 开启
 - **实时语音转写**：WebSocket 端点，`--enable-stream` 开启
 - **vLLM 原生流式引擎** *（2.1.0 新增，可选）*：独立的纯 GPU 运行模式（`latest-vllm` 镜像），句内实时 `partial`→`final` 增量解码 + 长音频逐块转写，详见 [vLLM 与 standard 差异](https://github.com/LanceLRQ/qwen3-asr-service/blob/main/docs/vllm-vs-standard.md)

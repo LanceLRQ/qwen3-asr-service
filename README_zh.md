@@ -19,6 +19,7 @@
 - **vLLM 原生流式引擎** *（v2.1.0 新增，可选）* - 独立的纯 GPU 运行模式（`--serve-mode vllm`），句内实时 partial→final 增量解码 + 长音频逐块转写，详见 [vLLM 与 standard 差异](docs/vllm-vs-standard.md)
 - **说话人分离** - 离线/实时转写标注匿名说话人标签 A/B/C…（CAM++ 声纹模型，CPU 推理）
 - **声纹库识别** - 登记说话人后转写直接显示真名；未知说话人自动登记占位名，Web 管理页一键改名（speakers.db，强制鉴权）
+- **实时声纹登记 / speaker_id 回传** *（v2.4.0 新增）* - 按请求开关 `return_speaker_id`：离线 `segments[].speaker_id`、实时 `final.speaker_id` 回传声纹库 UUID，供客户端跨会话记忆同一声纹；实时支持经 WebSocket `enroll` 消息登记当前说话人（`enroll.ack` 回 UUID），服务端 `stream_speaker_auto_enroll` 可选自动登记（默认关）
 - **音频标注** *（v2.3.0 新增，可选）* - 通用音频事件标注（AudioSet 全类，PANNs 527 类 / YAMNet 521 类）+ 派生场景（静音/说话/唱歌/音乐/其他）：离线结果加 `audio_events` 与每段 `scene`，实时流推 `scene` 消息，另有只打标不转写的 `POST /v2/audio/tag`。可开关、双引擎、场景映射可配置。`--enable-audio-tagging` 启用。（YAMNet 为非推荐的轻量备选：精度低于 PANNs，需额外安装可选依赖（`pip install -r requirements-yamnet.txt`），且 vLLM 模式不可用。）
 - **远场过滤 / 参数可调** - 实时段级能量/SNR 门控减少远场与环境音误触发；说话人、断句、输出等参数支持按请求/会话动态覆盖
 - **OpenAI / DashScope 兼容接口** - 改 base_url 即对接 OpenAI / 阿里云 DashScope 生态（离线 + 实时），无需改动业务代码

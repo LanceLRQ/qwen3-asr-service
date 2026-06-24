@@ -237,7 +237,7 @@ def create_app(args=None) -> FastAPI:
     _apply_cli_config(args)
 
     serve_mode = getattr(args, "serve_mode", "standard")
-    app = FastAPI(title="Qwen3-ASR Service", version=os.environ.get("APP_VERSION", "2.3.0"))
+    app = FastAPI(title="Qwen3-ASR Service", version=os.environ.get("APP_VERSION", "2.4.0"))
     # 响应压缩（vendored 前端库 1.7MB → ~426KB；仅作用于 HTTP，WS 不受影响）
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
