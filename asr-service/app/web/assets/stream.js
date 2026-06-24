@@ -221,7 +221,7 @@
       const identifySpeakers = ref(false);
       // 返回声纹 UUID（仅 identify 开启才有意义）+ 显式登记所需的同意与命名
       const returnSpeakerId = ref(false);
-      const consent = ref(false);
+      const consent = ref(true);
       const enrollName = reactive({});    // label -> 输入框姓名
       const enrolledMap = reactive({});   // label -> {name, speakerId}（命中/登记后回填，含历史行）
       // identify 关闭时联动复位 returnSpeakerId（无识别即无 id 可回传）
@@ -902,7 +902,7 @@
               <n-alert v-if="warn" type="warning" :show-icon="true" :bordered="false" style="margin-top:12px;">{{ t('warn.ignored', warn) }}</n-alert>
             </n-card>
 
-            <n-card v-if="canIdentify && identifySpeakers" :bordered="false" class="panel" size="small">
+            <n-card v-if="canIdentify && identifySpeakers" :bordered="false" class="panel" size="small" style="margin-top:20px;">
               <template #header><span class="panel-title"><a-icon name="mic" size="15"></a-icon>{{ t('spk.panel') }}</span></template>
               <n-checkbox v-model:checked="consent" size="small" style="margin-bottom:10px;">{{ t('spk.consent') }}</n-checkbox>
               <n-empty v-if="!sessionSpeakers.length" :description="t('spk.empty')" size="small" style="margin:8px 0;"></n-empty>
