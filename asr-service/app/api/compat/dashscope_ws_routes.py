@@ -40,6 +40,7 @@ class DashScopeRealtimeAdapter:
 
     def __init__(self):
         self._task_id = None
+        self._sentence_id = 0
 
     async def on_open(self, ws: WebSocket, backend):
         # DashScope 不在连接建立时发消息；等 run-task 后回 task-started
@@ -64,6 +65,7 @@ class DashScopeRealtimeAdapter:
         return ("ignore", None)
 
     async def on_configured(self, ws: WebSocket, warnings):
+        self._sentence_id = 0
         if warnings:
             logger.info(f"[compat-ws/dashscope] 忽略未启用参数: {', '.join(warnings)}")
         await ws.send_json({
@@ -74,10 +76,16 @@ class DashScopeRealtimeAdapter:
     def translate_partials(self, partial: dict):
         # R2：vLLM 路线 A 的累计 partial → 中间 result-generated(sentence_end=false)。
         # DashScope 中间结果本就累计，无需 diff，干净直发。route B 不产 partial 故不触发。
-        return [partial_to_dashscope_result(partial, self._task_id)]
+        event = partial_to_dashscope_result(partial, self._task_id)
+        event["payload"]["output"]["sentence"]["sentence_id"] = self._sentence_id
+        return [event]
 
     def translate_finals(self, final: dict):
-        return [final_to_dashscope_result(final, self._task_id)]
+        event = final_to_dashscope_result(final, self._task_id)
+        event["payload"]["output"]["sentence"]["sentence_id"] = self._sentence_id
+        # 同一句的 partial/final 共用编号；完成后才递增，避免客户端覆盖前句。
+        self._sentence_id += 1
+        return [event]
 
     def translate_error(self, code: str, message: str, *, fatal: bool = False):
         return {
