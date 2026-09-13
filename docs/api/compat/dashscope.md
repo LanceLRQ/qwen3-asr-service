@@ -91,7 +91,7 @@ Paraformer realtime（standard 模式需 `--enable-stream`；vLLM 模式 `--serv
 1. 客户端 → `run-task`：`{"header":{"action":"run-task","task_id":"<uuid>","streaming":"duplex"},"payload":{"parameters":{"format":"pcm","sample_rate":16000,"language_hints":["zh"]}}}`
 2. 服务端 → `task-started`
 3. 客户端 → 二进制 PCM 帧（~100ms/帧）
-4. 服务端 → 每句 `result-generated`：`payload.output.sentence` 含 `sentence_id`/`begin_time`/`end_time`(ms)/`text`/`sentence_end:true`/`words[]`。`sentence_id` 每个任务从 0 递增，同一句的中间结果与最终结果共用编号；连接复用时新任务重新从 0 开始。
+4. 服务端 → 每句 `result-generated`：`payload.output.sentence` 含 `sentence_id`/`begin_time`/`end_time`(ms)/`text`/`sentence_end:true`/`words[]`。`sentence_id` 每个任务从 1 递增，同一句的中间结果与最终结果共用编号；连接复用时新任务重新从 1 开始。
 5. 客户端 → `finish-task` → 服务端 → `task-finished`
 6. 同一连接可再发 `run-task` 起新任务（连接复用）
 

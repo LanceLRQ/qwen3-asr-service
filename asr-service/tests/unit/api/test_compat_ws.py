@@ -231,7 +231,7 @@ def test_dashscope_sentence_ids_preserve_multiple_sentences_and_reset(ws_app):
                 ids.append(sentence_id)
                 segments[sentence_id] = sentence["text"]
             assert "".join(segments[k] for k in sorted(segments)) == "".join(texts)
-            assert ids == [0, 1, 2]
+            assert ids == [1, 2, 3]
             assert ws.receive_json()["header"]["event"] == "task-finished"
 
 
@@ -239,7 +239,7 @@ def test_dashscope_partial_and_final_share_sentence_id():
     from app.api.compat.dashscope_ws_routes import DashScopeRealtimeAdapter
 
     adapter = DashScopeRealtimeAdapter()
-    for sentence_id in range(2):
+    for sentence_id in (1, 2):
         for text in ("你", "你好"):
             event = adapter.translate_partials({"text": text})[0]
             assert event["payload"]["output"]["sentence"]["sentence_id"] == sentence_id
@@ -247,7 +247,7 @@ def test_dashscope_partial_and_final_share_sentence_id():
         assert event["payload"]["output"]["sentence"]["sentence_id"] == sentence_id
     # A separate connection starts its own sequence.
     event = DashScopeRealtimeAdapter().translate_finals(FINAL)[0]
-    assert event["payload"]["output"]["sentence"]["sentence_id"] == 0
+    assert event["payload"]["output"]["sentence"]["sentence_id"] == 1
 
 
 # ─── 鉴权 / 容量 ───

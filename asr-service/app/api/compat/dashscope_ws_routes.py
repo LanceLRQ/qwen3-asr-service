@@ -40,7 +40,7 @@ class DashScopeRealtimeAdapter:
 
     def __init__(self):
         self._task_id = None
-        self._sentence_id = 0
+        self._sentence_id = 1
 
     async def on_open(self, ws: WebSocket, backend):
         # DashScope 不在连接建立时发消息；等 run-task 后回 task-started
@@ -65,7 +65,7 @@ class DashScopeRealtimeAdapter:
         return ("ignore", None)
 
     async def on_configured(self, ws: WebSocket, warnings):
-        self._sentence_id = 0
+        self._sentence_id = 1
         if warnings:
             logger.info(f"[compat-ws/dashscope] 忽略未启用参数: {', '.join(warnings)}")
         await ws.send_json({
