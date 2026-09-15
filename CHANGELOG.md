@@ -3,6 +3,16 @@
 本项目所有重要变更记录于此。版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)，
 发布版本号经由 git tag（去掉 `v` 前缀）注入镜像 `APP_VERSION`，体现在 `/openapi.json` 的 `info.version`。
 
+## [2.4.2] - 2026-09-15
+
+DashScope 实时兼容接口补充句子编号。
+
+### 修复
+- **`result-generated` 补 `payload.output.sentence.sentence_id`**：此前缺少该字段，按句子编号归并结果的客户端会把所有句子当成同一句，说到第二句时第一句被覆盖，录音结束只剩最后一句。现在每个任务从 1 开始编号，同一句的中间结果与最终结果共用编号，final 后递增；连接复用时新任务重新从 1 开始。编号起点与百炼实时 ASR 服务端事件一致。
+- 同步 DashScope 兼容接口中英文文档，更新模块说明。
+
+感谢 @damaged-soda 贡献 PR #29。
+
 ## [2.4.1] - 2026-07-24
 
 离线 ASR 推理批大小可配置。
