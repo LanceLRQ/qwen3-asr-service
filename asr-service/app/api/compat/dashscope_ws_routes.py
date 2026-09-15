@@ -1,8 +1,10 @@
 """DashScope Paraformer 实时识别兼容 WS（/compat/dashscope/api-ws/v1/inference）。
 
-复用 ws_bridge 骨架，仅提供 header/payload 信封翻译 adapter。Stage A：route B 每句
-final → `result-generated`（sentence_end=true，整句），不发中间结果（sentence_end=false，
-route B 无逐字增量）。支持连接复用：task-finished 后可再 run-task 起新会话。
+复用 ws_bridge 骨架，仅提供 header/payload 信封翻译 adapter。每句 final →
+`result-generated`（sentence_end=true，整句）；vLLM 路线 A 的累计 partial → 中间
+`result-generated`（sentence_end=false），route B 无逐字增量故只发 final。sentence 带
+sentence_id：每个任务从 1 递增，同一句的 partial/final 共用。支持连接复用：task-finished
+后可再 run-task 起新会话。
 """
 import json
 import logging

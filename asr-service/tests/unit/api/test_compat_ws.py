@@ -226,6 +226,7 @@ def test_dashscope_sentence_ids_preserve_multiple_sentences_and_reset(ws_app):
                 assert result["header"]["task_id"] == task_id
                 sentence = result["payload"]["output"]["sentence"]
                 assert sentence["sentence_end"] is True
+                # 模拟按 sentence_id 归并整句的客户端（缺省视为 0）
                 # OSGKeyboard keys completed sentences by sentence_id (missing => 0).
                 sentence_id = sentence.get("sentence_id", 0)
                 ids.append(sentence_id)
@@ -245,6 +246,7 @@ def test_dashscope_partial_and_final_share_sentence_id():
             assert event["payload"]["output"]["sentence"]["sentence_id"] == sentence_id
         event = adapter.translate_finals(FINAL)[0]
         assert event["payload"]["output"]["sentence"]["sentence_id"] == sentence_id
+    # 新连接独立编号，从 1 开始
     # A separate connection starts its own sequence.
     event = DashScopeRealtimeAdapter().translate_finals(FINAL)[0]
     assert event["payload"]["output"]["sentence"]["sentence_id"] == 1
