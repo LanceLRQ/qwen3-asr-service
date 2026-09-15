@@ -91,7 +91,7 @@ Paraformer realtime (standard mode needs `--enable-stream`; under vLLM mode `--s
 1. Client → `run-task`: `{"header":{"action":"run-task","task_id":"<uuid>","streaming":"duplex"},"payload":{"parameters":{"format":"pcm","sample_rate":16000,"language_hints":["zh"]}}}`
 2. Server → `task-started`
 3. Client → binary PCM frames (~100ms each)
-4. Server → per sentence `result-generated`: `payload.output.sentence` with `begin_time`/`end_time`(ms)/`text`/`sentence_end:true`/`words[]`
+4. Server → per sentence `result-generated`: `payload.output.sentence` with `sentence_id`/`begin_time`/`end_time`(ms)/`text`/`sentence_end:true`/`words[]`. `sentence_id` starts at 1 per task and increments after each final; intermediate and final results for the same sentence share an ID. A new task on a reused connection resets the sequence to 1.
 5. Client → `finish-task` → Server → `task-finished`
 6. The same connection can issue another `run-task` (connection reuse)
 

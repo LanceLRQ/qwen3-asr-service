@@ -209,6 +209,47 @@ def test_dashscope_connection_reuse(ws_app):
     assert backend.released == 1   # 整连接只释放一次（跨两轮）
 
 
+def test_dashscope_sentence_ids_preserve_multiple_sentences_and_reset(ws_app):
+    texts = ["第一句话。", "接着说第二句。", "最后一句。"]
+    backend = FakeBackend(session_factory=lambda: FakeSession(
+        flush_finals=[dict(FINAL, text=text) for text in texts]))
+    client = ws_app(backend)
+    with client.websocket_connect(DASHSCOPE_WS) as ws:
+        for task_id in ("first-recording", "second-recording"):
+            ws.send_json({"header": {"action": "run-task", "task_id": task_id}, "payload": {}})
+            assert ws.receive_json()["header"]["event"] == "task-started"
+            ws.send_json({"header": {"action": "finish-task", "task_id": task_id}})
+            segments = {}
+            ids = []
+            for _ in texts:
+                result = ws.receive_json()
+                assert result["header"]["task_id"] == task_id
+                sentence = result["payload"]["output"]["sentence"]
+                assert sentence["sentence_end"] is True
+                # OSGKeyboard keys completed sentences by sentence_id (missing => 0).
+                sentence_id = sentence.get("sentence_id", 0)
+                ids.append(sentence_id)
+                segments[sentence_id] = sentence["text"]
+            assert "".join(segments[k] for k in sorted(segments)) == "".join(texts)
+            assert ids == [1, 2, 3]
+            assert ws.receive_json()["header"]["event"] == "task-finished"
+
+
+def test_dashscope_partial_and_final_share_sentence_id():
+    from app.api.compat.dashscope_ws_routes import DashScopeRealtimeAdapter
+
+    adapter = DashScopeRealtimeAdapter()
+    for sentence_id in (1, 2):
+        for text in ("你", "你好"):
+            event = adapter.translate_partials({"text": text})[0]
+            assert event["payload"]["output"]["sentence"]["sentence_id"] == sentence_id
+        event = adapter.translate_finals(FINAL)[0]
+        assert event["payload"]["output"]["sentence"]["sentence_id"] == sentence_id
+    # A separate connection starts its own sequence.
+    event = DashScopeRealtimeAdapter().translate_finals(FINAL)[0]
+    assert event["payload"]["output"]["sentence"]["sentence_id"] == 1
+
+
 # ─── 鉴权 / 容量 ───
 
 def test_ws_auth_rejected(ws_app):
