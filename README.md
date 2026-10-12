@@ -98,3 +98,7 @@ docker run -d --gpus all -p 8765:8765 \
 ---
 
 If you find this project helpful, please consider giving a ⭐ on [GitHub](https://github.com/LanceLRQ/qwen3-asr-service) and [Docker Hub](https://hub.docker.com/r/lancelrq/qwen3-asr-service) — it really helps!
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=LanceLRQ/qwen3-asr-service&type=Date)](https://www.star-history.com/#LanceLRQ/qwen3-asr-service&Date)
