@@ -1,0 +1,221 @@
+{
+  "wav_sha256": "7391c1a5dfa13b390080c10da315d015317160685727e937f2763a7c7ef278c9",
+  "models": {
+    "status": 200,
+    "body": {
+      "object": "list",
+      "data": [
+        {
+          "id": "qwen3-asr",
+          "object": "model",
+          "created": 1795164167,
+          "owned_by": "vllm",
+          "root": "models/asr/1.7b",
+          "parent": null,
+          "max_model_len": 4096,
+          "permission": [
+            {
+              "id": "modelperm-ad59a42000b78dc0",
+              "object": "model_permission",
+              "created": 1795164167,
+              "allow_create_engine": false,
+              "allow_sampling": true,
+              "allow_logprobs": true,
+              "allow_search_indices": false,
+              "allow_view": true,
+              "allow_fine_tuning": false,
+              "organization": "*",
+              "group": null,
+              "is_blocking": false
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "missing_key": {
+    "status": 401,
+    "body": {
+      "error": "Unauthorized"
+    }
+  },
+  "chat": {
+    "status": 200,
+    "body": {
+      "id": "chatcmpl-80b435cf3d2e75e4",
+      "object": "chat.completion",
+      "created": 1795164167,
+      "model": "qwen3-asr",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "language English<asr_text>The blue train leaves at noon.",
+            "refusal": null,
+            "annotations": null,
+            "audio": null,
+            "function_call": null,
+            "tool_calls": [],
+            "reasoning": null,
+            "reasoning_content": null
+          },
+          "logprobs": null,
+          "finish_reason": "stop",
+          "stop_reason": null,
+          "token_ids": null
+        }
+      ],
+      "service_tier": null,
+      "system_fingerprint": null,
+      "usage": {
+        "prompt_tokens": 66,
+        "total_tokens": 77,
+        "completion_tokens": 11,
+        "prompt_tokens_details": null
+      },
+      "prompt_logprobs": null,
+      "prompt_token_ids": null,
+      "kv_transfer_params": null
+    }
+  },
+  "language_field": {
+    "status": 200,
+    "body": {
+      "id": "chatcmpl-853e18efb1626d07",
+      "object": "chat.completion",
+      "created": 1795164167,
+      "model": "qwen3-asr",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "language English<asr_text>The blue train leaves at noon.",
+            "refusal": null,
+            "annotations": null,
+            "audio": null,
+            "function_call": null,
+            "tool_calls": [],
+            "reasoning": null,
+            "reasoning_content": null
+          },
+          "logprobs": null,
+          "finish_reason": "stop",
+          "stop_reason": null,
+          "token_ids": null
+        }
+      ],
+      "service_tier": null,
+      "system_fingerprint": null,
+      "usage": {
+        "prompt_tokens": 66,
+        "total_tokens": 77,
+        "completion_tokens": 11,
+        "prompt_tokens_details": null
+      },
+      "prompt_logprobs": null,
+      "prompt_token_ids": null,
+      "kv_transfer_params": null
+    }
+  },
+  "unknown_model": {
+    "status": 404,
+    "body": {
+      "error": {
+        "message": "The model `missing-model` does not exist.",
+        "type": "NotFoundError",
+        "param": "model",
+        "code": 404
+      }
+    }
+  },
+  "context_limit": {
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "'max_tokens' or 'max_completion_tokens' is too large: 4097. This model's maximum context length is 4096 tokens and your request has 16 input tokens (4097 > 4096 - 16). (parameter=max_tokens, value=4097) None",
+        "type": "BadRequestError",
+        "param": null,
+        "code": 400
+      }
+    }
+  },
+  "multipart": {
+    "status": 200,
+    "body": {
+      "text": "language English<asr_text>The blue train leaves at noon.",
+      "usage": {
+        "type": "duration",
+        "seconds": 4
+      }
+    }
+  },
+  "auto": {
+    "status": 200,
+    "body": {
+      "text": "language English<asr_text>The blue train leaves at noon.",
+      "usage": {
+        "type": "duration",
+        "seconds": 4
+      }
+    }
+  },
+  "other_language": {
+    "status": 200,
+    "body": {
+      "text": "language English<asr_text>The blue train leaves at noon.",
+      "usage": {
+        "type": "duration",
+        "seconds": 4
+      }
+    }
+  },
+  "invalid_language": {
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "Unsupported language: 'zz'.  Must be one of ['af', 'ar', 'hy', 'az', 'be', 'bs', 'bg', 'ca', 'zh', 'hr', 'cs', 'da', 'nl', 'en', 'et', 'fi', 'fr', 'gl', 'de', 'el', 'he', 'hi', 'hu', 'is', 'id', 'it', 'ja', 'kn', 'kk', 'ko', 'lv', 'lt', 'mk', 'ms', 'mr', 'mi', 'ne', 'no', 'fa', 'pl', 'pt', 'ro', 'ru', 'sr', 'sk', 'sl', 'es', 'sw', 'sv', 'tl', 'ta', 'th', 'tr', 'uk', 'ur', 'vi', 'cy'].",
+        "type": "BadRequestError",
+        "param": null,
+        "code": 400
+      }
+    }
+  },
+  "word_times": {
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "Currently do not support verbose_json for qwen3-asr",
+        "type": "BadRequestError",
+        "param": null,
+        "code": 400
+      }
+    }
+  },
+  "over_25_mib": {
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "Maximum file size exceeded (parameter=audio_filesize_mb, value=25.000000953674316)",
+        "type": "BadRequestError",
+        "param": "audio_filesize_mb",
+        "code": 400
+      }
+    }
+  },
+  "missing_file": {
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "1 validation error:\n  {'type': 'missing', 'loc': ('body', 'file'), 'msg': 'Field required', 'input': {'model': 'qwen3-asr', 'prompt': '', 'response_format': 'json', 'timestamp_granularities[]': [], 'stream': False, 'stream_include_usage': False, 'stream_continuous_usage_stats': False, 'temperature': 0.0, 'frequency_penalty': 0.0, 'presence_penalty': 0.0}}",
+        "type": "Bad Request",
+        "param": null,
+        "code": 400
+      }
+    }
+  },
+  "realtime_handshake": {
+    "status": 500
+  }
+}
