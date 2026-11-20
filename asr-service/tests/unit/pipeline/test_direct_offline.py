@@ -36,3 +36,22 @@ def test_direct_and_queued_results(mode, tmp_path, make_wav, tm_factory, monkeyp
     assert task["status"] == "completed"
     assert task["result"] == direct
     assert source.exists()
+
+
+@pytest.mark.parametrize("mode", ["standard", "vllm"])
+@pytest.mark.parametrize("option", ["speaker_id_threshold", "speaker_id_margin"])
+def test_identification_option_warns_when_request_skips_identification(mode, option, make_wav):
+    from app.pipeline.asr_pipeline import ASRPipeline
+    from app.runtime.vllm_offline import run_vllm_offline
+
+    engine = SimpleNamespace(capabilities=BackendCapabilities(),
+                             transcribe=Mock(return_value=ASRResult("")))
+    service = Mock()
+    components = {"speaker_engine": Mock(), "speaker_service": service}
+    if mode == "standard":
+        run = ASRPipeline(engine, SimpleNamespace(detect=lambda _: []), **components).run
+    else:
+        run = partial(run_vllm_offline, engine, **components)
+    result = run(make_wav(), identify_speakers=False, options={option: 0.2})
+    assert result.get("warnings") == ["speaker_id_threshold/margin"]
+    service.map_and_enroll_clusters.assert_not_called()

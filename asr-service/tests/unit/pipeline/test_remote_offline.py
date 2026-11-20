@@ -141,3 +141,21 @@ def test_only_unpunctuated_boundary_adds_space(remote_pipe, make_wav):
     ]
     result = remote_pipe.run(make_wav(4), options={"diarize": False})
     assert result["full_text"] == "yellow gag.The train leaves soon"
+
+
+def test_cancel_during_alignment_keeps_text_without_aligning_next_chunk(remote_pipe, make_wav):
+    align = Mock(return_value=[{"text": "第一句", "start": 0.1, "end": 0.8}])
+    remote_pipe.aligner = SimpleNamespace(align=align)
+    result = remote_pipe.run(make_wav(4), cancelled=lambda: align.called)
+    align.assert_called_once()
+    assert result["full_text"] == "第一句。第二句。"
+    assert result["segments"][0]["words"]
+    assert "words" not in result["segments"][1]
+
+
+def test_cancel_during_punctuation_keeps_remaining_recognized_text(remote_pipe, make_wav):
+    restore = Mock(side_effect=lambda text: text.replace("句", "段"))
+    remote_pipe.punc = SimpleNamespace(restore=restore)
+    result = remote_pipe.run(make_wav(4), cancelled=lambda: restore.called)
+    restore.assert_called_once()
+    assert result["full_text"] == "第一段。第二句。"

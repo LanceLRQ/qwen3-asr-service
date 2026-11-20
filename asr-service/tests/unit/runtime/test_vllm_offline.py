@@ -402,3 +402,17 @@ def test_segments_preserve_leading_punctuation_with_verified_words(patched):
     r = vo.run_vllm_offline(eng, "/x.wav")
     assert r["segments"][0]["text"] == r["full_text"] == "！你好。"
     assert r["segments"][0]["words"] == [{"text": "你好", "start": 0, "end": 0.4}]
+
+
+@pytest.mark.parametrize("failed", [True, False])
+def test_cancel_during_transcribe_skips_retry_and_alignment(patched, failed):
+    from unittest.mock import Mock
+
+    engine = _Engine(align=True)
+    engine.transcribe = Mock(side_effect=[RuntimeError("alignment failed"), _trans("文本")]
+                             if failed else [_trans("文本")])
+    engine.aligner = Mock()
+    result = vo.run_vllm_offline(engine, "/input.wav", cancelled=lambda: engine.transcribe.called)
+    engine.transcribe.assert_called_once()
+    engine.aligner.align.assert_not_called()
+    assert result["segments"] == [] and result["full_text"] == ""

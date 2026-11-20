@@ -89,7 +89,7 @@ class ASRPipeline:
             warnings.append("return_speaker_id")
         if identify_speakers and not spk_id_ready:
             warnings.append("identify_speakers")
-        if (id_threshold is not None or id_margin is not None) and not spk_id_ready:
+        if (id_threshold is not None or id_margin is not None) and not (identify_speakers and spk_id_ready):
             warnings.append("speaker_id_threshold/margin")
 
         with TemporaryDirectory(dir=self.work_dir) as chunk_dir:
@@ -154,6 +154,8 @@ class ASRPipeline:
             if self.punc and with_punc:
                 punc_count = 0
                 for seg in segments:
+                    if cancelled and cancelled():
+                        break
                     if seg["text"] and seg["text"] != "[识别失败]":
                         try:
                             original = seg["text"]
@@ -169,9 +171,10 @@ class ASRPipeline:
                 for seg in segments:
                     if seg["text"] == "[识别失败]":
                         continue
+                    aligner = None if cancelled and cancelled() else self.aligner
                     words = resolve_words(
                         seg["text"], seg.pop("words", None), seg["start"], seg["end"],
-                        self.aligner, paths[seg["start"]], seg.get("language") or language)
+                        aligner, paths[seg["start"]], seg.get("language") or language)
                     if words:
                         seg["words"] = words
                     elif "with_words" not in warnings:

@@ -141,10 +141,14 @@ def _transcribe_progressive(engine, wav_path, duration, language, want_words,
         try:
             results = engine.transcribe(audio, language=language, with_words=want_words, chunk_id=str(i))
         except Exception:
+            if cancelled and cancelled():
+                return None
             if not want_words:
                 raise
             logger.warning("含时间戳的转写失败，尝试仅转写")
             results = engine.transcribe(audio, language=language, with_words=False, chunk_id=str(i))
+        if cancelled and cancelled():
+            return None
         text = results.text
         next_offset = chunks[i + 1][1] if i + 1 < total else len(wav) / sr
         end = min(float(offset) + len(cwav) / sr, next_offset, duration)
@@ -179,7 +183,7 @@ def _collect_warnings(engine, opts: dict, identify_speakers: bool, *,
     if identify_speakers and not spk_id_ready:
         w.append("identify_speakers")
     if (opts.get("speaker_id_threshold") is not None
-            or opts.get("speaker_id_margin") is not None) and not spk_id_ready:
+            or opts.get("speaker_id_margin") is not None) and not (identify_speakers and spk_id_ready):
         w.append("speaker_id_threshold/margin")
     return w
 
