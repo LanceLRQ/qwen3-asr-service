@@ -205,7 +205,6 @@ class _SpeakerService:
 def patched_spk(monkeypatch, tmp_path):
     """写真实 5s 静音 wav（_diarize 需 sf.read 真文件）；embed_windows 已 mock 不读内容。"""
     import soundfile as sf
-    monkeypatch.setattr(cfg, "UPLOADS_DIR", str(tmp_path))
     monkeypatch.setattr(vo, "convert_to_wav",
                         lambda i, o: sf.write(o, np.zeros(16000 * 5, dtype="float32"), 16000))
     monkeypatch.setattr(vo, "get_audio_duration", lambda p: 5.0)
@@ -220,8 +219,8 @@ def _spk_trans():
 def test_run_with_diarization(patched_spk):
     """speaker_engine 在 + diarize → 每段叠加 speaker，result.speakers=['A']，无 diarize 软提示。"""
     eng = _Engine(align=True, result=_spk_trans())
-    task = {"task_id": "d1", "file_path": "/x.wav", "options": {"diarize": True}}
-    r = vo.run_vllm_offline(eng, task, speaker_engine=_SpeakerEngine(), energy_vad=_EnergyVAD())
+    task = {"audio_path": "/x.wav", "options": {"diarize": True}}
+    r = vo.run_vllm_offline(eng, **task, speaker_engine=_SpeakerEngine(), energy_vad=_EnergyVAD())
 
     assert r["speakers"] == ["A"]
     assert len(r["segments"]) == 2
@@ -233,9 +232,9 @@ def test_run_with_identification(patched_spk):
     """identify_speakers + 声纹库 → speakers 升级为映射，段叠加 speaker_name。"""
     eng = _Engine(align=True, result=_spk_trans())
     svc = _SpeakerService()
-    task = {"task_id": "i1", "file_path": "/x.wav", "identify_speakers": True,
+    task = {"audio_path": "/x.wav", "identify_speakers": True,
             "options": {"diarize": True, "speaker_id_threshold": 0.4}}
-    r = vo.run_vllm_offline(eng, task, speaker_engine=_SpeakerEngine(),
+    r = vo.run_vllm_offline(eng, **task, speaker_engine=_SpeakerEngine(),
                             speaker_service=svc, energy_vad=_EnergyVAD())
 
     assert r["speakers"] == [{"label": "A", "speaker_id": "sp1", "name": "张三", "score": 0.9}]
@@ -246,8 +245,8 @@ def test_run_with_identification(patched_spk):
 def test_run_diarize_disabled_no_speakers(patched_spk):
     """diarize=false → 不分离，无 speaker 字段、无 speakers。"""
     eng = _Engine(align=True, result=_spk_trans())
-    task = {"task_id": "d2", "file_path": "/x.wav", "options": {"diarize": False}}
-    r = vo.run_vllm_offline(eng, task, speaker_engine=_SpeakerEngine(), energy_vad=_EnergyVAD())
+    task = {"audio_path": "/x.wav", "options": {"diarize": False}}
+    r = vo.run_vllm_offline(eng, **task, speaker_engine=_SpeakerEngine(), energy_vad=_EnergyVAD())
 
     assert "speakers" not in r
     assert all("speaker" not in s for s in r["segments"])
@@ -256,8 +255,8 @@ def test_run_diarize_disabled_no_speakers(patched_spk):
 def test_run_no_speaker_engine_warns_diarize(patched_spk):
     """未挂说话人引擎但请求 diarize → 软提示，转写不受影响。"""
     eng = _Engine(align=True, result=_spk_trans())
-    task = {"task_id": "d3", "file_path": "/x.wav", "options": {"diarize": True}}
-    r = vo.run_vllm_offline(eng, task)        # speaker_engine=None
+    task = {"audio_path": "/x.wav", "options": {"diarize": True}}
+    r = vo.run_vllm_offline(eng, **task)        # speaker_engine=None
 
     assert "speakers" not in r
     assert "diarize" in r["warnings"]
@@ -268,7 +267,6 @@ def test_run_no_speaker_engine_warns_diarize(patched_spk):
 def patched(monkeypatch, tmp_path):
     """写真实 5s wav（_transcribe_progressive 需 sf.read）；默认时长 5s ≤ 切块阈值=单块直转。"""
     import soundfile as sf
-    monkeypatch.setattr(cfg, "UPLOADS_DIR", str(tmp_path))
     monkeypatch.setattr(vo, "convert_to_wav",
                         lambda i, o: sf.write(o, np.zeros(16000 * 5, dtype="float32"), 16000))
     monkeypatch.setattr(vo, "get_audio_duration", lambda p: 5.0)
@@ -279,9 +277,9 @@ def test_run_with_words(patched):
     eng = _Engine(align=True, result=_trans(
         "你好。世界。", [("你", 0.0, 0.2), ("好", 0.25, 0.4), ("世", 1.2, 1.4), ("界", 1.45, 1.6)]))
     prog = []
-    task = {"task_id": "t1", "file_path": "/x.wav", "language": "zh",
+    task = {"audio_path": "/x.wav", "language": "zh",
             "options": {"with_words": True}}
-    r = vo.run_vllm_offline(eng, task, progress_callback=prog.append)
+    r = vo.run_vllm_offline(eng, **task, progress_callback=prog.append)
 
     assert r["full_text"] == "你好。世界。"
     assert r["align_enabled"] is True and r["punc_enabled"] is True
@@ -294,8 +292,8 @@ def test_run_with_words(patched):
 
 def test_run_no_align_fallback(patched):
     eng = _Engine(align=False, result=_trans("整段文本。"))
-    task = {"task_id": "t2", "file_path": "/x.wav", "options": {"with_words": True}}
-    r = vo.run_vllm_offline(eng, task)
+    task = {"audio_path": "/x.wav", "options": {"with_words": True}}
+    r = vo.run_vllm_offline(eng, **task)
 
     assert r["align_enabled"] is False
     assert len(r["segments"]) == 1 and "words" not in r["segments"][0]
@@ -306,8 +304,8 @@ def test_run_no_align_fallback(patched):
 
 def test_run_cancelled_before_transcribe(patched):
     eng = _Engine(align=True, result=_trans("不应产生"))
-    task = {"task_id": "t3", "file_path": "/x.wav", "options": {}}
-    r = vo.run_vllm_offline(eng, task, cancelled=lambda: True)
+    task = {"audio_path": "/x.wav", "options": {}}
+    r = vo.run_vllm_offline(eng, **task, cancelled=lambda: True)
 
     assert r["segments"] == [] and r["full_text"] == ""
     assert eng.transcribe_calls == []                  # 取消 → 未触发推理
@@ -316,7 +314,6 @@ def test_run_cancelled_before_transcribe(patched):
 # ── 长音频逐块转写（进度 / 合并 / 取消粒度）──
 def _prog_patch(monkeypatch, tmp_path, duration):
     import soundfile as sf
-    monkeypatch.setattr(cfg, "UPLOADS_DIR", str(tmp_path))
     monkeypatch.setattr(vo, "convert_to_wav",
                         lambda i, o: sf.write(o, np.zeros(16000 * 6, dtype="float32"), 16000))
     monkeypatch.setattr(vo, "get_audio_duration", lambda p: duration)
@@ -328,8 +325,8 @@ def test_run_transcribe_progressive(monkeypatch, tmp_path):
     eng = _Engine(align=False, chunk_results=[
         _trans("第一段。"), _trans("第二段。"), _trans("第三段。")])
     prog = []
-    task = {"task_id": "p1", "file_path": "/x.wav", "options": {"with_words": False}}
-    r = vo.run_vllm_offline(eng, task, progress_callback=prog.append)
+    task = {"audio_path": "/x.wav", "options": {"with_words": False}}
+    r = vo.run_vllm_offline(eng, **task, progress_callback=prog.append)
 
     assert len(eng.transcribe_calls) == 3                        # 逐块
     assert r["full_text"] == "第一段。第二段。第三段。"               # 按块合并（""join）
@@ -344,8 +341,8 @@ def test_run_transcribe_progressive_words_offset(monkeypatch, tmp_path):
     eng = _Engine(align=True, chunk_results=[
         _trans("你好。", [("你", 0.0, 0.2), ("好", 0.2, 0.4)]),
         _trans("世界。", [("世", 0.0, 0.2), ("界", 0.2, 0.4)])])
-    task = {"task_id": "p2", "file_path": "/x.wav", "options": {"with_words": True}}
-    r = vo.run_vllm_offline(eng, task)
+    task = {"audio_path": "/x.wav", "options": {"with_words": True}}
+    r = vo.run_vllm_offline(eng, **task)
 
     assert len(eng.transcribe_calls) == 2
     assert r["full_text"] == "你好。世界。"
@@ -367,8 +364,8 @@ def test_run_transcribe_progressive_cancel_midway(monkeypatch, tmp_path):
             return self.calls > self.n
 
     # 调用序：pre-check(1,False) → chunk0 前(2,False)→转写 → chunk1 前(3,True)→停
-    task = {"task_id": "p3", "file_path": "/x.wav", "options": {"with_words": False}}
-    r = vo.run_vllm_offline(eng, task, cancelled=_CancelAfter(2))
+    task = {"audio_path": "/x.wav", "options": {"with_words": False}}
+    r = vo.run_vllm_offline(eng, **task, cancelled=_CancelAfter(2))
 
     assert r["full_text"] == "" and r["segments"] == []
     assert len(eng.transcribe_calls) == 1                        # 只转写首块即被取消

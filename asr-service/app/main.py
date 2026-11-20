@@ -475,7 +475,6 @@ def _assemble_standard(app: FastAPI, args) -> None:
 
         return pipeline.run(
             audio_path=task["file_path"],
-            task_id=task["task_id"],
             language=task.get("language"),
             progress_callback=on_progress,
             cancelled=lambda: task_manager.is_stopping or task_manager.is_cancelled(task["task_id"]),
@@ -797,7 +796,8 @@ def _assemble_vllm(app: FastAPI, args) -> None:
         def on_progress(p):
             task_manager.update_progress(task["task_id"], p)
         return run_vllm_offline(
-            engine, task,
+            engine, task["file_path"], language=task.get("language"), options=task.get("options"),
+            identify_speakers=task.get("identify_speakers", False),
             progress_callback=on_progress,
             cancelled=lambda: task_manager.is_stopping or task_manager.is_cancelled(task["task_id"]),
             speaker_engine=speaker_engine,

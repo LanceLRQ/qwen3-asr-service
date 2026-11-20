@@ -1,20 +1,12 @@
 import os
-import shutil
+from tempfile import TemporaryDirectory
 import logging
 import numpy as np
 import soundfile as sf
 
-from app.engines.vad_engine import VADEngine
-from app.engines.punc_engine import PuncEngine
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
 from app.pipeline.sentence_segmenter import segment_sentences
 from app.utils.result_parser import extract_words
-from app.config import (
-    UPLOADS_DIR,
-    AUDIO_CHUNKS_DIR,
-    MIN_AUDIO_DURATION,
-    MAX_AUDIO_DURATION,
-)
 import app.config as cfg
 
 logger = logging.getLogger(__name__)
@@ -24,13 +16,16 @@ class ASRPipeline:
     def __init__(
         self,
         asr_engine,
-        vad_engine: VADEngine,
-        punc_engine: PuncEngine | None = None,
+        vad_engine,
+        punc_engine=None,
         speaker_engine=None,
         speaker_service=None,
         tagger=None,
         scene_map=None,
+        *, work_dir=None, settings=cfg,
     ):
+        self.work_dir = work_dir
+        self.settings = settings
         self.asr = asr_engine
         self._remote = getattr(asr_engine, "is_remote", False) is True
         self.vad = vad_engine
@@ -43,7 +38,7 @@ class ASRPipeline:
     def run(
         self,
         audio_path: str,
-        task_id: str,
+        *,
         language: str | None = None,
         progress_callback=None,
         cancelled=None,
@@ -65,9 +60,6 @@ class ASRPipeline:
         5. 合并结果，回算绝对时间戳
         6. 清理临时文件
         """
-        wav_path = None
-        chunk_dir = os.path.join(AUDIO_CHUNKS_DIR, task_id)
-
         # 按请求覆盖（缺省=服务端默认）；降级开关只能关、不能开启未加载模型
         opts = options or {}
         with_punc = opts.get("with_punc", True)
@@ -93,24 +85,22 @@ class ASRPipeline:
         if (id_threshold is not None or id_margin is not None) and not spk_id_ready:
             warnings.append("speaker_id_threshold/margin")
 
-        try:
-            os.makedirs(chunk_dir, exist_ok=True)
+        with TemporaryDirectory(dir=self.work_dir) as chunk_dir:
 
             # 0. 格式转换
             if progress_callback:
                 progress_callback(0.05)
-            wav_path = os.path.join(UPLOADS_DIR, f"{task_id}.wav")
-            os.makedirs(UPLOADS_DIR, exist_ok=True)
+            wav_path = os.path.join(chunk_dir, "input.wav")
             convert_to_wav(audio_path, wav_path)
 
             # 检查音频时长
             duration = get_audio_duration(wav_path)
             logger.info(f"[Pipeline] 音频转换完成: 时长={duration:.1f}s, 路径={wav_path}")
-            if duration < MIN_AUDIO_DURATION:
-                raise ValueError(f"音频过短（{duration:.1f}s），最短要求 {MIN_AUDIO_DURATION}s")
-            if duration > MAX_AUDIO_DURATION:
+            if duration < self.settings.MIN_AUDIO_DURATION:
+                raise ValueError(f"音频过短（{duration:.1f}s），最短要求 {self.settings.MIN_AUDIO_DURATION}s")
+            if duration > self.settings.MAX_AUDIO_DURATION:
                 raise ValueError(
-                    f"音频过长（{duration:.0f}s），最大支持 {MAX_AUDIO_DURATION}s，请分段上传"
+                    f"音频过长（{duration:.0f}s），最大支持 {self.settings.MAX_AUDIO_DURATION}s，请分段上传"
                 )
 
             # 1. VAD 切片
@@ -197,7 +187,9 @@ class ASRPipeline:
 
             # 4.6 分句：把 ASR 处理块重组为句子（标点/停顿/说话人切换）。
             #     max_segment 仅在调用方显式给定时作为输出句长上限，缺省不按时长切。
-            segments = segment_sentences(segments, max_segment=max_segment)
+            segments = segment_sentences(
+                segments, max_segment=max_segment, long_pause_ms=self.settings.SENTENCE_LONG_PAUSE_MS,
+                short_pause_ms=self.settings.SENTENCE_SHORT_PAUSE_MS)
 
             # 4.7 句子级说话人标签精修 + 声纹识别/自动登记（可选）
             if diar is not None:
@@ -236,7 +228,7 @@ class ASRPipeline:
             if tagging_active:
                 try:
                     audio_events = self._run_tagging(
-                        wav_path, segments, scene_enable=cfg.SCENE_ENABLE,
+                        wav_path, segments, scene_enable=self.settings.SCENE_ENABLE,
                         scene_preset=opts.get("scene_preset"))
                 except Exception as e:
                     logger.warning(f"音频标注失败，跳过: {e}")
@@ -266,10 +258,6 @@ class ASRPipeline:
                 result["warnings"] = warnings
             return result
 
-        finally:
-            # 6. 清理临时文件
-            self._cleanup(audio_path, wav_path, chunk_dir)
-
     def _transcribe_batched(
         self,
         chunks: list[dict],
@@ -279,7 +267,7 @@ class ASRPipeline:
         progress_callback,
     ) -> list[dict]:
         """按 batch 分批调用 ASR 推理，每批之间更新进度和检查取消"""
-        batch_size = getattr(self.asr, "batch_size", None) or cfg.ASR_BATCH_SIZE
+        batch_size = getattr(self.asr, "batch_size", None) or self.settings.ASR_BATCH_SIZE
         segments: list[dict] = []
         processed = 0
 
@@ -428,14 +416,14 @@ class ASRPipeline:
             return DiarizationResult([], [], [])
 
         # 窗数上限抽稀：规避超长音频谱聚类 N² 亲和阵内存
-        if len(windows) > cfg.SPEAKER_MAX_WINDOWS:
-            k = -(-len(windows) // cfg.SPEAKER_MAX_WINDOWS)
+        if len(windows) > self.settings.SPEAKER_MAX_WINDOWS:
+            k = -(-len(windows) // self.settings.SPEAKER_MAX_WINDOWS)
             windows = windows[::k]
             logger.info(f"[Pipeline] 说话人滑窗抽稀: 每 {k} 取 1 → {len(windows)} 窗")
 
         wav, _sr = sf.read(wav_path, dtype="float32")  # 阶段 0 已保证 16k 单声道
         embeddings = self.speaker.embed_windows(wav, windows)
-        labels = cluster_offline(embeddings, max_speakers=cfg.SPEAKER_MAX)
+        labels = cluster_offline(embeddings, max_speakers=self.settings.SPEAKER_MAX)
         return DiarizationResult(windows, labels, embeddings)
 
     def _run_tagging(self, wav_path: str, segments: list[dict],
@@ -455,22 +443,22 @@ class ASRPipeline:
             return []
 
         windows = audio_tagging.tag_windows(
-            self.tagger, wav, sr, cfg.AUDIO_TAGGING_INTERVAL_MS, cfg.AUDIO_TAGGING_TOPK)
+            self.tagger, wav, sr, self.settings.AUDIO_TAGGING_INTERVAL_MS, self.settings.AUDIO_TAGGING_TOPK)
         audio_events = audio_tagging.events_from_windows(windows)
 
         # per-segment scene：对每个 ASR 句，用其时间窗内各窗 scene 投票
         if scene_enable and windows:
-            silence_dbfs = cfg.SCENE_SILENCE_DBFS
+            silence_dbfs = self.settings.SCENE_SILENCE_DBFS
             # per-request 预设覆盖服务端默认（缺省=服务端生效权重）
             if scene_preset:
                 _p = scene_mapper.resolve_preset(scene_preset)
                 vocal_priority, singing_min, singing_bias = (
                     _p["vocal_priority"], _p["singing_min"], _p["singing_bias"])
             else:
-                vocal_priority = cfg.SCENE_VOCAL_PRIORITY
-                singing_min = cfg.SCENE_SINGING_MIN
-                singing_bias = cfg.SCENE_SINGING_BIAS
-            weights = cfg.SCENE_WEIGHTS or None
+                vocal_priority = self.settings.SCENE_VOCAL_PRIORITY
+                singing_min = self.settings.SCENE_SINGING_MIN
+                singing_bias = self.settings.SCENE_SINGING_BIAS
+            weights = self.settings.SCENE_WEIGHTS or None
             for s in segments:
                 s_start = int(s["start"] * 1000)
                 s_end = int(s["end"] * 1000)
@@ -490,12 +478,12 @@ class ASRPipeline:
                     label, _ = scene_mapper.classify_buckets(               # 聚合后定主场景
                         bs, seg_dbfs, silence_dbfs=silence_dbfs, vocal_priority=vocal_priority,
                         singing_min=singing_min, singing_bias=singing_bias)
-                    if cfg.SCENE_LYRICS_AWARE:
+                    if self.settings.SCENE_LYRICS_AWARE:
                         # 转写文本作人声证据：带伴奏歌声 PANNs 常只给 music，靠歌词救回 singing
                         txt = (s.get("text") or "").strip()
                         has_text = bool(txt) and txt != "[识别失败]"
                         label = scene_mapper.refine_scene_with_text(
-                            label, bs, has_text, speech_min=cfg.SCENE_SPEECH_MIN)
+                            label, bs, has_text, speech_min=self.settings.SCENE_SPEECH_MIN)
                     s["scene"] = label
                     s["scene_scores"] = bs
 
@@ -515,7 +503,7 @@ class ASRPipeline:
         if not vad_segments:
             return []
 
-        max_span_ms = int((max_segment_sec or cfg.MAX_SEGMENT_DURATION) * 1000)
+        max_span_ms = int((max_segment_sec or self.settings.MAX_SEGMENT_DURATION) * 1000)
         merged = []
         group_start, group_end = vad_segments[0]
 
@@ -582,8 +570,8 @@ class ASRPipeline:
             split_after=True 标记 force-split 产生的人为切点（供边界去重精准定位）。
         """
         data, sr = sf.read(wav_path)
-        merge_max = max_segment_sec if max_segment_sec is not None else cfg.MAX_SEGMENT_DURATION
-        force_max = cfg.MAX_ASR_CHUNK_DURATION
+        merge_max = max_segment_sec if max_segment_sec is not None else self.settings.MAX_SEGMENT_DURATION
+        force_max = self.settings.MAX_ASR_CHUNK_DURATION
 
         # 先合并碎片段（仅在静音间隙处合并）
         merged = self._merge_vad_segments(vad_segments, merge_max)
@@ -638,23 +626,3 @@ class ASRPipeline:
 
         logger.info(f"切分完成: {len(merged)} 个合并段 -> {len(chunks)} 个 chunk")
         return chunks
-
-    def _cleanup(self, original_path: str, wav_path: str | None, chunk_dir: str):
-        """清理临时文件"""
-        try:
-            if original_path and os.path.exists(original_path):
-                os.remove(original_path)
-        except OSError as e:
-            logger.warning(f"清理原始文件失败: {e}")
-
-        try:
-            if wav_path and os.path.exists(wav_path):
-                os.remove(wav_path)
-        except OSError as e:
-            logger.warning(f"清理转换文件失败: {e}")
-
-        try:
-            if os.path.exists(chunk_dir):
-                shutil.rmtree(chunk_dir, ignore_errors=True)
-        except OSError as e:
-            logger.warning(f"清理 chunk 目录失败: {e}")

@@ -11,8 +11,6 @@ from app.pipeline import asr_pipeline as pipeline
 
 @pytest.fixture
 def remote_pipe(monkeypatch, tmp_path):
-    monkeypatch.setattr(pipeline, "UPLOADS_DIR", str(tmp_path / "wav"))
-    monkeypatch.setattr(pipeline, "AUDIO_CHUNKS_DIR", str(tmp_path / "chunks"))
     monkeypatch.setattr(pipeline.cfg, "MAX_SEGMENT_DURATION", 1)
     remote = SimpleNamespace(
         is_remote=True, capabilities=BackendCapabilities(),
@@ -34,7 +32,7 @@ def remote_pipe(monkeypatch, tmp_path):
 def test_remote_http_entries(compat, remote_pipe, make_client, tm_factory, make_wav,
                              tmp_path, monkeypatch):
     def process(task):
-        return remote_pipe.run(task["file_path"], task["task_id"], task.get("language"),
+        return remote_pipe.run(task["file_path"], language=task.get("language"),
                                options=task.get("options"))
 
     tm = tm_factory(start=True, processor=process)
@@ -70,13 +68,13 @@ def test_remote_http_entries(compat, remote_pipe, make_client, tm_factory, make_
 def test_remote_failure_stops_at_failed_chunk(remote_pipe, make_wav):
     remote_pipe.asr.transcribe.side_effect = TimeoutError("upstream")
     with pytest.raises(TimeoutError, match="upstream"):
-        remote_pipe.run(make_wav(4), "failure")
+        remote_pipe.run(make_wav(4))
     remote_pipe.asr.transcribe.assert_called_once()
     remote_pipe.asr.batch_transcribe.assert_not_called()
 
 
 def test_remote_cancel_during_request(remote_pipe, make_wav):
-    result = remote_pipe.run(make_wav(4), "cancel",
+    result = remote_pipe.run(make_wav(4),
                              cancelled=lambda: remote_pipe.asr.transcribe.called)
     remote_pipe.asr.transcribe.assert_called_once()
     assert result["segments"] == []

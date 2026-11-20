@@ -64,8 +64,6 @@ def run_env(monkeypatch, tmp_path):
     monkeypatch.setattr("app.pipeline.asr_pipeline.sf.write", lambda *a, **k: None)
     monkeypatch.setattr("app.pipeline.asr_pipeline.convert_to_wav", lambda a, b: None)
     monkeypatch.setattr("app.pipeline.asr_pipeline.get_audio_duration", lambda p: 12.0)
-    monkeypatch.setattr("app.pipeline.asr_pipeline.UPLOADS_DIR", str(tmp_path / "up"))
-    monkeypatch.setattr("app.pipeline.asr_pipeline.AUDIO_CHUNKS_DIR", str(tmp_path / "chunks"))
     return tmp_path
 
 
@@ -80,7 +78,7 @@ def _make_pipe(speaker_engine, speaker_service):
 def test_identify_attaches_names_and_mapping(run_env, tmp_path):
     service = FakeSpeakerService()
     pipe = _make_pipe(FakeSpeakerEngine(), service)
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1", identify_speakers=True)
+    result = pipe.run(str(tmp_path / "a.mp3"), identify_speakers=True)
 
     assert [seg["speaker"] for seg in result["segments"]] == ["A", "B"]
     assert [seg["speaker_name"] for seg in result["segments"]] == ["张三", "说话人_01"]
@@ -96,7 +94,7 @@ def test_identify_clusters_interface_fields(run_env, tmp_path):
     """S3→V3 衔接面：service 收到 [{"label","centroid","dur_sec"}]。"""
     service = FakeSpeakerService()
     pipe = _make_pipe(FakeSpeakerEngine(), service)
-    pipe.run(str(tmp_path / "a.mp3"), "t1", identify_speakers=True)
+    pipe.run(str(tmp_path / "a.mp3"), identify_speakers=True)
     clusters = service.calls[0]
     assert [c["label"] for c in clusters] == ["A", "B"]
     for c in clusters:
@@ -111,7 +109,7 @@ def test_identify_miss_keeps_anonymous(run_env, tmp_path):
                      "score": None} for c in clusters]
 
     pipe = _make_pipe(FakeSpeakerEngine(), AllMissService())
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1", identify_speakers=True)
+    result = pipe.run(str(tmp_path / "a.mp3"), identify_speakers=True)
     assert all("speaker_name" not in seg for seg in result["segments"])
     assert [seg["speaker"] for seg in result["segments"]] == ["A", "B"]   # 匿名保留
     assert result["speakers"][0]["speaker_id"] is None
@@ -120,7 +118,7 @@ def test_identify_miss_keeps_anonymous(run_env, tmp_path):
 def test_identify_flag_off_keeps_s3_shape(run_env, tmp_path):
     service = FakeSpeakerService()
     pipe = _make_pipe(FakeSpeakerEngine(), service)
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1", identify_speakers=False)
+    result = pipe.run(str(tmp_path / "a.mp3"), identify_speakers=False)
     assert result["speakers"] == ["A", "B"]            # 纯标签列表（S3 形态）
     assert all("speaker_name" not in seg for seg in result["segments"])
     assert service.calls == []
@@ -128,7 +126,7 @@ def test_identify_flag_off_keeps_s3_shape(run_env, tmp_path):
 
 def test_identify_without_service_keeps_s3_shape(run_env, tmp_path):
     pipe = _make_pipe(FakeSpeakerEngine(), None)
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1", identify_speakers=True)
+    result = pipe.run(str(tmp_path / "a.mp3"), identify_speakers=True)
     assert result["speakers"] == ["A", "B"]
     assert all("speaker_name" not in seg for seg in result["segments"])
 
@@ -136,7 +134,7 @@ def test_identify_without_service_keeps_s3_shape(run_env, tmp_path):
 def test_identify_skipped_when_diarization_fails(run_env, tmp_path):
     service = FakeSpeakerService()
     pipe = _make_pipe(BoomSpeakerEngine(), service)
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1", identify_speakers=True)
+    result = pipe.run(str(tmp_path / "a.mp3"), identify_speakers=True)
     assert "speakers" not in result                    # 分离失败 → 降级一致
     assert service.calls == []                         # 不调用声纹服务
 
@@ -145,7 +143,7 @@ def test_identify_with_diarize_off_warns_not_silent(run_env, tmp_path):
     """diarize=false 时声纹库虽就位也无法识别（不聚类）——须软提示而非静默丢弃。"""
     service = FakeSpeakerService()
     pipe = _make_pipe(FakeSpeakerEngine(), service)
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1", identify_speakers=True,
+    result = pipe.run(str(tmp_path / "a.mp3"), identify_speakers=True,
                       options={"diarize": False, "speaker_id_threshold": 0.5})
     assert "speakers" not in result
     assert all("speaker_name" not in seg for seg in result["segments"])

@@ -13,6 +13,7 @@ transcribe → 标点优先分段 → （可选）说话人分离/识别叠加 �
 - 说话人滑窗来源 = 传入的离线能量 VAD（无 funasr VAD），镜像 standard 的 vad_segments 路径。
 """
 import logging
+from tempfile import TemporaryDirectory
 import os
 import re
 
@@ -23,21 +24,17 @@ from app.utils.result_parser import extract_words
 logger = logging.getLogger(__name__)
 
 
-def run_vllm_offline(engine, task, *, progress_callback=None, cancelled=None,
+def run_vllm_offline(engine, audio_path, *, language=None, options=None, identify_speakers=False,
+                     work_dir=None, settings=cfg, progress_callback=None, cancelled=None,
                      speaker_engine=None, speaker_service=None, energy_vad=None) -> dict:
     """执行一次离线转写，返回与 standard ASRPipeline.run 同形的 result dict。
 
     speaker_engine/speaker_service/energy_vad 为 Phase 2 说话人能力（均可缺省=未启用）：
     speaker_engine 在 → diarize；再有 speaker_service 且 identify_speakers → 声纹识别/自动登记。
     """
-    task_id = task["task_id"]
-    file_path = task["file_path"]
-    language = task.get("language")
-    opts = task.get("options") or {}
-    identify_speakers = task.get("identify_speakers", False)
-
+    opts = options or {}
     with_words = opts.get("with_words", True)
-    max_segment = opts.get("max_segment")        # 秒；None → cfg.MAX_SEGMENT_DURATION
+    max_segment = opts.get("max_segment")        # 秒；None → settings.MAX_SEGMENT_DURATION
     diarize = opts.get("diarize", True)
     id_threshold = opts.get("speaker_id_threshold")
     id_margin = opts.get("speaker_id_margin")
@@ -49,19 +46,17 @@ def run_vllm_offline(engine, task, *, progress_callback=None, cancelled=None,
     warnings = _collect_warnings(engine, opts, identify_speakers,
                                  speaker_enabled=speaker_enabled, spk_id_ready=spk_id_ready)
 
-    wav_path = None
-    try:
+    with TemporaryDirectory(dir=work_dir) as workspace:
         if progress_callback:
             progress_callback(0.05)
-        os.makedirs(cfg.UPLOADS_DIR, exist_ok=True)
-        wav_path = os.path.join(cfg.UPLOADS_DIR, f"{task_id}.wav")
-        convert_to_wav(file_path, wav_path)
+        wav_path = os.path.join(workspace, "input.wav")
+        convert_to_wav(audio_path, wav_path)
 
         duration = get_audio_duration(wav_path)
-        if duration < cfg.MIN_AUDIO_DURATION:
-            raise ValueError(f"音频过短（{duration:.1f}s），最短要求 {cfg.MIN_AUDIO_DURATION}s")
-        if duration > cfg.MAX_AUDIO_DURATION:
-            raise ValueError(f"音频过长（{duration:.0f}s），最大支持 {cfg.MAX_AUDIO_DURATION}s")
+        if duration < settings.MIN_AUDIO_DURATION:
+            raise ValueError(f"音频过短（{duration:.1f}s），最短要求 {settings.MIN_AUDIO_DURATION}s")
+        if duration > settings.MAX_AUDIO_DURATION:
+            raise ValueError(f"音频过长（{duration:.0f}s），最大支持 {settings.MAX_AUDIO_DURATION}s")
 
         # 取消：转写前检查（worker 据 cancel_event 定终态）
         if cancelled and cancelled():
@@ -72,11 +67,11 @@ def run_vllm_offline(engine, task, *, progress_callback=None, cancelled=None,
         want_words = with_words and engine.capabilities.word_timestamps
         # 长音频按静音切块逐块转写：转写阶段 0.1→0.85 逐块报进度 + 块间查取消 + 压峰值显存
         transcribed = _transcribe_progressive(
-            engine, wav_path, duration, language, want_words, progress_callback, cancelled)
+            engine, wav_path, duration, language, want_words, progress_callback, cancelled, settings)
         if transcribed is None:                       # 转写途中取消
             return _result([], "", language, engine, warnings)
         full_text, words = transcribed
-        segments = _segment(full_text, words, duration, max_segment)
+        segments = _segment(full_text, words, duration, max_segment, settings)
 
         # 说话人分离/识别（可选；容错——失败只丢标签，不破坏转写）
         speakers = None
@@ -84,13 +79,11 @@ def run_vllm_offline(engine, task, *, progress_callback=None, cancelled=None,
             speakers = _diarize_and_identify(
                 speaker_engine, speaker_service, energy_vad, wav_path, segments, duration,
                 identify_speakers=identify_speakers, id_threshold=id_threshold, id_margin=id_margin,
-                return_speaker_id=return_speaker_id, progress_callback=progress_callback)
+                return_speaker_id=return_speaker_id, progress_callback=progress_callback, settings=settings)
 
         if progress_callback:
             progress_callback(1.0)
         return _result(segments, full_text, language, engine, warnings, speakers=speakers)
-    finally:
-        _cleanup(file_path, wav_path)
 
 
 _PROGRESS_TRANSCRIBE_LO = 0.1
@@ -98,7 +91,7 @@ _PROGRESS_TRANSCRIBE_HI = 0.85
 
 
 def _transcribe_progressive(engine, wav_path, duration, language, want_words,
-                            progress_callback, cancelled):
+                            progress_callback, cancelled, settings):
     """长音频按静音切块逐块转写，转写阶段 0.1→0.85 逐块报进度、块间查取消。
 
     返回 (full_text, words) ；途中取消返回 None。短音频（≤VLLM_OFFLINE_CHUNK_SEC）整段
@@ -106,7 +99,7 @@ def _transcribe_progressive(engine, wav_path, duration, language, want_words,
     →与整段转写质量一致，且每次只对齐一块、峰值显存随块走。词时间戳按块 offset 归到绝对时间。
     """
     import soundfile as sf
-    chunk_sec = float(cfg.VLLM_OFFLINE_CHUNK_SEC)
+    chunk_sec = float(settings.VLLM_OFFLINE_CHUNK_SEC)
     wav, sr = sf.read(wav_path, dtype="float32")
     if wav.ndim > 1:                                  # 兜底：多声道取均值（阶段0已单声道）
         wav = wav.mean(axis=1)
@@ -157,7 +150,7 @@ def _collect_warnings(engine, opts: dict, identify_speakers: bool, *,
 
 def _diarize_and_identify(speaker_engine, speaker_service, energy_vad, wav_path, segments,
                           duration, *, identify_speakers, id_threshold, id_margin,
-                          return_speaker_id=False, progress_callback=None):
+                          return_speaker_id=False, progress_callback=None, settings=cfg):
     """说话人分离（+可选声纹识别/自动登记），就地给 segments 叠加 speaker/speaker_name。
 
     返回 speakers（labels_in_order 列表，或识别后带 speaker_id/name 的簇映射），无法分离
@@ -186,11 +179,11 @@ def _diarize_and_identify(speaker_engine, speaker_service, energy_vad, wav_path,
             windows.extend(make_windows(st_ms / 1000.0, ed_ms / 1000.0))
         if not windows:
             return None
-        if len(windows) > cfg.SPEAKER_MAX_WINDOWS:        # 抽稀防谱聚类 N² 亲和阵内存
-            k = -(-len(windows) // cfg.SPEAKER_MAX_WINDOWS)
+        if len(windows) > settings.SPEAKER_MAX_WINDOWS:        # 抽稀防谱聚类 N² 亲和阵内存
+            k = -(-len(windows) // settings.SPEAKER_MAX_WINDOWS)
             windows = windows[::k]
         embeddings = speaker_engine.embed_windows(wav, windows)
-        labels = cluster_offline(embeddings, max_speakers=cfg.SPEAKER_MAX)
+        labels = cluster_offline(embeddings, max_speakers=settings.SPEAKER_MAX)
         diar = DiarizationResult(windows, labels, embeddings)
         for seg in segments:
             label = diar.label_for(seg["start"], seg["end"])
@@ -231,7 +224,7 @@ _CLAUSE_PUNCT = r"[，,、]"              # 子句标点 → 超长句二次切
 _DURATION_CLAMP_FACTOR = 2.0           # 段时长超 max_seg×此值视为对齐器跨块损坏 → 钳制
 
 
-def _segment(full_text: str, words, duration: float, max_segment) -> list:
+def _segment(full_text: str, words, duration: float, max_segment, settings=cfg) -> list:
     """标点优先分段：用 full_text 原生句末标点切句，词时间戳仅用于定位 start/end。
 
     默认（max_segment 缺省）只按标点/词间隙分句，不按时长二次切——句子边界与处理切块
@@ -254,7 +247,7 @@ def _segment(full_text: str, words, duration: float, max_segment) -> list:
     sentence_cuts = [m.end() for m in re.finditer(_SENTENCE_PUNCT, full_text)]
     if not sentence_cuts:
         return _clamp_segments(
-            _segment_by_word_gap(full_text, words, positions, max_seg), duration)
+            _segment_by_word_gap(full_text, words, positions, max_seg, settings), duration)
 
     # 句级切片；仅在显式 max_seg 时把超 max_seg 的句子在逗号处细切
     final = []
@@ -313,9 +306,9 @@ def _span_seconds(c0: int, c1: int, positions: list, words: list) -> float:
     return (max(w["end"] for w in sw) - min(w["start"] for w in sw)) if sw else 0.0
 
 
-def _segment_by_word_gap(full_text: str, words: list, positions: list, max_seg: float) -> list:
+def _segment_by_word_gap(full_text: str, words: list, positions: list, max_seg: float, settings) -> list:
     """退化路径（full_text 无句末标点，罕见）：按词间隙/回退/段长分段，段文本取 full_text 切片。"""
-    gap = cfg.VLLM_SEGMENT_GAP_MS / 1000.0
+    gap = settings.VLLM_SEGMENT_GAP_MS / 1000.0
     groups, cur = [], []
     for w in words:
         if cur:
@@ -369,12 +362,3 @@ def _result(segments, full_text, language, engine, warnings, speakers=None) -> d
     if warnings:
         result["warnings"] = warnings
     return result
-
-
-def _cleanup(*paths):
-    for p in paths:
-        if p and os.path.exists(p):
-            try:
-                os.remove(p)
-            except OSError as e:
-                logger.warning(f"临时文件清理失败 {p}: {e}")

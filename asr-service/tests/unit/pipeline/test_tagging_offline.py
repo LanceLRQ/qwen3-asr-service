@@ -44,8 +44,6 @@ def _patch_io(monkeypatch, tmp_path, audio):
     monkeypatch.setattr("app.pipeline.asr_pipeline.sf.write", lambda *a, **k: None)
     monkeypatch.setattr("app.pipeline.asr_pipeline.convert_to_wav", lambda a, b: None)
     monkeypatch.setattr("app.pipeline.asr_pipeline.get_audio_duration", lambda p: 12.0)
-    monkeypatch.setattr("app.pipeline.asr_pipeline.UPLOADS_DIR", str(tmp_path / "up"))
-    monkeypatch.setattr("app.pipeline.asr_pipeline.AUDIO_CHUNKS_DIR", str(tmp_path / "chunks"))
 
 
 @pytest.fixture
@@ -65,7 +63,7 @@ def _make_pipe(tagger, vad_segments):
 def test_run_tagging_enabled(noise_env, tmp_path, monkeypatch):
     monkeypatch.setattr("app.config.SCENE_ENABLE", True)
     pipe = _make_pipe(FakeTagger(), [(0, 3000), (8000, 11000)])
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1")
+    result = pipe.run(str(tmp_path / "a.mp3"))
     assert result["audio_events"]
     assert any(e["label"] == "Singing" for e in result["audio_events"])
     assert all(seg.get("scene") == "singing" for seg in result["segments"])
@@ -77,14 +75,14 @@ def test_run_tagging_enabled(noise_env, tmp_path, monkeypatch):
 def test_run_tagging_scene_disabled_keeps_events(noise_env, tmp_path, monkeypatch):
     monkeypatch.setattr("app.config.SCENE_ENABLE", False)
     pipe = _make_pipe(FakeTagger(), [(0, 3000), (8000, 11000)])
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1")
+    result = pipe.run(str(tmp_path / "a.mp3"))
     assert "audio_events" in result                                  # 通用标签仍给
     assert all("scene" not in seg for seg in result["segments"])     # 不出场景视图
 
 
 def test_run_tagging_failure_degrades(noise_env, tmp_path):
     pipe = _make_pipe(BoomTagger(), [(0, 3000), (8000, 11000)])
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1")
+    result = pipe.run(str(tmp_path / "a.mp3"))
     assert result["full_text"] == "你好你好"
     assert "audio_events" not in result
     assert all("scene" not in seg for seg in result["segments"])
@@ -92,7 +90,7 @@ def test_run_tagging_failure_degrades(noise_env, tmp_path):
 
 def test_run_tagging_disabled_no_fields(noise_env, tmp_path):
     pipe = _make_pipe(None, [(0, 3000), (8000, 11000)])
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1")
+    result = pipe.run(str(tmp_path / "a.mp3"))
     assert "audio_events" not in result
     assert all("scene" not in seg for seg in result["segments"])
 
@@ -102,5 +100,5 @@ def test_run_tagging_silence_scene(monkeypatch, tmp_path):
     _patch_io(monkeypatch, tmp_path, np.zeros(16000 * 12, dtype=np.float32))
     monkeypatch.setattr("app.config.SCENE_ENABLE", True)
     pipe = _make_pipe(SilentTagger(), [(0, 3000), (8000, 11000)])
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1")
+    result = pipe.run(str(tmp_path / "a.mp3"))
     assert all(seg.get("scene") == "silence" for seg in result["segments"])

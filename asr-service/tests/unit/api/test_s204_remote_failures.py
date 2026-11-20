@@ -26,16 +26,16 @@ def remote_service(tmp_path, monkeypatch, make_client, make_wav, tm_factory):
             return remote_transport
 
         monkeypatch.setattr(httpx.Client, "_init_transport", transport)
-        for module in (asr_pipeline, openai_routes):
-            monkeypatch.setattr(module, "UPLOADS_DIR", str(tmp_path / "uploads"))
-        monkeypatch.setattr(asr_pipeline, "AUDIO_CHUNKS_DIR", str(tmp_path / "chunks"))
+        monkeypatch.setattr(openai_routes, "UPLOADS_DIR", str(tmp_path / "uploads"))
+        workspace = tmp_path / "chunks"
+        workspace.mkdir()
         monkeypatch.setattr(asr_pipeline.cfg, "MAX_SEGMENT_DURATION", 1)
         engine = RemoteASREngine("http://upstream/v1", "qwen3-asr", "secret-key", 2)
         vad = Mock()
         vad.detect.return_value = [(100, 1000), (2000, 3000)]
-        pipe = asr_pipeline.ASRPipeline(engine, vad)
+        pipe = asr_pipeline.ASRPipeline(engine, vad, work_dir=workspace)
         manager = tm_factory(start=True, processor=lambda task: pipe.run(
-            task["file_path"], task["task_id"], cancelled=lambda: manager.is_cancelled(task["task_id"])))
+            task["file_path"], cancelled=lambda: manager.is_cancelled(task["task_id"])))
         client = make_client(task_manager=manager)
         source = Path(make_wav(4))
         files = {"file": ("clip.wav", source.read_bytes(), "audio/wav")}
@@ -114,8 +114,9 @@ def test_upstream_failure_envelopes(cause, endpoint, tmp_path, monkeypatch,
     transport.close.assert_called_once()
     assert len(requests) == 1
     assert source.is_file()
-    for directory in ("uploads", "chunks"):
-        assert not list((tmp_path / directory).iterdir())
+    assert not list((tmp_path / "chunks").iterdir())
+    if endpoint != "dashscope":
+        assert not list((tmp_path / "uploads").iterdir())
 
 @pytest.mark.parametrize("late_failure", [False, True])
 def test_cancel_during_remote_post(remote_service, tmp_path, late_failure):
@@ -147,5 +148,5 @@ def test_cancel_during_remote_post(remote_service, tmp_path, late_failure):
     transport, = transports
     transport.close.assert_called_once()
     assert source.is_file()
-    for directory in ("uploads", "chunks"):
-        assert not list((tmp_path / directory).iterdir())
+    assert not list((tmp_path / "chunks").iterdir())
+    assert not list((tmp_path / "uploads").iterdir())

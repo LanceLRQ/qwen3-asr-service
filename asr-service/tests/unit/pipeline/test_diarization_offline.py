@@ -136,14 +136,12 @@ def test_run_diarization_no_windows():
 def run_env(monkeypatch, tmp_path, fake_wav_io):
     monkeypatch.setattr("app.pipeline.asr_pipeline.convert_to_wav", lambda a, b: None)
     monkeypatch.setattr("app.pipeline.asr_pipeline.get_audio_duration", lambda p: 12.0)
-    monkeypatch.setattr("app.pipeline.asr_pipeline.UPLOADS_DIR", str(tmp_path / "up"))
-    monkeypatch.setattr("app.pipeline.asr_pipeline.AUDIO_CHUNKS_DIR", str(tmp_path / "chunks"))
 
 
 def test_run_speaker_enabled(run_env, tmp_path):
     pipe = _make_pipe(FakeSpeakerEngine(), [(0, 3000), (8000, 11000)])
     progress: list[float] = []
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1", progress_callback=progress.append)
+    result = pipe.run(str(tmp_path / "a.mp3"), progress_callback=progress.append)
     assert result["speakers"] == ["A", "B"]
     assert [seg["speaker"] for seg in result["segments"]] == ["A", "B"]
     assert 0.90 in progress and 0.95 in progress
@@ -151,7 +149,7 @@ def test_run_speaker_enabled(run_env, tmp_path):
 
 def test_run_speaker_failure_degrades(run_env, tmp_path):
     pipe = _make_pipe(BoomSpeakerEngine(), [(0, 3000), (8000, 11000)])
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1")
+    result = pipe.run(str(tmp_path / "a.mp3"))
     # 失败只丢标签：转写完整、无 speaker 字段、无 speakers 顶层键
     assert result["full_text"] == "你好你好"
     assert "speakers" not in result
@@ -160,13 +158,13 @@ def test_run_speaker_failure_degrades(run_env, tmp_path):
 
 def test_run_speaker_disabled_no_fields(run_env, tmp_path):
     pipe = _make_pipe(None, [(0, 3000), (8000, 11000)])
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1")
+    result = pipe.run(str(tmp_path / "a.mp3"))
     assert "speakers" not in result
     assert all("speaker" not in seg for seg in result["segments"])
 
 
 def test_run_no_vad_with_speaker_enabled(run_env, tmp_path):
     pipe = _make_pipe(FakeSpeakerEngine(), [])
-    result = pipe.run(str(tmp_path / "a.mp3"), "t1")
+    result = pipe.run(str(tmp_path / "a.mp3"))
     assert result["segments"] == []
     assert result["speakers"] == []
