@@ -48,3 +48,34 @@ python -m app.main --enable-openai-api --enable-dashscope-api --enable-stream \
 - `--compat-fetch-allow-private`：DashScope 离线需要——客户端会起本地 HTTP server 把音频
   暴露成 `http://127.0.0.1:PORT/a.wav`，服务端需允许下载回环地址（mock 服务已默认开启）。
 - 主项目 venv 若 WebSocket 握手失败（迁移/版本不配套），这个独立 venv 正是为绕开它而设。
+
+## 三条最小集成示例
+
+以下命令从 `asr-service/` 执行。使用 standard 服务环境启动时显式指定 `--no-web`，即使配置文件为 `web: true` 也会关闭 UI。同步接口需要 OpenAI 兼容开关，实时接口需要流式开关。
+
+```bash
+python -m app.main --no-web --enable-openai-api --enable-stream --api-key demo-key
+```
+
+另开终端运行以下示例。默认输入是仓库的 16 kHz 中文语音 WAV，可用 `--audio /path/to/speech.wav` 指定一段短语音。HTTP 请求使用 Bearer 密钥，WebSocket 通过查询参数 token 鉴权。服务未配置密钥时可省略客户端的 `--api-key`。
+
+```bash
+args=(--base-url http://127.0.0.1:8765 --api-key demo-key)
+scripts/e2e/run.sh "${args[@]}" --only openai-transcribe-json
+scripts/e2e/run.sh "${args[@]}" --only v2-task
+scripts/e2e/run.sh "${args[@]}" --only v2-stream
+```
+
+| 示例 | 请求与预期结果 | 常见失败 |
+| --- | --- | --- |
+| 同步 | OpenAI SDK 向 `/compat/openai/v1/audio/transcriptions` 提交 WAV，直接读取 JSON 的 `text`。说话人分离等原生选项请使用 v2 接口。 | 密钥无效返回 401，兼容路由未启用返回 404。 |
+| 异步 | multipart 上传到 `POST /v2/asr`，用返回的 task_id 轮询 `GET /v2/tasks/{task_id}`。completed 后读取 result.full_text 和 result.segments。 | failed 时读取 error，cancelled 或 not_found 时停止轮询。等待超时后可凭 task_id 继续查询。 |
+| 实时 | 连接 `/v2/asr/stream` 后读取 session.created，发送携带 audio_fs 的 start，再按采样率发送单声道 PCM16 小端二进制帧。发送 stop 后读完逐句 final，收到 session.closed 即退出连接。 | 密钥错误会拒绝连接。音频帧过大或积压超限时服务返回 error。 |
+
+要取消排队中或执行中的任务，向同一任务地址发送带鉴权的 DELETE 请求。启用 `enable_task_store` 后可跨重启查询已完成的结果；重启时未完成的任务标记为 failed。对仅存在于持久化库的历史任务发 DELETE 会删除记录。[任务生命周期](../../../docs/api/v2/tasks.md)
+
+本地 mock 复用上述三个客户端和服务端路由，返回固定文本“你好世界”。以下命令验证协议，识别质量需用真实模型及语音另行验收。
+
+```bash
+E2E_API_KEY=demo-key scripts/e2e/run.sh --api-key demo-key --only openai-transcribe-json,v2-task,v2-stream
+```

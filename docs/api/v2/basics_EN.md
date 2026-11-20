@@ -4,6 +4,8 @@
 
 Service probing, capability declaration, and authentication conventions. All endpoints are prefixed with `/v2`. Default base URL: `http://127.0.0.1:8765`.
 
+[Runnable examples for synchronous transcription, asynchronous tasks and realtime streaming (Chinese)](../../../asr-service/scripts/e2e/README.md#三条最小集成示例)
+
 ## Table of Contents
 
 - [Authentication](#authentication)

@@ -28,7 +28,8 @@ import json
 import os
 import sys
 import threading
-from urllib.parse import urlparse
+import time
+from urllib.parse import urlencode, urlparse
 import uuid
 
 # ── 路径：默认音频取仓库内现成的 16k 中文语音样本（scripts/e2e/ → asr-service）──
@@ -268,7 +269,7 @@ def _ws_url(args, path):
     base = args.base_url.replace("http://", "ws://").replace("https://", "wss://")
     url = base + path
     if args.api_key:
-        url += f"?token={args.api_key}"
+        url += "?" + urlencode({"token": args.api_key})
     return url
 
 
@@ -358,6 +359,53 @@ def check_dashscope_realtime(args, pcm, sr):
 
 # ═══════════════════ 主流程 ═══════════════════
 
+def check_v2_task(args):
+    import httpx
+
+    headers = {"Authorization": f"Bearer {args.api_key}"} if args.api_key else {}
+    with httpx.Client(base_url=args.base_url, headers=headers) as client:
+        with open(args.audio, "rb") as audio:
+            response = client.post("/v2/asr", files={"file": (os.path.basename(args.audio), audio)})
+        task_id = response.raise_for_status().json()["task_id"]
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            task = client.get(f"/v2/tasks/{task_id}").raise_for_status().json()
+            assert task["task_id"] == task_id
+            if task["status"] == "completed":
+                result = task["result"]
+                assert isinstance(result["segments"], list) and result["full_text"].strip()
+                return f"{task_id} completed: {result['full_text'][:40]} ({len(result['segments'])} segments)"
+            if task["status"] not in ("pending", "processing"):
+                raise RuntimeError(f"{task_id}: {task['status']} {task.get('error')}")
+            time.sleep(0.5)
+        raise TimeoutError(f"等待任务超时: {task_id}")
+
+
+async def check_v2_stream(args, pcm, sr):
+    import websockets
+
+    async with websockets.connect(_ws_url(args, "/v2/asr/stream")) as ws:
+        created = json.loads(await asyncio.wait_for(ws.recv(), 10))
+        assert created["type"] == "session.created", created
+        await ws.send(json.dumps({"type": "start", "audio_fs": sr}))
+        for frame in _frames(pcm, sr):
+            await ws.send(frame)
+            await asyncio.sleep(len(frame) / (2 * sr))
+        await ws.send(json.dumps({"type": "stop"}))
+        finals = []
+        closed = False
+        while not closed:
+            event = json.loads(await ws.recv())
+            if event["type"] == "final":
+                finals.append(event["text"])
+            elif event["type"] == "error":
+                raise RuntimeError(event)
+            elif event["type"] == "session.closed":
+                closed = True
+        assert "".join(finals).strip(), "语音样本未返回 final 文本"
+        return f"{created['backend']}: {''.join(finals)[:40]} (session.closed)"
+
+
 def main():
     p = argparse.ArgumentParser(
         description="兼容接口端到端冒烟测试（需服务正在运行并开启 /compat/*）")
@@ -381,6 +429,8 @@ def main():
         return pcm_holder["pcm"], pcm_holder["sr"]
 
     checks = {
+        "v2-task": lambda: check_v2_task(args),
+        "v2-stream": lambda: asyncio.run(asyncio.wait_for(check_v2_stream(args, *_audio()), 120)),
         "openai-models": lambda: check_openai_models(args),
         "openai-transcribe-json": lambda: check_openai_json(args),
         "openai-transcribe-verbose": lambda: check_openai_verbose(args),

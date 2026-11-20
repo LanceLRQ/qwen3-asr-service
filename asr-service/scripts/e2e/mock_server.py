@@ -25,6 +25,8 @@ cfg.UPLOADS_DIR = tempfile.mkdtemp(prefix="e2e_uploads_")
 
 from fastapi import FastAPI
 
+from app.api.routes import build_offline_router, init_routes
+from app.api.ws_routes import init_ws_stream, ws_router_stream
 from app.api.compat import init_compat
 from app.api.compat.dashscope_routes import build_dashscope_router
 from app.api.compat.dashscope_ws_routes import build_dashscope_ws_router
@@ -48,14 +50,20 @@ FINAL = {"type": "final", "seg_id": 0, "text": "你好世界", "start": 0, "end"
 class MockTaskManager:
     """离线兼容用：submit 立即返回 id，wait_done/get_task 返回固定 completed 结果。"""
 
+    def __init__(self):
+        self.task_ids = set()
+
     def submit(self, **kwargs):
-        return "task-" + uuid.uuid4().hex[:8]
+        task_id = "task-" + uuid.uuid4().hex[:8]
+        self.task_ids.add(task_id)
+        return task_id
 
     def wait_done(self, task_id, timeout):
         return {"status": "completed", "result": RESULT, "error": None}
 
     def get_task(self, task_id):
-        return {"status": "completed", "result": RESULT}
+        if task_id in self.task_ids:
+            return {"task_id": task_id, "status": "completed", "progress": 1.0, "result": RESULT}
 
 
 class FakeSession:
@@ -88,9 +96,15 @@ class FakeBackend:
 
 
 def build_app() -> FastAPI:
-    init_compat(task_manager=MockTaskManager(),
-                service_info={"model_size": "0.6b"}, backend=FakeBackend())
+    manager = MockTaskManager()
+    backend = FakeBackend()
+    init_routes(manager)
+    init_ws_stream(backend)
+    init_compat(task_manager=manager,
+                service_info={"model_size": "0.6b"}, backend=backend)
     app = FastAPI()
+    app.include_router(build_offline_router("/v2"))
+    app.include_router(ws_router_stream)
     register_compat_exception_handlers(app)
     app.include_router(build_openai_router())
     app.include_router(build_dashscope_router())
