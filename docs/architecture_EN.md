@@ -4,9 +4,9 @@
 
 ## How an integration reaches the model
 
-Both serving modes load Qwen3-ASR locally. Standard uses Transformers on GPU or OpenVINO on CPU. The vLLM mode loads its own CUDA engine. OpenAI and DashScope compatibility expose inbound APIs. Each protocol has its own enable switch. The Web UI is optional in both modes (`--web` / `--no-web`).
+The standard and vLLM modes load Qwen3-ASR locally. Standard uses Transformers on GPU or OpenVINO on CPU. The vLLM mode loads its own CUDA engine. OpenAI and DashScope compatibility expose inbound APIs. Each protocol has its own enable switch. The Web UI is optional (`--web` / `--no-web`).
 
-Today, `app/main.py` wires engines, pipelines, task storage and routes. Even synchronous OpenAI file transcription submits an offline task and waits for its result. The planned split gives engines responsibility for recognition, alignment and speaker processing, a reusable Python pipeline responsibility for combining their results, and API adapters responsibility for request handling. Task storage and scheduling stay with the service. Remote inference is planned. See the [mode and interface matrix](vllm-vs-standard_EN.md).
+Today, `app/main.py` wires engines, pipelines, task storage and routes. Even synchronous OpenAI file transcription submits an offline task and waits for its result. The planned split gives engines responsibility for recognition, alignment and speaker processing, a reusable Python pipeline responsibility for combining their results, and API adapters responsibility for request handling. Task storage and scheduling stay with the service. In remote mode the service uploads each VAD chunk to a Qwen HTTP transcription server. The local pipeline handles timestamps at chunk boundaries, sentence segmentation and optional speaker labels. Word alignment and realtime input are unavailable in this mode. See the [mode and interface matrix](vllm-vs-standard_EN.md).
 
 ## Project Structure
 

@@ -43,12 +43,20 @@ class ArgSpec:
 ARG_SPECS = (
     ArgSpec(
         key="serve_mode", flags=("--serve-mode",), default="standard",
-        choices=("standard", "vllm"), group="服务",
+        choices=("standard", "vllm", "remote"), group="服务",
         help="服务运行模式：standard=transformers/OpenVINO 离线+实时(路线B)；"
-             "vllm=vLLM 原生流式(Phase 3) (default: standard)",
+             "remote=远端离线；vllm=vLLM 原生流式(Phase 3) (default: standard)",
         help_en="Service run mode: standard=transformers/OpenVINO offline+realtime "
-                "(route B); vllm=vLLM native streaming (Phase 3) (default: standard)",
+                "(route B); remote=remote offline; vllm=vLLM native streaming (Phase 3) (default: standard)",
     ),
+    ArgSpec("remote_base_url", ("--remote-base-url",), group="远端 ASR",
+            help="上游 API 基址（含 /v1）", help_en="Upstream API base URL including /v1"),
+    ArgSpec("remote_model", ("--remote-model",), default=cfg.REMOTE_MODEL, group="远端 ASR",
+            help="上游模型别名", help_en="Upstream model ID"),
+    ArgSpec("remote_api_key", ("--remote-api-key",), group="远端 ASR",
+            help="上游 Bearer 密钥", help_en="Upstream bearer token"),
+    ArgSpec("remote_timeout", ("--remote-timeout",), default=cfg.REMOTE_TIMEOUT, type=float,
+            group="远端 ASR", help="上游 HTTP 超时（秒）", help_en="HTTP timeout in seconds"),
     ArgSpec(
         key="device", flags=("--device",), default="auto",
         choices=("auto", "cuda", "cpu"), group="模型",

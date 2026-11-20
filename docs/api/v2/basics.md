@@ -93,14 +93,14 @@ GET /v2/health
 | 字段 | 说明 |
 |------|------|
 | status | 服务状态，`ready` 表示就绪（未就绪时返回 503） |
-| mode | 运行模式：`standard` / `vllm` |
+| mode | 运行模式：`standard` / `vllm` / `remote` |
 | device | 运行设备：`cuda` / `cpu` |
 | model_size | ASR 模型大小：`0.6b` / `1.7b` |
 | align_enabled | 是否启用对齐模型（单词级时间戳） |
 | punc_enabled | 是否启用标点恢复 |
 | speaker_enabled | 是否启用说话人分离（`enable_speaker`） |
 | speaker_db_enabled | 声纹库是否可用（启用且 model_tag 一致） |
-| asr_backend | ASR 后端：`qwen_asr` / `openvino` / `vllm` |
+| asr_backend | ASR 后端：`qwen_asr` / `openvino` / `vllm` / `remote` |
 | vad_backend | VAD 后端：`pytorch` / `onnx` |
 | punc_backend | 标点后端：`pytorch` / `onnx` / `disabled` |
 | config_file | 本次生效的配置文件名（`null` = 未加载配置文件） |

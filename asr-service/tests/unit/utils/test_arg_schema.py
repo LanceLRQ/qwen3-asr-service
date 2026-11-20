@@ -11,6 +11,10 @@ from app.utils.arg_schema import ARG_SPECS, build_parser, schema_defaults
 # 重构前 main.py argparse 的默认值表（dest 键），作为零行为变化的基准
 LEGACY_DEFAULTS = {
     "serve_mode": "standard",
+    "remote_base_url": None,
+    "remote_model": "qwen3-asr",
+    "remote_api_key": None,
+    "remote_timeout": 60.0,
     "device": "auto",
     "model_size": None,
     "enable_align": True,

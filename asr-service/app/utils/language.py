@@ -37,3 +37,14 @@ def to_engine_language(code: str | None) -> str | None:
         return _ISO_TO_QWEN[key]
     primary = key.replace("_", "-").split("-", 1)[0]    # zh-CN / en_US → 取主标签
     return _ISO_TO_QWEN.get(primary)
+
+
+def to_iso_language(language: str | None) -> str | None:
+    """将流水线规范名转回 multipart 的语言提示码。"""
+    # S2-01 的 multipart 语言表只接受 tl，未收录粤语提示。
+    canonical = to_engine_language(language)
+    if canonical == "Filipino":
+        return "tl"
+    if canonical == "Cantonese":
+        return None
+    return next((code for code, name in _ISO_TO_QWEN.items() if name == canonical), None)

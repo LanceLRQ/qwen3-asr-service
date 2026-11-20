@@ -296,13 +296,17 @@ def merge_runtime_config(cli_ns: argparse.Namespace) -> argparse.Namespace:
 
     merged = schema_defaults()
 
-    # ② 环境变量（存量两项，空值视为未设置）
+    # ② 环境变量（空值视为未设置）
     env_model_source = os.environ.get("MODEL_SOURCE")
     if env_model_source:
         merged["model_source"] = env_model_source
     env_api_key = os.environ.get("ASR_API_KEY")
     if env_api_key:
         merged["api_key"] = env_api_key
+
+    env_remote_key = os.environ.get("ASR_REMOTE_API_KEY")
+    if env_remote_key:
+        merged["remote_api_key"] = env_remote_key
 
     # ③ 配置文件
     path = resolve_config_path(config_arg, no_config)

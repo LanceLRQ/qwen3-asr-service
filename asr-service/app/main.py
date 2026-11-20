@@ -72,7 +72,9 @@ def _log_effective_config(args):
     """
     def fmt(spec):
         val = getattr(args, spec.attr, None)
-        if spec.key == "api_key" and val:
+        if spec.key == "remote_api_key" and val:
+            val = "****"
+        elif spec.key == "api_key" and val:
             val = (val[:4] + "****") if len(val) > 4 else "****"
         if val is None:
             if spec.key in _CFG_FALLBACK_ATTRS:
@@ -121,7 +123,7 @@ def _apply_cli_config(args):
     if args.max_queue_size is not None:
         cfg.MAX_QUEUE_SIZE = args.max_queue_size
     cfg.SERVE_MODE = getattr(args, "serve_mode", "standard")
-    cfg.ENABLE_STREAM = getattr(args, "enable_stream", False)
+    cfg.ENABLE_STREAM = cfg.SERVE_MODE != "remote" and getattr(args, "enable_stream", False)
     if getattr(args, "max_stream_sessions", None) is not None:
         cfg.MAX_STREAM_SESSIONS = args.max_stream_sessions
     if getattr(args, "stream_asr_concurrency", None) is not None:
@@ -292,14 +294,11 @@ def _assemble_standard(app: FastAPI, args) -> None:
     vram_gb = device_info.get("vram_gb")
     logger.info(f"当前运行模式：{"CPU" if is_cpu else "CUDA"}")
 
-    # 自动选择模型大小
-    model_size = args.model_size or auto_select_model_size(vram_gb)
-
-    # 确定对齐开关
-    enable_align = args.enable_align
-    if should_disable_align(device, vram_gb):
-        if enable_align:
-            logger.warning("当前设备条件不满足，强制关闭对齐模型")
+    remote = cfg.SERVE_MODE == "remote"
+    model_size = None if remote else args.model_size or auto_select_model_size(vram_gb)
+    enable_align = not remote and args.enable_align
+    if enable_align and should_disable_align(device, vram_gb):
+        logger.warning("当前设备条件不满足，强制关闭对齐模型")
         enable_align = False
 
     # 确定标点开关
@@ -322,7 +321,12 @@ def _assemble_standard(app: FastAPI, args) -> None:
         sys.exit(1)
 
     # ASR 引擎（必须）—— CPU 使用 OpenVINO，GPU 使用 Qwen ASR
-    if is_cpu:
+    if remote:
+        from app.engines.remote_asr_engine import RemoteASREngine
+        asr_engine = RemoteASREngine(args.remote_base_url, args.remote_model,
+                                     args.remote_api_key, args.remote_timeout)
+        asr_backend = "remote"
+    elif is_cpu:
         from app.engines.openvino_asr_engine import OpenVINOASREngine
         asr_engine = OpenVINOASREngine(model_size=model_size)
         asr_backend = "openvino"
@@ -484,9 +488,9 @@ def _assemble_standard(app: FastAPI, args) -> None:
 
     # 构建服务信息（mode-aware，供 /health、/capabilities 使用）
     from app.runtime import scene_mapper
-    stream_enabled = getattr(args, "enable_stream", False)
+    stream_enabled = cfg.ENABLE_STREAM
     capabilities = {
-        "mode": "standard",
+        "mode": cfg.SERVE_MODE,
         "offline_api": True,
         "speaker_labels": speaker_enabled,
         "speaker_identification": speaker_db_enabled,
@@ -519,9 +523,16 @@ def _assemble_standard(app: FastAPI, args) -> None:
             "audio_tagging_panns_variant": cfg.AUDIO_TAGGING_PANNS_VARIANT,
         },
     }
+    if remote:
+        capabilities["compat"] = {
+            "openai": cfg.ENABLE_OPENAI_API,
+            "dashscope": cfg.ENABLE_DASHSCOPE_API,
+            "realtime": False,
+            "realtime_partial": False,
+        }
     service_info = {
         "status": "ready",
-        "mode": "standard",
+        "mode": cfg.SERVE_MODE,
         "device": device,
         "model_size": model_size,
         "align_enabled": enable_align,

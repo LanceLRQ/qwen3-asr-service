@@ -90,14 +90,14 @@ GET /v2/health
 | Field | Description |
 |-------|-------------|
 | status | Service status, `ready` means operational (503 when not ready) |
-| mode | Serving mode: `standard` / `vllm` |
+| mode | Serving mode: `standard` / `vllm` / `remote` |
 | device | Running device: `cuda` / `cpu` |
 | model_size | ASR model size: `0.6b` / `1.7b` |
 | align_enabled | Whether the alignment model is enabled (word-level timestamps) |
 | punc_enabled | Whether punctuation restoration is enabled |
 | speaker_enabled | Whether speaker diarization is enabled (`enable_speaker`) |
 | speaker_db_enabled | Whether the voiceprint database is available (enabled and model_tag matches) |
-| asr_backend | ASR backend: `qwen_asr` / `openvino` / `vllm` |
+| asr_backend | ASR backend: `qwen_asr` / `openvino` / `vllm` / `remote` |
 | vad_backend | VAD backend: `pytorch` / `onnx` |
 | punc_backend | Punctuation backend: `pytorch` / `onnx` / `disabled` |
 | config_file | Name of the active config file (`null` = no config file loaded) |

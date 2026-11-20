@@ -147,7 +147,9 @@ COMPAT_EXTERNAL_BASE_URL = None  # 兼容层回链外部基址（反代/容器�
 
 # ─── serve-mode ───
 
-SERVE_MODE = "standard"         # "standard" | "vllm"（由 main.py argparse 覆盖）
+REMOTE_MODEL = "qwen3-asr"
+REMOTE_TIMEOUT = 60.0
+SERVE_MODE = "standard"         # "standard" | "vllm" | "remote"（由 main.py argparse 覆盖）
 
 # ─── 配置文件 ───
 
