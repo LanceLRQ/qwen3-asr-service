@@ -109,3 +109,19 @@ def test_remote_aligner_failure_and_request_opt_out(remote_pipe, make_wav, reque
     assert all("words" not in seg for seg in result["segments"])
     assert result.get("warnings", []) == (["with_words"] if requested else [])
     assert align.call_count == (2 if requested else 0)
+
+
+@pytest.mark.parametrize("left,right,expected", [
+    ("at noon", "please wait", "at noon please wait"),
+    ("到中午", "请稍候", "到中午请稍候"),
+    ("At noon.", "Please wait.", "At noon.Please wait."),
+    ("at noon ", "please wait", "at noon please wait"),
+])
+@pytest.mark.parametrize("pause_ms", [100, 1000])
+def test_word_boundary_between_vad_chunks(remote_pipe, make_wav, left, right, expected, pause_ms):
+    remote_pipe.asr.transcribe.side_effect = [ASRResult(left), ASRResult(right)]
+    remote_pipe.vad.detect = lambda _: [(0, 1000), (1000 + pause_ms, 2000 + pause_ms)]
+    result = remote_pipe.run(make_wav(4), options={"diarize": False})
+    assert result["full_text"] == expected
+    if pause_ms == 100 and not left.endswith("."):
+        assert [s["text"] for s in result["segments"]] == [expected]

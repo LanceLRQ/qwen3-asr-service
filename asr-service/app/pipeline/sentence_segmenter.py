@@ -35,6 +35,12 @@ _ABBREVIATIONS = {
 }
 
 
+def chunk_separator(left, right):
+    """独立识别块交界处的英文单词需要一个空格。"""
+    boundary = left[-1:] + right[:1]
+    return " " if len(boundary) == 2 and boundary.isascii() and boundary.isalnum() else ""
+
+
 def segment_sentences(chunks, *, max_segment=None,
                       long_pause_ms=None, short_pause_ms=None, dedupe=True):
     """把 ASR 处理块重组为句子级 segments。max_segment 为 None/0 时不按时长切。
@@ -78,7 +84,7 @@ def segment_sentences(chunks, *, max_segment=None,
                 "speaker": piece.get("speaker"),
             }
         else:
-            buf["text"] += piece["text"]
+            buf["text"] += chunk_separator(buf["text"], piece["text"]) + piece["text"]
             if piece["words"]:
                 buf["words"].extend(piece["words"])
             buf["end"] = max(buf["end"], piece["end"])

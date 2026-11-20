@@ -52,6 +52,7 @@ if __name__ == "__main__":
         assert not result.get("warnings") and result["full_text"]
         segments = result["segments"]
         assert len(segments) == 3
+        assert result["full_text"] == " ".join(s["text"] for s in segments)
         assert all(seg["text"].strip() and seg["text"] != "[识别失败]" for seg in segments)
         if enabled:
             assert all(s["speaker"] in result["speakers"] for s in segments)

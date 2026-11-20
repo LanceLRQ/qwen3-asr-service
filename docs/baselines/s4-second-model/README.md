@@ -7,8 +7,8 @@
 在仓库根目录运行。PYTHON 指向已安装项目依赖的解释器，MODELS 指向已有 FSMN、CAM++ 和 Qwen3-ForcedAligner 0.6B 权重的项目 models 目录。系统 ffmpeg 需包含 asr 和样本生成器使用的 flite 滤镜。
 
 ```sh
-export PYTHON=/mnt/data/github/qwen3-asr-service/asr-service/venv/bin/python
-export MODELS=/mnt/data/github/qwen3-asr-service/asr-service/models
+export PYTHON="${PYTHON:-$PWD/asr-service/venv/bin/python}"
+export MODELS="${MODELS:-$PWD/asr-service/models}"
 export PYTHONPATH="$PWD/asr-service"
 BASE=docs/baselines/s4-second-model
 "$PYTHON" docs/baselines/s1-standard-gpu/samples.py /tmp/s403-input >/tmp/s403-samples.json
@@ -20,6 +20,8 @@ curl --retry 10 --retry-connrefused --retry-delay 1 -fsS http://127.0.0.1:18779/
 ```
 
 GET /v1/models 公开模型 ID。POST /v1/audio/transcriptions 接收 multipart 的 model、file（WAV）和可选 language，返回 text。省略语言时使用英语，显式语言只接受 en。探针验证 zh 返回 400。这个本机样例面向可信的离线音频块，逐请求启动解码进程，不提供流式识别、自动语种识别、鉴权或原生词时间。
+
+最大输入时长尚未验证。此次最长输入为 9.765 秒，HTTP 样例未设置时长上限。生产接入时应限制上传时长和单块长度，并按实际音频验证资源占用。
 
 ## 实测
 

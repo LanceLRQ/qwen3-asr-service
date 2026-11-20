@@ -6,7 +6,7 @@ import soundfile as sf
 
 from app.engines.forced_alignment import resolve_words, valid_words
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
-from app.pipeline.sentence_segmenter import segment_sentences
+from app.pipeline.sentence_segmenter import chunk_separator, dedupe_contiguous_boundaries, segment_sentences
 from app.utils.result_parser import extract_words
 import app.config as cfg
 
@@ -202,8 +202,19 @@ class ASRPipeline:
 
             # 4.6 分句：把 ASR 处理块重组为句子（标点/停顿/说话人切换）。
             #     max_segment 仅在调用方显式给定时作为输出句长上限，缺省不按时长切。
+            # 在输出句按时长切分之前组装全文，避免在词内的显示切点插入空格。
+            segments = dedupe_contiguous_boundaries([s for s in segments if (s["text"] or "").strip()])
+            parts = []
+            for seg in segments:
+                text = seg["text"]
+                if text != "[识别失败]":
+                    if parts:
+                        parts.append(chunk_separator(parts[-1], text))
+                    parts.append(text)
+            full_text = "".join(parts)
+
             segments = segment_sentences(
-                segments, max_segment=max_segment, long_pause_ms=self.settings.SENTENCE_LONG_PAUSE_MS,
+                segments, dedupe=False, max_segment=max_segment, long_pause_ms=self.settings.SENTENCE_LONG_PAUSE_MS,
                 short_pause_ms=self.settings.SENTENCE_SHORT_PAUSE_MS)
 
             for seg in segments:
@@ -255,12 +266,6 @@ class ASRPipeline:
                 except Exception as e:
                     logger.warning(f"音频标注失败，跳过: {e}")
                     audio_events = None
-
-            # 5. 合并全文
-            full_text = "".join(
-                seg["text"] for seg in segments
-                if seg["text"] and seg["text"].strip() and seg["text"] != "[识别失败]"
-            )
 
             if progress_callback:
                 progress_callback(1.0)

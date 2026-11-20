@@ -30,7 +30,7 @@
         "text": "i will bring the yellow band"
       }
     ],
-    "full_text": "the bullet train leaves at noonplease meet me at the stationi will bring the yellow band",
+    "full_text": "the bullet train leaves at noon please meet me at the station i will bring the yellow band",
     "language": "en",
     "align_enabled": true,
     "punc_enabled": false
@@ -152,7 +152,7 @@
         "speaker": "A"
       }
     ],
-    "full_text": "the bullet train leaves at noonplease meet me at the stationi will bring the yellow band",
+    "full_text": "the bullet train leaves at noon please meet me at the station i will bring the yellow band",
     "language": "en",
     "align_enabled": true,
     "punc_enabled": false,
