@@ -1,0 +1,276 @@
+[
+  {
+    "protocol": "native",
+    "case": "cancel",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "protocol": "qwen3-asr-stream",
+          "protocol_version": "1.0",
+          "mode": "remote",
+          "backend": "vad-offline",
+          "sample_rate": 16000,
+          "capabilities": {
+            "partial_results": false,
+            "word_timestamps": false,
+            "languages_auto": true,
+            "speaker_labels": false,
+            "speaker_identification": false,
+            "noise_filter_tunable": true,
+            "speaker_tunable": false,
+            "endpoint_tunable": true,
+            "output_toggles": true,
+            "scene": false
+          },
+          "limits": {
+            "max_frame_bytes": 2097152,
+            "max_backlog_bytes": 8388608
+          }
+        }
+      },
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "protocol": "qwen3-asr-stream",
+          "protocol_version": "1.0",
+          "mode": "remote",
+          "backend": "vad-offline",
+          "sample_rate": 16000,
+          "capabilities": {
+            "partial_results": false,
+            "word_timestamps": false,
+            "languages_auto": true,
+            "speaker_labels": false,
+            "speaker_identification": false,
+            "noise_filter_tunable": true,
+            "speaker_tunable": false,
+            "endpoint_tunable": true,
+            "output_toggles": true,
+            "scene": false
+          },
+          "limits": {
+            "max_frame_bytes": 2097152,
+            "max_backlog_bytes": 8388608
+          }
+        }
+      },
+      {
+        "ms": 1845,
+        "event": {
+          "type": "final",
+          "seg_id": 0,
+          "text": "The blue train leaves at noon.",
+          "start": 0,
+          "end": 1620
+        }
+      },
+      {
+        "ms": 1845,
+        "event": {
+          "type": "session.closed",
+          "reason": "end"
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      201
+    ],
+    "max_send_lag_ms": 1,
+    "abort_unix_ms": 1795166930400,
+    "reconnect_ms": 1,
+    "audio_s": 1.644375,
+    "wall_rtf": 1.1220147119725197,
+    "proxy": [
+      {
+        "path": "/v1/audio/transcriptions",
+        "delay_ms": 2000,
+        "at": 1795166931674
+      }
+    ],
+    "passed": true
+  },
+  {
+    "protocol": "openai",
+    "case": "cancel",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "session": {
+            "id": "sess_03b54ec9bc394271bba215ebd3fe3ec5",
+            "object": "realtime.transcription_session",
+            "expires_at": 0,
+            "input_audio_format": "pcm16",
+            "input_audio_transcription": {
+              "model": "qwen3-asr"
+            },
+            "turn_detection": {
+              "type": "server_vad"
+            }
+          }
+        }
+      },
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.updated",
+          "session": {
+            "object": "realtime.transcription_session",
+            "audio": {
+              "input": {
+                "format": {
+                  "type": "audio/pcm",
+                  "rate": 16000
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "session": {
+            "id": "sess_67d46b0b0a01436c9e944c10f4027e32",
+            "object": "realtime.transcription_session",
+            "expires_at": 0,
+            "input_audio_format": "pcm16",
+            "input_audio_transcription": {
+              "model": "qwen3-asr"
+            },
+            "turn_detection": {
+              "type": "server_vad"
+            }
+          }
+        }
+      },
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.updated",
+          "session": {
+            "object": "realtime.transcription_session",
+            "audio": {
+              "input": {
+                "format": {
+                  "type": "audio/pcm",
+                  "rate": 16000
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "ms": 1850,
+        "event": {
+          "type": "conversation.item.input_audio_transcription.completed",
+          "item_id": "item_0",
+          "content_index": 0,
+          "transcript": "The blue train leaves at noon."
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      205
+    ],
+    "max_send_lag_ms": 2,
+    "abort_unix_ms": 1795166935494,
+    "reconnect_ms": 2,
+    "audio_s": 1.644375,
+    "wall_rtf": 1.124867926111816,
+    "proxy": [
+      {
+        "path": "/v1/audio/transcriptions",
+        "delay_ms": 2000,
+        "at": 1795166936760
+      }
+    ],
+    "passed": true
+  },
+  {
+    "protocol": "dashscope",
+    "case": "cancel",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "header": {
+            "task_id": "faf23eb2acc74e11b41d7603d13bcc39",
+            "event": "task-started",
+            "attributes": {}
+          },
+          "payload": {}
+        }
+      },
+      {
+        "ms": 0,
+        "event": {
+          "header": {
+            "task_id": "5ee1aed95d484772a2f6fe821a7679a4",
+            "event": "task-started",
+            "attributes": {}
+          },
+          "payload": {}
+        }
+      },
+      {
+        "ms": 1845,
+        "event": {
+          "header": {
+            "task_id": "5ee1aed95d484772a2f6fe821a7679a4",
+            "event": "result-generated",
+            "attributes": {}
+          },
+          "payload": {
+            "output": {
+              "sentence": {
+                "begin_time": 0,
+                "end_time": 1620,
+                "text": "The blue train leaves at noon.",
+                "sentence_end": true,
+                "sentence_id": 1
+              }
+            },
+            "usage": null
+          }
+        }
+      },
+      {
+        "ms": 1845,
+        "event": {
+          "header": {
+            "task_id": "5ee1aed95d484772a2f6fe821a7679a4",
+            "event": "task-finished",
+            "attributes": {}
+          },
+          "payload": {
+            "output": {},
+            "usage": null
+          }
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      200
+    ],
+    "max_send_lag_ms": 1,
+    "abort_unix_ms": 1795166941093,
+    "reconnect_ms": 1,
+    "audio_s": 1.644375,
+    "wall_rtf": 1.121875817864211,
+    "proxy": [
+      {
+        "path": "/v1/audio/transcriptions",
+        "delay_ms": 2000,
+        "at": 1795166942351
+      }
+    ],
+    "passed": true
+  }
+]

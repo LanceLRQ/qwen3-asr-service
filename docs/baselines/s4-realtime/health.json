@@ -1,0 +1,59 @@
+{
+    "status": "ready",
+    "mode": "remote",
+    "device": "cuda",
+    "model_size": null,
+    "align_enabled": false,
+    "punc_enabled": false,
+    "speaker_enabled": false,
+    "speaker_db_enabled": false,
+    "audio_tagging_enabled": false,
+    "asr_backend": "remote",
+    "vad_backend": "pytorch",
+    "punc_backend": "disabled",
+    "config_file": "config.yaml",
+    "capabilities": {
+        "mode": "remote",
+        "offline_api": true,
+        "word_timestamps": false,
+        "speaker_labels": false,
+        "speaker_identification": false,
+        "audio_tagging": false,
+        "scene": false,
+        "scene_preset": "balanced",
+        "scene_presets": [
+            "balanced",
+            "live",
+            "music"
+        ],
+        "stream": {
+            "enabled": true,
+            "backend": "vad-offline",
+            "path": "/v2/asr/stream",
+            "partial_results": false,
+            "word_timestamps": false,
+            "speaker_labels": false,
+            "scene": false
+        },
+        "defaults": {
+            "max_segment": 5,
+            "max_end_silence_ms": 800,
+            "max_segment_sec": 12,
+            "speaker_threshold": 0.5,
+            "speaker_min_seg_ms": 1500,
+            "speaker_max": 8,
+            "speaker_id_threshold": 0.45,
+            "speaker_id_margin": 0.1,
+            "energy_floor_dbfs": -50.0,
+            "snr_min_db": 6.0,
+            "audio_tagging_engine": "panns",
+            "audio_tagging_panns_variant": "16k"
+        },
+        "compat": {
+            "openai": true,
+            "dashscope": true,
+            "realtime": true,
+            "realtime_partial": false
+        }
+    }
+}

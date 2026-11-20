@@ -1,0 +1,898 @@
+[
+  {
+    "protocol": "native",
+    "case": "two",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "protocol": "qwen3-asr-stream",
+          "protocol_version": "1.0",
+          "mode": "remote",
+          "backend": "vad-offline",
+          "sample_rate": 16000,
+          "capabilities": {
+            "partial_results": false,
+            "word_timestamps": false,
+            "languages_auto": true,
+            "speaker_labels": false,
+            "speaker_identification": false,
+            "noise_filter_tunable": true,
+            "speaker_tunable": false,
+            "endpoint_tunable": true,
+            "output_toggles": true,
+            "scene": false
+          },
+          "limits": {
+            "max_frame_bytes": 2097152,
+            "max_backlog_bytes": 8388608
+          }
+        }
+      },
+      {
+        "ms": 2526,
+        "event": {
+          "type": "final",
+          "seg_id": 0,
+          "text": "The blue train leaves at noon.",
+          "start": 0,
+          "end": 1810
+        }
+      },
+      {
+        "ms": 6703,
+        "event": {
+          "type": "final",
+          "seg_id": 1,
+          "text": "Please meet me at the station.",
+          "start": 3700,
+          "end": 5980
+        }
+      },
+      {
+        "ms": 7815,
+        "event": {
+          "type": "session.closed",
+          "reason": "end"
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      881,
+      892
+    ],
+    "max_send_lag_ms": 1,
+    "audio_s": 7.80975,
+    "wall_rtf": 1.0005947598833886,
+    "passed": true
+  },
+  {
+    "protocol": "native",
+    "case": "stop",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "protocol": "qwen3-asr-stream",
+          "protocol_version": "1.0",
+          "mode": "remote",
+          "backend": "vad-offline",
+          "sample_rate": 16000,
+          "capabilities": {
+            "partial_results": false,
+            "word_timestamps": false,
+            "languages_auto": true,
+            "speaker_labels": false,
+            "speaker_identification": false,
+            "noise_filter_tunable": true,
+            "speaker_tunable": false,
+            "endpoint_tunable": true,
+            "output_toggles": true,
+            "scene": false
+          },
+          "limits": {
+            "max_frame_bytes": 2097152,
+            "max_backlog_bytes": 8388608
+          }
+        }
+      },
+      {
+        "ms": 1844,
+        "event": {
+          "type": "final",
+          "seg_id": 0,
+          "text": "The blue train leaves at noon.",
+          "start": 0,
+          "end": 1620
+        }
+      },
+      {
+        "ms": 1844,
+        "event": {
+          "type": "session.closed",
+          "reason": "end"
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      200
+    ],
+    "max_send_lag_ms": 1,
+    "audio_s": 1.644375,
+    "wall_rtf": 1.1215418228811076,
+    "passed": true
+  },
+  {
+    "protocol": "native",
+    "case": "disconnect",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "protocol": "qwen3-asr-stream",
+          "protocol_version": "1.0",
+          "mode": "remote",
+          "backend": "vad-offline",
+          "sample_rate": 16000,
+          "capabilities": {
+            "partial_results": false,
+            "word_timestamps": false,
+            "languages_auto": true,
+            "speaker_labels": false,
+            "speaker_identification": false,
+            "noise_filter_tunable": true,
+            "speaker_tunable": false,
+            "endpoint_tunable": true,
+            "output_toggles": true,
+            "scene": false
+          },
+          "limits": {
+            "max_frame_bytes": 2097152,
+            "max_backlog_bytes": 8388608
+          }
+        }
+      },
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "protocol": "qwen3-asr-stream",
+          "protocol_version": "1.0",
+          "mode": "remote",
+          "backend": "vad-offline",
+          "sample_rate": 16000,
+          "capabilities": {
+            "partial_results": false,
+            "word_timestamps": false,
+            "languages_auto": true,
+            "speaker_labels": false,
+            "speaker_identification": false,
+            "noise_filter_tunable": true,
+            "speaker_tunable": false,
+            "endpoint_tunable": true,
+            "output_toggles": true,
+            "scene": false
+          },
+          "limits": {
+            "max_frame_bytes": 2097152,
+            "max_backlog_bytes": 8388608
+          }
+        }
+      },
+      {
+        "ms": 1852,
+        "event": {
+          "type": "final",
+          "seg_id": 0,
+          "text": "The blue train leaves at noon.",
+          "start": 0,
+          "end": 1620
+        }
+      },
+      {
+        "ms": 1852,
+        "event": {
+          "type": "session.closed",
+          "reason": "end"
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      207
+    ],
+    "max_send_lag_ms": 1,
+    "reconnect_ms": 1,
+    "audio_s": 1.644375,
+    "wall_rtf": 1.126087672215924,
+    "passed": true
+  },
+  {
+    "protocol": "native",
+    "case": "slow",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "protocol": "qwen3-asr-stream",
+          "protocol_version": "1.0",
+          "mode": "remote",
+          "backend": "vad-offline",
+          "sample_rate": 16000,
+          "capabilities": {
+            "partial_results": false,
+            "word_timestamps": false,
+            "languages_auto": true,
+            "speaker_labels": false,
+            "speaker_identification": false,
+            "noise_filter_tunable": true,
+            "speaker_tunable": false,
+            "endpoint_tunable": true,
+            "output_toggles": true,
+            "scene": false
+          },
+          "limits": {
+            "max_frame_bytes": 2097152,
+            "max_backlog_bytes": 8388608
+          }
+        }
+      },
+      {
+        "ms": 4506,
+        "event": {
+          "type": "final",
+          "seg_id": 0,
+          "text": "The blue train leaves at noon.",
+          "start": 0,
+          "end": 1810
+        }
+      },
+      {
+        "ms": 8706,
+        "event": {
+          "type": "final",
+          "seg_id": 1,
+          "text": "Please meet me at the station.",
+          "start": 3700,
+          "end": 5980
+        }
+      },
+      {
+        "ms": 8730,
+        "event": {
+          "type": "session.closed",
+          "reason": "end"
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      2861,
+      2896
+    ],
+    "max_send_lag_ms": 2,
+    "audio_s": 7.80975,
+    "wall_rtf": 1.1177599530074318,
+    "proxy": [
+      {
+        "path": "/v1/audio/transcriptions",
+        "delay_ms": 2000,
+        "at": 1795166867895
+      },
+      {
+        "path": "/v1/audio/transcriptions",
+        "delay_ms": 2000,
+        "at": 1795166872096
+      }
+    ],
+    "passed": true
+  },
+  {
+    "protocol": "openai",
+    "case": "two",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "session": {
+            "id": "sess_cc2852052fff461e8abd90cc102519fc",
+            "object": "realtime.transcription_session",
+            "expires_at": 0,
+            "input_audio_format": "pcm16",
+            "input_audio_transcription": {
+              "model": "qwen3-asr"
+            },
+            "turn_detection": {
+              "type": "server_vad"
+            }
+          }
+        }
+      },
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.updated",
+          "session": {
+            "object": "realtime.transcription_session",
+            "audio": {
+              "input": {
+                "format": {
+                  "type": "audio/pcm",
+                  "rate": 16000
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "ms": 2500,
+        "event": {
+          "type": "conversation.item.input_audio_transcription.completed",
+          "item_id": "item_0",
+          "content_index": 0,
+          "transcript": "The blue train leaves at noon."
+        }
+      },
+      {
+        "ms": 6708,
+        "event": {
+          "type": "conversation.item.input_audio_transcription.completed",
+          "item_id": "item_1",
+          "content_index": 0,
+          "transcript": "Please meet me at the station."
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      855,
+      898
+    ],
+    "max_send_lag_ms": 2,
+    "audio_s": 7.80975,
+    "wall_rtf": 1.0001963220333994,
+    "passed": true
+  },
+  {
+    "protocol": "openai",
+    "case": "stop",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "session": {
+            "id": "sess_be7953117da74993ad134e2ca336c680",
+            "object": "realtime.transcription_session",
+            "expires_at": 0,
+            "input_audio_format": "pcm16",
+            "input_audio_transcription": {
+              "model": "qwen3-asr"
+            },
+            "turn_detection": {
+              "type": "server_vad"
+            }
+          }
+        }
+      },
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.updated",
+          "session": {
+            "object": "realtime.transcription_session",
+            "audio": {
+              "input": {
+                "format": {
+                  "type": "audio/pcm",
+                  "rate": 16000
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "ms": 1854,
+        "event": {
+          "type": "conversation.item.input_audio_transcription.completed",
+          "item_id": "item_0",
+          "content_index": 0,
+          "transcript": "The blue train leaves at noon."
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      209
+    ],
+    "max_send_lag_ms": 1,
+    "audio_s": 1.644375,
+    "wall_rtf": 1.127122757886895,
+    "passed": true
+  },
+  {
+    "protocol": "openai",
+    "case": "disconnect",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "session": {
+            "id": "sess_fe649eeb67db43a8b8e3d97816cc525f",
+            "object": "realtime.transcription_session",
+            "expires_at": 0,
+            "input_audio_format": "pcm16",
+            "input_audio_transcription": {
+              "model": "qwen3-asr"
+            },
+            "turn_detection": {
+              "type": "server_vad"
+            }
+          }
+        }
+      },
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.updated",
+          "session": {
+            "object": "realtime.transcription_session",
+            "audio": {
+              "input": {
+                "format": {
+                  "type": "audio/pcm",
+                  "rate": 16000
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "session": {
+            "id": "sess_e6790c8f3e7c49e89e1e0038a7f3965a",
+            "object": "realtime.transcription_session",
+            "expires_at": 0,
+            "input_audio_format": "pcm16",
+            "input_audio_transcription": {
+              "model": "qwen3-asr"
+            },
+            "turn_detection": {
+              "type": "server_vad"
+            }
+          }
+        }
+      },
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.updated",
+          "session": {
+            "object": "realtime.transcription_session",
+            "audio": {
+              "input": {
+                "format": {
+                  "type": "audio/pcm",
+                  "rate": 16000
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "ms": 1851,
+        "event": {
+          "type": "conversation.item.input_audio_transcription.completed",
+          "item_id": "item_0",
+          "content_index": 0,
+          "transcript": "The blue train leaves at noon."
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      207
+    ],
+    "max_send_lag_ms": 1,
+    "reconnect_ms": 1,
+    "audio_s": 1.644375,
+    "wall_rtf": 1.1256608893955755,
+    "passed": true
+  },
+  {
+    "protocol": "openai",
+    "case": "slow",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.created",
+          "session": {
+            "id": "sess_f4e742209632450b82706d3e1a8a240e",
+            "object": "realtime.transcription_session",
+            "expires_at": 0,
+            "input_audio_format": "pcm16",
+            "input_audio_transcription": {
+              "model": "qwen3-asr"
+            },
+            "turn_detection": {
+              "type": "server_vad"
+            }
+          }
+        }
+      },
+      {
+        "ms": 0,
+        "event": {
+          "type": "session.updated",
+          "session": {
+            "object": "realtime.transcription_session",
+            "audio": {
+              "input": {
+                "format": {
+                  "type": "audio/pcm",
+                  "rate": 16000
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "ms": 4512,
+        "event": {
+          "type": "conversation.item.input_audio_transcription.completed",
+          "item_id": "item_0",
+          "content_index": 0,
+          "transcript": "The blue train leaves at noon."
+        }
+      },
+      {
+        "ms": 8739,
+        "event": {
+          "type": "conversation.item.input_audio_transcription.completed",
+          "item_id": "item_1",
+          "content_index": 0,
+          "transcript": "Please meet me at the station."
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      2867,
+      2929
+    ],
+    "max_send_lag_ms": 3,
+    "audio_s": 7.80975,
+    "wall_rtf": 1.118973417586935,
+    "proxy": [
+      {
+        "path": "/v1/audio/transcriptions",
+        "delay_ms": 2000,
+        "at": 1795166891303
+      },
+      {
+        "path": "/v1/audio/transcriptions",
+        "delay_ms": 2000,
+        "at": 1795166895526
+      }
+    ],
+    "passed": true
+  },
+  {
+    "protocol": "dashscope",
+    "case": "two",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "header": {
+            "task_id": "5c1f220035494b3989cc30d465af0d69",
+            "event": "task-started",
+            "attributes": {}
+          },
+          "payload": {}
+        }
+      },
+      {
+        "ms": 2533,
+        "event": {
+          "header": {
+            "task_id": "5c1f220035494b3989cc30d465af0d69",
+            "event": "result-generated",
+            "attributes": {}
+          },
+          "payload": {
+            "output": {
+              "sentence": {
+                "begin_time": 0,
+                "end_time": 1810,
+                "text": "The blue train leaves at noon.",
+                "sentence_end": true,
+                "sentence_id": 1
+              }
+            },
+            "usage": null
+          }
+        }
+      },
+      {
+        "ms": 6727,
+        "event": {
+          "header": {
+            "task_id": "5c1f220035494b3989cc30d465af0d69",
+            "event": "result-generated",
+            "attributes": {}
+          },
+          "payload": {
+            "output": {
+              "sentence": {
+                "begin_time": 3700,
+                "end_time": 5980,
+                "text": "Please meet me at the station.",
+                "sentence_end": true,
+                "sentence_id": 2
+              }
+            },
+            "usage": null
+          }
+        }
+      },
+      {
+        "ms": 7816,
+        "event": {
+          "header": {
+            "task_id": "5c1f220035494b3989cc30d465af0d69",
+            "event": "task-finished",
+            "attributes": {}
+          },
+          "payload": {
+            "output": {},
+            "usage": null
+          }
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      888,
+      917
+    ],
+    "max_send_lag_ms": 3,
+    "audio_s": 7.80975,
+    "wall_rtf": 1.0007105611576215,
+    "passed": true
+  },
+  {
+    "protocol": "dashscope",
+    "case": "stop",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "header": {
+            "task_id": "98e0c641840d41adb1a0e9e26c31c09e",
+            "event": "task-started",
+            "attributes": {}
+          },
+          "payload": {}
+        }
+      },
+      {
+        "ms": 1846,
+        "event": {
+          "header": {
+            "task_id": "98e0c641840d41adb1a0e9e26c31c09e",
+            "event": "result-generated",
+            "attributes": {}
+          },
+          "payload": {
+            "output": {
+              "sentence": {
+                "begin_time": 0,
+                "end_time": 1620,
+                "text": "The blue train leaves at noon.",
+                "sentence_end": true,
+                "sentence_id": 1
+              }
+            },
+            "usage": null
+          }
+        }
+      },
+      {
+        "ms": 1846,
+        "event": {
+          "header": {
+            "task_id": "98e0c641840d41adb1a0e9e26c31c09e",
+            "event": "task-finished",
+            "attributes": {}
+          },
+          "payload": {
+            "output": {},
+            "usage": null
+          }
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      201
+    ],
+    "max_send_lag_ms": 2,
+    "audio_s": 1.644375,
+    "wall_rtf": 1.1222765464084354,
+    "passed": true
+  },
+  {
+    "protocol": "dashscope",
+    "case": "disconnect",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "header": {
+            "task_id": "586b17f751cf46738089e00940f81e5e",
+            "event": "task-started",
+            "attributes": {}
+          },
+          "payload": {}
+        }
+      },
+      {
+        "ms": 0,
+        "event": {
+          "header": {
+            "task_id": "1cb12d0d106d4d13a41407ba28154032",
+            "event": "task-started",
+            "attributes": {}
+          },
+          "payload": {}
+        }
+      },
+      {
+        "ms": 1844,
+        "event": {
+          "header": {
+            "task_id": "1cb12d0d106d4d13a41407ba28154032",
+            "event": "result-generated",
+            "attributes": {}
+          },
+          "payload": {
+            "output": {
+              "sentence": {
+                "begin_time": 0,
+                "end_time": 1620,
+                "text": "The blue train leaves at noon.",
+                "sentence_end": true,
+                "sentence_id": 1
+              }
+            },
+            "usage": null
+          }
+        }
+      },
+      {
+        "ms": 1845,
+        "event": {
+          "header": {
+            "task_id": "1cb12d0d106d4d13a41407ba28154032",
+            "event": "task-finished",
+            "attributes": {}
+          },
+          "payload": {
+            "output": {},
+            "usage": null
+          }
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      200
+    ],
+    "max_send_lag_ms": 1,
+    "reconnect_ms": 2,
+    "audio_s": 1.644375,
+    "wall_rtf": 1.1215024650704104,
+    "passed": true
+  },
+  {
+    "protocol": "dashscope",
+    "case": "slow",
+    "events": [
+      {
+        "ms": 0,
+        "event": {
+          "header": {
+            "task_id": "040009126272400bba5fc04293577a19",
+            "event": "task-started",
+            "attributes": {}
+          },
+          "payload": {}
+        }
+      },
+      {
+        "ms": 4505,
+        "event": {
+          "header": {
+            "task_id": "040009126272400bba5fc04293577a19",
+            "event": "result-generated",
+            "attributes": {}
+          },
+          "payload": {
+            "output": {
+              "sentence": {
+                "begin_time": 0,
+                "end_time": 1810,
+                "text": "The blue train leaves at noon.",
+                "sentence_end": true,
+                "sentence_id": 1
+              }
+            },
+            "usage": null
+          }
+        }
+      },
+      {
+        "ms": 8701,
+        "event": {
+          "header": {
+            "task_id": "040009126272400bba5fc04293577a19",
+            "event": "result-generated",
+            "attributes": {}
+          },
+          "payload": {
+            "output": {
+              "sentence": {
+                "begin_time": 3700,
+                "end_time": 5980,
+                "text": "Please meet me at the station.",
+                "sentence_end": true,
+                "sentence_id": 2
+              }
+            },
+            "usage": null
+          }
+        }
+      },
+      {
+        "ms": 8724,
+        "event": {
+          "header": {
+            "task_id": "040009126272400bba5fc04293577a19",
+            "event": "task-finished",
+            "attributes": {}
+          },
+          "payload": {
+            "output": {},
+            "usage": null
+          }
+        }
+      }
+    ],
+    "end_to_final_ms": [
+      2860,
+      2891
+    ],
+    "max_send_lag_ms": 1,
+    "audio_s": 7.80975,
+    "wall_rtf": 1.1170300736898955,
+    "proxy": [
+      {
+        "path": "/v1/audio/transcriptions",
+        "delay_ms": 2000,
+        "at": 1795166913699
+      },
+      {
+        "path": "/v1/audio/transcriptions",
+        "delay_ms": 2000,
+        "at": 1795166917895
+      }
+    ],
+    "passed": true
+  }
+]
