@@ -13,6 +13,7 @@ from uuid import uuid4
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 import app.config as cfg
+from app.engines.remote_asr_engine import RemoteASRError
 from app.api.ws_schemas import SessionCreated, SessionClosed, ErrorMsg, EnrollMsg, EnrollAck
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,25 @@ async def verify_ws_token(ws: WebSocket) -> bool:
         if auth and auth.lower().startswith("bearer "):
             token = auth[7:]
     return token is not None and hmac.compare_digest(token, cfg.API_KEY)
+
+
+async def receive_while_consuming(ws, consumer, deadline):
+    """消费结束或失败时唤醒接收循环，即使客户端正等待服务端回包。"""
+    receive = asyncio.create_task(ws.receive())
+    try:
+        done, _ = await asyncio.wait(
+            (receive, consumer), timeout=deadline - asyncio.get_running_loop().time(),
+            return_when=asyncio.FIRST_COMPLETED)
+        if consumer in done:
+            consumer.result()
+            return None
+        if not done:
+            raise asyncio.TimeoutError
+        return receive.result()
+    finally:
+        if not receive.done():
+            receive.cancel()
+            await asyncio.gather(receive, return_exceptions=True)
 
 
 @ws_router_stream.websocket("/stream")
@@ -136,7 +156,7 @@ async def stream(ws: WebSocket):
                     async for r in session.feed_audio(item):
                         await ws.send_json(r)
                         sent_msgs += 1
-                except WebSocketDisconnect:
+                except (WebSocketDisconnect, RemoteASRError):
                     raise                           # 连接已断，交由主循环统一收尾
                 except Exception as e:
                     logger.warning(f"音频处理失败: {e}", exc_info=True)
@@ -151,10 +171,9 @@ async def stream(ws: WebSocket):
         consume_task = asyncio.create_task(_consume())
 
         while True:
-            if consume_task.done():
-                consume_task.result()               # 消费侧异常上抛；正常结束则连接已不可用
+            m = await receive_while_consuming(ws, consume_task, deadline)
+            if m is None:
                 break
-            m = await asyncio.wait_for(ws.receive(), timeout=deadline - loop.time())
             if m["type"] == "websocket.disconnect":
                 logger.info(f"[stream] 客户端断开 sid={sid[:8]} "
                             f"累计收字节={recv_bytes} 累计发消息={sent_msgs}")
@@ -190,7 +209,7 @@ async def stream(ws: WebSocket):
                 if typ == "stop":
                     logger.info(f"[stream] 收到 stop sid={sid[:8]} 累计收字节={recv_bytes}")
                     frame_q.put_nowait(None)
-                    await consume_task              # 消费完积压并冲刷末句
+                    await asyncio.wait_for(consume_task, timeout=deadline - loop.time())
                     break
                 if typ == "enroll":
                     # 接收侧按 schema 校验（类型/限长），失败入队回执；保持单一发送方

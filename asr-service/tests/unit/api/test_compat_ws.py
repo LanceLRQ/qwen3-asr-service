@@ -332,3 +332,58 @@ def test_openai_adapter_partial_revision_best_effort():
     a.translate_finals({"text": "你们好", "start": 0, "end": 1})  # item_0 → seq 递增 + 基准归零
     nxt = a.translate_partials({"text": "早"})
     assert nxt[0]["delta"] == "早" and nxt[0]["item_id"] == "item_1"
+
+
+def test_commit_failure_reported_without_another_frame(ws_app, monkeypatch):
+    class FailedFlush(FakeSession):
+        async def flush(self):
+            raise RuntimeError("private details")
+            yield
+
+    monkeypatch.setattr(cfg, "STREAM_MAX_SESSION_SECONDS", 2)
+    backend = FakeBackend(FailedFlush)
+    with ws_app(backend).websocket_connect(OPENAI_WS) as ws:
+        ws.receive_json()
+        ws.send_json({"type": "input_audio_buffer.commit"})
+        assert ws.receive_json()["error"]["code"] == "internal"
+    assert backend.released == 1
+
+
+@pytest.mark.parametrize("path", [OPENAI_WS, DASHSCOPE_WS])
+@pytest.mark.parametrize("overflow", [False, True])
+def test_slow_consumer_released_on_disconnect_or_overflow(ws_app, monkeypatch, path, overflow):
+    import asyncio
+    import threading
+
+    started = threading.Event()
+    cancelled = threading.Event()
+
+    class SlowSession(FakeSession):
+        async def feed_audio(self, pcm):
+            started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                cancelled.set()
+            yield
+
+    monkeypatch.setattr(cfg, "STREAM_MAX_BACKLOG_BYTES", 4)
+    backend = FakeBackend(SlowSession)
+    with ws_app(backend).websocket_connect(path) as ws:
+        def send_frame():
+            if path == OPENAI_WS:
+                ws.send_json({"type": "input_audio_buffer.append", "audio": "AAAAAA=="})
+            else:
+                ws.send_bytes(bytes(4))
+
+        if path == OPENAI_WS:
+            ws.receive_json()
+        send_frame()
+        assert started.wait(2)
+        if overflow:
+            send_frame()
+            error = ws.receive_json()
+            code = error["error"]["code"] if path == OPENAI_WS else error["header"]["error_code"]
+            assert code == "backlog_overflow"
+    assert cancelled.wait(2)
+    assert backend.released == 1

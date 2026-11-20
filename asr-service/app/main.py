@@ -124,7 +124,7 @@ def _apply_cli_config(args):
     if args.max_queue_size is not None:
         cfg.MAX_QUEUE_SIZE = args.max_queue_size
     cfg.SERVE_MODE = getattr(args, "serve_mode", "standard")
-    cfg.ENABLE_STREAM = cfg.SERVE_MODE != "remote" and getattr(args, "enable_stream", False)
+    cfg.ENABLE_STREAM = getattr(args, "enable_stream", False)
     if getattr(args, "max_stream_sessions", None) is not None:
         cfg.MAX_STREAM_SESSIONS = args.max_stream_sessions
     if getattr(args, "stream_asr_concurrency", None) is not None:
@@ -501,8 +501,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
             "backend": "vad-offline" if stream_enabled else None,
             "path": "/v2/asr/stream" if stream_enabled else None,
             "partial_results": asr_engine.capabilities.realtime_incremental,
-            "word_timestamps": enable_align if stream_enabled else False,
-            "speaker_labels": speaker_enabled if stream_enabled else False,
+            "word_timestamps": stream_enabled and asr_engine.capabilities.word_timestamps,
+            "speaker_labels": speaker_enabled and stream_enabled and not remote,
             "scene": tagging_enabled and cfg.SCENE_ENABLE if stream_enabled else False,
         },
         # 可覆盖参数的当前生效默认值（反映实际配置，供 Web UI 占位提示）
@@ -525,7 +525,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
         capabilities["compat"] = {
             "openai": cfg.ENABLE_OPENAI_API,
             "dashscope": cfg.ENABLE_DASHSCOPE_API,
-            "realtime": False,
+            "realtime": stream_enabled and (cfg.ENABLE_OPENAI_API or cfg.ENABLE_DASHSCOPE_API),
             "realtime_partial": False,
         }
     service_info = {
@@ -572,8 +572,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
         from app.api.ws_routes import ws_router_stream, init_ws_stream
         from app.runtime.stream_session import VadOfflineBackend
         stream_backend = VadOfflineBackend(
-            asr_engine, vad_engine, punc_engine,
-            speaker=speaker_engine,
+            asr_engine, vad_engine, punc_engine, mode=cfg.SERVE_MODE,
+            speaker=None if remote else speaker_engine,
             speaker_service=linked_speaker_service,
             max_sessions=cfg.MAX_STREAM_SESSIONS,
             asr_concurrency=cfg.STREAM_ASR_CONCURRENCY,

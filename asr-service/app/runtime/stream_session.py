@@ -407,8 +407,18 @@ class StreamSession:
                     f"floor={'—' if floor is None else f'{floor:.1f}'} 门={reason}")
                 return
         t0 = time.monotonic()
-        async with self._asr_sem:                      # 串行化 GPU/ASR
-            res = await self._in_thread(self._asr.transcribe_array, seg, _TARGET_SR, self.language, str(self.seg_id))
+        # 客户端断连可以取消会话，但已发出的同步推理仍占用并发名额直到返回。
+        await self._asr_sem.acquire()
+        inference = asyncio.create_task(self._in_thread(
+            self._asr.transcribe_array, seg, _TARGET_SR, self.language, str(self.seg_id)))
+
+        def inference_done(task):
+            self._asr_sem.release()
+            if not task.cancelled():
+                task.exception()  # 会话已断开时也回收后台异常
+
+        inference.add_done_callback(inference_done)
+        res = await asyncio.shield(inference)
         decode_ms = (time.monotonic() - t0) * 1000
         text = res.text
         if self._punc is not None and self._with_punc and text.strip():
@@ -640,13 +650,14 @@ class VadOfflineBackend:
     mode = "standard"
     backend = "vad-offline"
 
-    def __init__(self, asr, vad, punc=None, *, speaker=None, speaker_service=None,
+    def __init__(self, asr, vad, punc=None, *, mode="standard", speaker=None, speaker_service=None,
                  max_sessions=4, asr_concurrency=1, max_segment_sec=30, vad_chunk_ms=200,
                  noise_filter=False, energy_floor_dbfs=-50.0, snr_min_db=6.0, tagger=None,
                  scene_enable=True, scene_enter_sec=2.0, scene_exit_sec=2.0,
                  scene_silence_dbfs=-50.0, scene_vocal_priority=True,
                  scene_singing_min=0.10, scene_singing_bias=0.0, scene_weights=None,
                  tag_interval_ms=960, tag_topk=5, scene_map=None):
+        self.mode = mode
         self._svad = StreamingVADEngine(vad, chunk_ms=vad_chunk_ms)
         self._asr = asr
         self._punc = punc

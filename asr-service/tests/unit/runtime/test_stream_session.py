@@ -793,3 +793,31 @@ async def test_handle_enroll_merges_into_existing(monkeypatch):
         assert service.merged and not service.enrolled        # 走合并、未新建
     finally:
         ex.shutdown(wait=False)
+
+
+async def test_disconnect_preserves_inference_slot_until_worker_finishes():
+    import threading
+
+    started = threading.Event()
+    finish = threading.Event()
+    vad = FakeSVAD({0: [{"type": "complete", "start": 0, "end": 500}]})
+    session, asr, executor = _make_session(vad)
+
+    def slow_request(*args):
+        started.set()
+        finish.wait(5)
+        return ASRResult("done")
+
+    asr.transcribe_array.side_effect = slow_request
+    consumer = asyncio.create_task(_collect(session.feed_audio(_pcm_ms(500))))
+    try:
+        assert await asyncio.to_thread(started.wait, 2)
+        consumer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await consumer
+        assert session._asr_sem.locked()
+        finish.set()
+        await asyncio.wait_for(session._asr_sem.acquire(), timeout=2)
+    finally:
+        finish.set()
+        executor.shutdown()

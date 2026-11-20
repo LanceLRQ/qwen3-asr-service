@@ -1,8 +1,10 @@
 """S2-01 Qwen HTTP multipart 单块离线适配器。"""
+import io
 import math
 from pathlib import Path
 
 import httpx
+import soundfile as sf
 
 from app.engines.asr_result import ASRResult, BackendCapabilities, from_qwen_text
 from app.utils.language import to_iso_language
@@ -58,14 +60,23 @@ class RemoteASREngine:
             raise ValueError("上游未提供配置的 remote_model")
 
     def transcribe(self, audio_path: str, language: str | None = None) -> ASRResult:
+        with open(audio_path, "rb") as audio:
+            return self._transcribe(audio, Path(audio_path).name, language, audio_path)
+
+    def transcribe_array(self, samples, sample_rate, language=None, chunk_id=None) -> ASRResult:
+        with io.BytesIO() as audio:
+            sf.write(audio, samples, sample_rate, format="WAV", subtype="PCM_16")
+            audio.seek(0)
+            return self._transcribe(audio, "segment.wav", language, chunk_id)
+
+    def _transcribe(self, audio, filename, language, chunk_id) -> ASRResult:
         data = {"model": self.model}
         hint = to_iso_language(language)
         if hint:
             data["language"] = hint
-        with open(audio_path, "rb") as audio:
-            payload = self._request("POST", "/audio/transcriptions", data=data,
-                                    files={"file": (Path(audio_path).name, audio, "audio/wav")})
+        payload = self._request("POST", "/audio/transcriptions", data=data,
+                                    files={"file": (filename, audio, "audio/wav")})
         text = payload.get("text")
         if not isinstance(text, str):
             raise RemoteASRError("远端 ASR 转写响应格式错误")
-        return from_qwen_text(text, audio_path)
+        return from_qwen_text(text, chunk_id)

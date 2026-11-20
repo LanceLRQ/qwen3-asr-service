@@ -25,9 +25,11 @@ import logging
 from uuid import uuid4
 
 from fastapi import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 
 import app.config as cfg
-from app.api.ws_routes import verify_ws_token
+from app.api.ws_routes import receive_while_consuming, verify_ws_token
+from app.engines.remote_asr_engine import RemoteASRError
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +88,7 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
             try:
                 async for f in session.feed_audio(item):
                     await _emit(f)
-            except WebSocketDisconnect:
+            except (WebSocketDisconnect, RemoteASRError):
                 raise
             except Exception as e:
                 logger.warning(f"[compat-ws] 音频处理失败: {e}", exc_info=True)
@@ -101,10 +103,9 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
     holder["task"] = consume_task
     try:
         while True:
-            if consume_task.done():
-                consume_task.result()        # 消费侧异常上抛；正常结束 → 连接不可用
+            m = await receive_while_consuming(ws, consume_task, deadline)
+            if m is None:
                 return False
-            m = await asyncio.wait_for(ws.receive(), timeout=deadline - loop.time())
             if m["type"] == "websocket.disconnect":
                 return False
             kind, payload = adapter.classify(m)
@@ -132,7 +133,7 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
                 frame_q.put_nowait(_SOFT_FLUSH)
             elif kind == "end":
                 frame_q.put_nowait(_HARD_END)
-                await consume_task
+                await asyncio.wait_for(consume_task, timeout=deadline - loop.time())
                 await adapter.on_finish(ws)
                 return adapter.reusable
             # kind == "ignore": 跳过
@@ -159,9 +160,10 @@ async def run_compat_ws(ws: WebSocket, adapter) -> None:
         return
 
     sid = uuid4().hex
-    session = backend.create_session(sid)
+    session = None
     holder = {"task": None}
     try:
+        session = backend.create_session(sid)
         await ws.accept()
         await adapter.on_open(ws, backend)
         logger.info(f"[compat-ws] accepted sid={sid[:8]} adapter={type(adapter).__name__}")
@@ -196,3 +198,5 @@ async def run_compat_ws(ws: WebSocket, adapter) -> None:
             except (asyncio.CancelledError, Exception):
                 pass
         backend.release(session)
+        if ws.client_state == WebSocketState.CONNECTED and ws.application_state == WebSocketState.CONNECTED:
+            await ws.close()

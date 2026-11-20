@@ -56,7 +56,7 @@ def test_remote_assembly_and_transcription(isolated_create_app, monkeypatch, tmp
     args = main.parse_args(["--no-config", "--serve-mode", "remote", "--remote-base-url",
                             "http://upstream/v1/", "--remote-model", "qwen3-asr",
                             "--remote-api-key", "outbound-secret", "--remote-timeout", "3",
-                            "--enable-stream", "--web", "--no-punc", "--enable-openai-api"]
+                            "--enable-stream", "--web", "--no-punc", "--enable-openai-api", "--enable-dashscope-api"]
                            + (["--remote-enable-align"] if align else []))
     monkeypatch.setattr(main.cfg, "ENABLE_WEB", False)
     monkeypatch.setattr(main, "setup_logger", lambda: None)
@@ -71,12 +71,14 @@ def test_remote_assembly_and_transcription(isolated_create_app, monkeypatch, tmp
     assert loads == (["cuda:0" if device == "cuda" else "cpu"] if align else [])
     capabilities = client.get("/v1/capabilities").json()
     assert capabilities["mode"] == "remote" and capabilities["offline_api"]
-    assert capabilities["stream"]["enabled"] is False
-    assert capabilities["compat"]["openai"] and not capabilities["compat"]["realtime"]
+    assert capabilities["stream"]["enabled"] is True
+    assert capabilities["stream"]["word_timestamps"] is False
+    assert capabilities["compat"]["openai"] and capabilities["compat"]["realtime"]
     assert client.get("/compat/openai/v1/models").json()["data"][0]["id"] == "qwen3-asr"
     paths = {route.path for route in app.routes}
-    assert "/v2/asr/stream" not in paths
-    assert "/compat/openai/v1/realtime" not in paths
+    assert "/v2/asr/stream" in paths
+    assert "/compat/openai/v1/realtime" in paths
+    assert "/compat/dashscope/api-ws/v1/inference" in paths
     assert client.get("/web-ui", follow_redirects=True).status_code == 200
     wav = tmp_path / "short.wav"
     wav.write_bytes(b"test-audio")
@@ -132,3 +134,24 @@ def test_invalid_upstream_response_has_public_error(monkeypatch, tmp_path):
     with pytest.raises(RemoteASRError, match="格式") as error:
         engine.transcribe(str(chunk))
     assert "private" not in str(error.value) and "secret" not in str(error.value)
+
+
+def test_remote_sentence_wav(monkeypatch):
+    import io
+    import wave
+    import numpy as np
+    from app.engines.remote_asr_engine import RemoteASREngine
+
+    engine = RemoteASREngine("http://upstream/v1", "qwen", "", 1)
+
+    def request(method, path, *, data, files):
+        assert (method, path) == ("POST", "/audio/transcriptions")
+        assert data == {"model": "qwen", "language": "en"}
+        with wave.open(io.BytesIO(files["file"][1].read())) as wav:
+            assert (wav.getframerate(), wav.getnchannels(), wav.getsampwidth()) == (16000, 1, 2)
+            assert wav.readframes(2) == b"\x00\xc0\x00\x40"
+        return {"text": "language English<asr_text>Hello"}
+
+    monkeypatch.setattr(engine, "_request", request)
+    result = engine.transcribe_array(np.array([-.5, .5]), 16000, "English", "2")
+    assert (result.chunk_id, result.language, result.text) == ("2", "English", "Hello")
