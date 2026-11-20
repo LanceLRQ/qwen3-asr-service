@@ -2,6 +2,7 @@ import logging
 import threading
 import warnings
 import torch
+from app.engines.asr_result import ASRResult, BackendCapabilities, from_qwen
 from app.utils.model_manager import ensure_model
 from app.config import MODEL_REPO_MAP, MODEL_LOCAL_MAP, MODEL_SOURCE
 
@@ -80,12 +81,12 @@ class QwenASREngine:
         self,
         audio_path: str,
         language: str | None = None,
-    ) -> list[dict]:
+    ) -> ASRResult:
         """
         对单个音频执行 ASR 识别。
 
         返回:
-            [ASRTranscription, ...]
+            ASRResult
         """
         if self._model is None:
             raise RuntimeError("ASR 模型未加载，请先调用 load()")
@@ -96,13 +97,13 @@ class QwenASREngine:
                 language=language,
                 return_time_stamps=self._enable_align,
             )
-        return results
+        return from_qwen(results, audio_path)
 
     def batch_transcribe(
         self,
         audio_paths: list[str],
         language: str | None = None,
-    ) -> list:
+    ) -> list[ASRResult]:
         """
         批量音频 ASR 识别，利用 Qwen3ASRModel 内部按 max_inference_batch_size 分批并行推理。
 
@@ -111,7 +112,7 @@ class QwenASREngine:
             language: 语言（标量，广播到所有音频）
 
         返回:
-            List[ASRTranscription]，每个元素对应一个输入音频
+            list[ASRResult]，每个元素对应一个输入音频
         """
         if self._model is None:
             raise RuntimeError("ASR 模型未加载，请先调用 load()")
@@ -125,14 +126,15 @@ class QwenASREngine:
                 language=language,
                 return_time_stamps=self._enable_align,
             )
-        return results
+        return [from_qwen([item], path) for item, path in zip(results, audio_paths, strict=True)]
 
     def transcribe_array(
         self,
         audio,
         sr: int = 16000,
         language: str | None = None,
-    ) -> list:
+        chunk_id: str | None = None,
+    ) -> ASRResult:
         """对内存音频数组执行 ASR 识别（实时逐句解码，不落盘）。
 
         参数:
@@ -141,7 +143,7 @@ class QwenASREngine:
             language: 语言（可选）
 
         返回:
-            [ASRTranscription, ...]
+            ASRResult
         """
         if self._model is None:
             raise RuntimeError("ASR 模型未加载，请先调用 load()")
@@ -152,7 +154,7 @@ class QwenASREngine:
                 language=language,
                 return_time_stamps=self._enable_align,
             )
-        return results
+        return from_qwen(results, chunk_id)
 
     def unload(self):
         self._model = None
@@ -163,6 +165,10 @@ class QwenASREngine:
     @property
     def is_loaded(self) -> bool:
         return self._model is not None
+
+    @property
+    def capabilities(self) -> BackendCapabilities:
+        return BackendCapabilities(batch=True, word_timestamps=self._enable_align)
 
     @property
     def align_enabled(self) -> bool:

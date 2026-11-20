@@ -2,6 +2,7 @@
 
 行为依源码确认（qwen_asr_engine.py:10/24/70/91/119/129）。
 """
+from types import SimpleNamespace
 import threading
 import time
 from unittest.mock import MagicMock
@@ -37,9 +38,9 @@ def test_is_loaded_property():
 def test_transcribe_passes_params_with_align():
     eng = QwenASREngine(enable_align=True)
     eng._model = MagicMock()
-    eng._model.transcribe.return_value = ["r"]
+    eng._model.transcribe.return_value = [SimpleNamespace(text="r", language=None, time_stamps=None)]
     out = eng.transcribe("x.wav", language="zh")
-    assert out == ["r"]
+    assert out.text == "r"
     eng._model.transcribe.assert_called_once_with(
         audio="x.wav", language="zh", return_time_stamps=True,
     )
@@ -65,9 +66,9 @@ def test_batch_transcribe_empty_returns_empty():
 def test_batch_transcribe_passes_params():
     eng = QwenASREngine(enable_align=True)
     eng._model = MagicMock()
-    eng._model.transcribe.return_value = ["a", "b"]
+    eng._model.transcribe.return_value = [SimpleNamespace(text=t, language=None, time_stamps=None) for t in ("a", "b")]
     out = eng.batch_transcribe(["1.wav", "2.wav"], language="en")
-    assert out == ["a", "b"]
+    assert [(r.text, r.chunk_id) for r in out] == [("a", "1.wav"), ("b", "2.wav")]
     eng._model.transcribe.assert_called_once_with(
         audio=["1.wav", "2.wav"], language="en", return_time_stamps=True,
     )
@@ -83,12 +84,12 @@ def test_transcribe_array_requires_loaded():
 def test_transcribe_array_passes_tuple_and_align():
     eng = QwenASREngine(enable_align=True)
     eng._model = MagicMock()
-    eng._model.transcribe.return_value = ["r"]
+    eng._model.transcribe.return_value = [SimpleNamespace(text="r", language=None, time_stamps=None)]
     audio = np.zeros(8, dtype=np.float32)
 
     out = eng.transcribe_array(audio, sr=16000, language="zh")
 
-    assert out == ["r"]
+    assert out.text == "r"
     kwargs = eng._model.transcribe.call_args.kwargs
     # audio 以 (ndarray, sr) 元组传入
     assert kwargs["audio"][0] is audio
@@ -123,7 +124,7 @@ def test_inference_serialized_across_threads():
         time.sleep(0.02)
         with stat_lock:
             active -= 1
-        return []
+        return [SimpleNamespace(text="", language=None, time_stamps=None)] * (2 if isinstance(kwargs["audio"], list) else 1)
 
     eng._model.transcribe.side_effect = fake_transcribe
     threads = [

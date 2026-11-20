@@ -4,11 +4,11 @@
 端到端（result schema 同 standard、progress、cancelled 早退、with_words 透传）。
 dependency-neutral：standard venv 即可运行。
 """
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
+from app.engines.asr_result import ASRResult, BackendCapabilities, WordTime
 from app.runtime import vllm_offline as vo
 from app import config as cfg
 
@@ -22,14 +22,14 @@ class _Engine:
 
     def __init__(self, align=True, result=None, chunk_results=None):
         self._align = align
-        self._result = result or []
+        self._result = result or ASRResult("")
         self._chunk_results = chunk_results
         self._n_chunks = len(chunk_results) if chunk_results else 1
         self.transcribe_calls = []
 
     @property
-    def align_enabled(self):
-        return self._align
+    def capabilities(self):
+        return BackendCapabilities(word_timestamps=self._align)
 
     def split_chunks(self, wav, sr, chunk_sec):
         n = self._n_chunks
@@ -37,7 +37,7 @@ class _Engine:
         return [(wav[i * L:(i + 1) * L] if i < n - 1 else wav[i * L:], round(i * L / sr, 3))
                 for i in range(n)]
 
-    def transcribe(self, audio, language=None, with_words=False):
+    def transcribe(self, audio, language=None, with_words=False, *, chunk_id=None):
         self.transcribe_calls.append((audio, language, with_words))
         if self._chunk_results is not None:
             return self._chunk_results[len(self.transcribe_calls) - 1]
@@ -45,12 +45,7 @@ class _Engine:
 
 
 def _trans(text, items=None):
-    """构造 ASRTranscription 形态：.text + .time_stamps.items[].{text,start_time,end_time}。"""
-    ts = None
-    if items:
-        ts = SimpleNamespace(items=[
-            SimpleNamespace(text=t, start_time=s, end_time=e) for t, s, e in items])
-    return SimpleNamespace(text=text, time_stamps=ts, language="Chinese")
+    return ASRResult(text, "Chinese", tuple(WordTime(*word) for word in items) if items else None)
 
 
 # ── _segment ──────────────────────────────────────────────
@@ -218,8 +213,8 @@ def patched_spk(monkeypatch, tmp_path):
 
 
 def _spk_trans():
-    return [_trans("你好。世界。",
-                   [("你", 0.0, 0.2), ("好", 0.25, 0.4), ("世", 1.2, 1.4), ("界", 1.45, 1.6)])]
+    return _trans("你好。世界。",
+                   [("你", 0.0, 0.2), ("好", 0.25, 0.4), ("世", 1.2, 1.4), ("界", 1.45, 1.6)])
 
 
 def test_run_with_diarization(patched_spk):
@@ -281,8 +276,8 @@ def patched(monkeypatch, tmp_path):
 
 
 def test_run_with_words(patched):
-    eng = _Engine(align=True, result=[_trans(
-        "你好。世界。", [("你", 0.0, 0.2), ("好", 0.25, 0.4), ("世", 1.2, 1.4), ("界", 1.45, 1.6)])])
+    eng = _Engine(align=True, result=_trans(
+        "你好。世界。", [("你", 0.0, 0.2), ("好", 0.25, 0.4), ("世", 1.2, 1.4), ("界", 1.45, 1.6)]))
     prog = []
     task = {"task_id": "t1", "file_path": "/x.wav", "language": "zh",
             "options": {"with_words": True}}
@@ -298,7 +293,7 @@ def test_run_with_words(patched):
 
 
 def test_run_no_align_fallback(patched):
-    eng = _Engine(align=False, result=[_trans("整段文本。")])
+    eng = _Engine(align=False, result=_trans("整段文本。"))
     task = {"task_id": "t2", "file_path": "/x.wav", "options": {"with_words": True}}
     r = vo.run_vllm_offline(eng, task)
 
@@ -310,7 +305,7 @@ def test_run_no_align_fallback(patched):
 
 
 def test_run_cancelled_before_transcribe(patched):
-    eng = _Engine(align=True, result=[_trans("不应产生")])
+    eng = _Engine(align=True, result=_trans("不应产生"))
     task = {"task_id": "t3", "file_path": "/x.wav", "options": {}}
     r = vo.run_vllm_offline(eng, task, cancelled=lambda: True)
 
@@ -331,7 +326,7 @@ def test_run_transcribe_progressive(monkeypatch, tmp_path):
     """长音频(>切块阈值)逐块转写：N 次 transcribe、转写阶段多点递增进度、文本按块合并。"""
     _prog_patch(monkeypatch, tmp_path, duration=600.0)            # >180 → 切块
     eng = _Engine(align=False, chunk_results=[
-        [_trans("第一段。")], [_trans("第二段。")], [_trans("第三段。")]])
+        _trans("第一段。"), _trans("第二段。"), _trans("第三段。")])
     prog = []
     task = {"task_id": "p1", "file_path": "/x.wav", "options": {"with_words": False}}
     r = vo.run_vllm_offline(eng, task, progress_callback=prog.append)
@@ -347,8 +342,8 @@ def test_run_transcribe_progressive_words_offset(monkeypatch, tmp_path):
     """逐块词级时间戳按块 offset 归到绝对时间（第二块 +~3s）。"""
     _prog_patch(monkeypatch, tmp_path, duration=400.0)           # >180 → 2 块（6s 等分→offset≈3s）
     eng = _Engine(align=True, chunk_results=[
-        [_trans("你好。", [("你", 0.0, 0.2), ("好", 0.2, 0.4)])],
-        [_trans("世界。", [("世", 0.0, 0.2), ("界", 0.2, 0.4)])]])
+        _trans("你好。", [("你", 0.0, 0.2), ("好", 0.2, 0.4)]),
+        _trans("世界。", [("世", 0.0, 0.2), ("界", 0.2, 0.4)])])
     task = {"task_id": "p2", "file_path": "/x.wav", "options": {"with_words": True}}
     r = vo.run_vllm_offline(eng, task)
 
@@ -361,7 +356,7 @@ def test_run_transcribe_progressive_words_offset(monkeypatch, tmp_path):
 def test_run_transcribe_progressive_cancel_midway(monkeypatch, tmp_path):
     """逐块转写途中取消：已转写块后即停，结果为空、未跑完所有块。"""
     _prog_patch(monkeypatch, tmp_path, duration=600.0)
-    eng = _Engine(align=False, chunk_results=[[_trans("一")], [_trans("二")], [_trans("三")]])
+    eng = _Engine(align=False, chunk_results=[_trans("一"), _trans("二"), _trans("三")])
 
     class _CancelAfter:
         def __init__(self, n):

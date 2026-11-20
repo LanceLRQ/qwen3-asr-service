@@ -10,6 +10,8 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+from app.engines.asr_result import ASRResult, BackendCapabilities, from_qwen_text
+
 logger = logging.getLogger(__name__)
 
 # pipeline 传入的语言代码 → processor 期望的语言名称
@@ -97,29 +99,32 @@ class OpenVINOASREngine:
             f"OpenVINO ASR 模型已加载: size={self._model_size}, device=CPU"
         )
 
+    capabilities = BackendCapabilities()
+
     def transcribe(
         self,
         audio_path: str,
         language: str | None = None,
-    ) -> list[dict]:
+    ) -> ASRResult:
         """
         对音频文件执行 ASR 识别。
 
         返回:
-            [{"text": str}]
+            ASRResult
         """
         if self._processor is None:
             raise RuntimeError("ASR 模型未加载，请先调用 load()")
 
         audio, sr = sf.read(audio_path, dtype="float32")
-        return self.transcribe_array(audio, sr, language)
+        return self.transcribe_array(audio, sr, language, chunk_id=audio_path)
 
     def transcribe_array(
         self,
         audio,
         sr: int = 16000,
         language: str | None = None,
-    ) -> list[dict]:
+        chunk_id: str | None = None,
+    ) -> ASRResult:
         """对内存音频数组执行 ASR 识别（实时逐句解码，不落盘）。
 
         与 QwenASREngine.transcribe_array 接口一致，供流式会话使用。
@@ -130,7 +135,7 @@ class OpenVINOASREngine:
             language: 语言（可选）
 
         返回:
-            [{"text": str}]
+            ASRResult
         """
         if self._processor is None:
             raise RuntimeError("ASR 模型未加载，请先调用 load()")
@@ -151,7 +156,7 @@ class OpenVINOASREngine:
         # 4. 推理
         text = self._infer(mel, ids)
 
-        return [{"text": text}]
+        return from_qwen_text(text, chunk_id)
 
     def _map_language(self, language: str | None) -> str | None:
         """将短语言代码映射为 processor 期望的全称"""
@@ -244,10 +249,7 @@ class OpenVINOASREngine:
                 next_token = int(np.argmax(logits[0, -1, :]))
                 cur_pos += 1
 
-        raw = self._processor.decode(gen_tokens)
-        if "<asr_text>" in raw:
-            raw = raw.split("<asr_text>", 1)[1]
-        return raw.strip()
+        return self._processor.decode(gen_tokens)
 
     def unload(self):
         """释放资源"""

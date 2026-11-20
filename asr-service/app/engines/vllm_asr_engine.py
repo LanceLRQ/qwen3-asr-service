@@ -15,6 +15,7 @@ import threading
 
 import numpy as np
 
+from app.engines.asr_result import ASRResult, BackendCapabilities, from_qwen
 from app.utils.model_manager import ensure_model
 from app.config import MODEL_REPO_MAP, MODEL_LOCAL_MAP, MODEL_SOURCE
 
@@ -125,8 +126,8 @@ class VLLMASREngine:
         return state.text, state.language
 
     # ── 离线一次性转写（同步；与流式共用同一 vllm.LLM 与 _infer_lock，故串行）──
-    def transcribe(self, audio, language=None, with_words: bool = False):
-        """对一段音频做离线转写，返回 [ASRTranscription, ...]（单输入即长度 1）。
+    def transcribe(self, audio, language=None, with_words: bool = False, *, chunk_id: str | None = None) -> ASRResult:
+        """对一段音频做离线转写，返回 单个 ASRResult。
 
         audio 可为文件路径或 (np.ndarray, sr) / np.ndarray（qwen_asr 内部归一化），便于离线
         逐块转写时直接传切块数组、免临时文件。with_words 且对齐器已加载时产词级时间戳。
@@ -136,8 +137,9 @@ class VLLMASREngine:
             raise RuntimeError("vLLM ASR 引擎未加载，请先调用 load()")
         want_ts = bool(with_words) and self._enable_align
         with self._infer_lock:
-            return self._model.transcribe(
+            results = self._model.transcribe(
                 audio=audio, language=language, return_time_stamps=want_ts)
+        return from_qwen(results, audio if isinstance(audio, str) and chunk_id is None else chunk_id)
 
     def split_chunks(self, wav, sr, chunk_sec):
         """按低能量（静音）边界把长音频切块，返回 [(chunk_wav, offset_sec)]。
@@ -152,6 +154,10 @@ class VLLMASREngine:
     @property
     def is_loaded(self) -> bool:
         return self._model is not None
+
+    @property
+    def capabilities(self) -> BackendCapabilities:
+        return BackendCapabilities(realtime_incremental=True, word_timestamps=self._enable_align)
 
     @property
     def align_enabled(self) -> bool:

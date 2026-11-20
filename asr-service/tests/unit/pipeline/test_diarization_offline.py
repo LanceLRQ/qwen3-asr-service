@@ -8,6 +8,7 @@ import types
 import numpy as np
 import pytest
 
+from app.engines.asr_result import ASRResult, BackendCapabilities
 from app.pipeline.asr_pipeline import ASRPipeline
 from app.runtime.speaker_cluster import DiarizationResult
 
@@ -48,8 +49,8 @@ def fake_wav_io(monkeypatch):
 
 def _make_pipe(speaker, vad_segments):
     asr = types.SimpleNamespace(
-        align_enabled=False,
-        transcribe=lambda audio_path, language: "你好",
+        capabilities=BackendCapabilities(),
+        transcribe=lambda audio_path, language: ASRResult("你好"),
     )
     vad = types.SimpleNamespace(detect=lambda p: vad_segments)
     return ASRPipeline(asr_engine=asr, vad_engine=vad,

@@ -8,6 +8,7 @@ import types
 import numpy as np
 import pytest
 
+from app.engines.asr_result import ASRResult, BackendCapabilities
 from app.engines.audio_tagger import TagResult
 from app.pipeline.asr_pipeline import ASRPipeline
 
@@ -55,8 +56,8 @@ def noise_env(monkeypatch, tmp_path):
 
 
 def _make_pipe(tagger, vad_segments):
-    asr = types.SimpleNamespace(align_enabled=False,
-                                transcribe=lambda audio_path, language: "你好")
+    asr = types.SimpleNamespace(capabilities=BackendCapabilities(),
+                                transcribe=lambda audio_path, language: ASRResult("你好"))
     vad = types.SimpleNamespace(detect=lambda p: vad_segments)
     return ASRPipeline(asr_engine=asr, vad_engine=vad, punc_engine=None, tagger=tagger)
 

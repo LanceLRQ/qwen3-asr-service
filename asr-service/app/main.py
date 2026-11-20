@@ -491,7 +491,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
     stream_enabled = cfg.ENABLE_STREAM
     capabilities = {
         "mode": cfg.SERVE_MODE,
-        "offline_api": True,
+        "offline_api": asr_engine.capabilities.offline,
         "speaker_labels": speaker_enabled,
         "speaker_identification": speaker_db_enabled,
         "audio_tagging": tagging_enabled,
@@ -502,7 +502,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
             "enabled": stream_enabled,
             "backend": "vad-offline" if stream_enabled else None,
             "path": "/v2/asr/stream" if stream_enabled else None,
-            "partial_results": False,
+            "partial_results": asr_engine.capabilities.realtime_incremental,
             "word_timestamps": enable_align if stream_enabled else False,
             "speaker_labels": speaker_enabled if stream_enabled else False,
             "scene": tagging_enabled and cfg.SCENE_ENABLE if stream_enabled else False,
@@ -810,14 +810,14 @@ def _assemble_vllm(app: FastAPI, args) -> None:
 
     capabilities = {
         "mode": "vllm",
-        "offline_api": True,
+        "offline_api": engine.capabilities.offline,
         "speaker_labels": speaker_enabled,             # Phase 2：离线说话人分离
         "speaker_identification": speaker_db_enabled,  # Phase 2：声纹识别（需声纹库）
         "stream": {
             "enabled": True,
             "backend": "vllm-native",
             "path": "/v2/asr/stream",
-            "partial_results": True,
+            "partial_results": engine.capabilities.realtime_incremental,
             "word_timestamps": False,
             "speaker_labels": False,                   # 流式说话人仍无（仅离线，见能力对照）
         },

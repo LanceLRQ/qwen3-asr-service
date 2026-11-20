@@ -1,10 +1,10 @@
 """S2-01 Qwen HTTP multipart 单块离线适配器。"""
 import math
 from pathlib import Path
-from types import SimpleNamespace
 
 import httpx
 
+from app.engines.asr_result import ASRResult, BackendCapabilities, from_qwen_text
 from app.utils.language import to_iso_language
 
 
@@ -13,6 +13,7 @@ class RemoteASRError(RuntimeError):
 
 
 class RemoteASREngine:
+    capabilities = BackendCapabilities()
     is_remote = True
     align_enabled = False
 
@@ -56,7 +57,7 @@ class RemoteASREngine:
         if not any(isinstance(model, dict) and model.get("id") == self.model for model in models):
             raise ValueError("上游未提供配置的 remote_model")
 
-    def transcribe(self, audio_path: str, language: str | None = None) -> list:
+    def transcribe(self, audio_path: str, language: str | None = None) -> ASRResult:
         data = {"model": self.model}
         hint = to_iso_language(language)
         if hint:
@@ -67,9 +68,4 @@ class RemoteASREngine:
         text = payload.get("text")
         if not isinstance(text, str):
             raise RemoteASRError("远端 ASR 转写响应格式错误")
-        prefix, marker, body = text.partition("<asr_text>")
-        detected = None
-        if marker:
-            detected = prefix.removeprefix("language ").strip() or None
-            text = body
-        return [SimpleNamespace(text=text.strip(), language=detected, time_stamps=None)]
+        return from_qwen_text(text, audio_path)

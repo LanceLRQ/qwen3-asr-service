@@ -47,60 +47,6 @@ def test_merge_boundary_over_splits(pipe, monkeypatch):
     assert pipe._merge_vad_segments([(0, 2000), (5001, 6000)]) == [(0, 2000), (5001, 6000)]
 
 
-# ─── _extract_text ───
-
-def test_extract_text_empty_and_none(pipe):
-    assert pipe._extract_text(None) == ""
-    assert pipe._extract_text([]) == ""
-    assert pipe._extract_text("") == ""
-
-
-def test_extract_text_str(pipe):
-    assert pipe._extract_text("hello") == "hello"
-
-
-def test_extract_text_list_of_objects(pipe):
-    items = [types.SimpleNamespace(text="你"), types.SimpleNamespace(text="好")]
-    assert pipe._extract_text(items) == "你好"
-
-
-def test_extract_text_list_of_dicts(pipe):
-    assert pipe._extract_text([{"text": "a"}, {"text": "b"}, {}]) == "ab"
-
-
-def test_extract_text_list_of_str(pipe):
-    assert pipe._extract_text(["a", "b"]) == "ab"
-
-
-def test_extract_text_object_with_text(pipe):
-    assert pipe._extract_text(types.SimpleNamespace(text="hi")) == "hi"
-
-
-def test_extract_text_fallback_str(pipe):
-    assert pipe._extract_text(123) == "123"
-
-
-# ─── _extract_words ───
-
-def test_extract_words_non_list_returns_none(pipe):
-    assert pipe._extract_words(None, 0.0) is None
-    assert pipe._extract_words("x", 0.0) is None
-    assert pipe._extract_words([], 0.0) is None
-
-
-def test_extract_words_no_timestamps_returns_none(pipe):
-    items = [types.SimpleNamespace(time_stamps=None)]
-    assert pipe._extract_words(items, 1.0) is None
-
-
-def test_extract_words_with_offset_and_round(pipe):
-    word = types.SimpleNamespace(text="a", start_time=0.1, end_time=0.5)
-    ts = types.SimpleNamespace(items=[word])
-    item = types.SimpleNamespace(time_stamps=ts)
-    out = pipe._extract_words([item], offset_sec=2.0)
-    assert out == [{"text": "a", "start": 2.1, "end": 2.5}]
-
-
 # ─── _cleanup ───
 
 def test_cleanup_removes_files_and_dir(pipe, tmp_path):

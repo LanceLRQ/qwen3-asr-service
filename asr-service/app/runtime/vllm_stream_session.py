@@ -215,7 +215,7 @@ class VllmStreamBackend:
         self._active = 0
         self._count_lock = threading.Lock()
         self.capabilities = {
-            "partial_results": True,
+            "partial_results": engine.capabilities.realtime_incremental,
             "word_timestamps": False,
             "languages_auto": True,
             "speaker_labels": False,

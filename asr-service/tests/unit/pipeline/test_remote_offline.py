@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from app.engines.asr_result import ASRResult, BackendCapabilities
 from app.api.compat import openai_routes
 from app.pipeline import asr_pipeline as pipeline
 
@@ -14,11 +15,11 @@ def remote_pipe(monkeypatch, tmp_path):
     monkeypatch.setattr(pipeline, "AUDIO_CHUNKS_DIR", str(tmp_path / "chunks"))
     monkeypatch.setattr(pipeline.cfg, "MAX_SEGMENT_DURATION", 1)
     remote = SimpleNamespace(
-        is_remote=True, align_enabled=False,
+        is_remote=True, capabilities=BackendCapabilities(),
         batch_transcribe=Mock(side_effect=AssertionError("remote batch invoked")),
         transcribe=Mock(side_effect=[
-            [SimpleNamespace(text="第一句。", language=None)],
-            [SimpleNamespace(text="第二句。", language="Chinese")],
+            ASRResult("第一句。", language=None),
+            ASRResult("第二句。", language="Chinese"),
         ]),
     )
     vad = SimpleNamespace(detect=lambda path: [(500, 1500), (2500, 3500)])

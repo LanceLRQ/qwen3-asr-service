@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from app.engines.asr_result import BackendCapabilities
 from app.runtime.vllm_stream_session import (
     EnergyEndpointer, VllmStreamSession, VllmStreamBackend,
 )
@@ -66,6 +67,8 @@ def test_endpointer_reset():
 
 class _MockEngine:
     """累积式 mock：每次 feed 追加一个字符，finish 补句号。"""
+
+    capabilities = BackendCapabilities(realtime_incremental=True)
 
     def __init__(self):
         self.feeds = 0

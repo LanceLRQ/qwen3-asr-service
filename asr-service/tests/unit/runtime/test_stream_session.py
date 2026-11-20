@@ -4,13 +4,13 @@
 时间戳偏移、对齐 words、标点、长句兜底、flush 末句，以及 backend 并发准入与 AudioBuffer。
 """
 import asyncio
-import types
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
+from app.engines.asr_result import ASRResult, BackendCapabilities, WordTime
 from app.engines.vad_engine import VADEngine
 from app.runtime.stream_session import StreamSession, VadOfflineBackend, AudioBuffer
 
@@ -44,7 +44,7 @@ def _make_session(svad, *, enable_words=False, punc=None, max_segment_sec=30,
                   asr_result=None, speaker=None, speaker_service=None,
                   identify=False):
     asr = MagicMock()
-    asr.transcribe_array.return_value = asr_result or [types.SimpleNamespace(text="hi")]
+    asr.transcribe_array.return_value = asr_result or ASRResult("hi")
     executor = ThreadPoolExecutor(max_workers=2)
     sem = asyncio.Semaphore(1)
     s = StreamSession("sid", svad, asr, punc, executor, sem,
@@ -120,10 +120,10 @@ async def test_flush_emits_pending_segment():
 
 
 async def test_words_attached_when_enabled():
-    word = types.SimpleNamespace(text="a", start_time=0.1, end_time=0.5)
-    item = types.SimpleNamespace(text="a", time_stamps=types.SimpleNamespace(items=[word]))
+    word = WordTime("a", 0.1, 0.5)
+    item = ASRResult("a", words=(word,))
     svad = FakeSVAD(events_by_call={0: [{"type": "complete", "start": 1000, "end": 2000}]})
-    s, asr, ex = _make_session(svad, enable_words=True, asr_result=[item])
+    s, asr, ex = _make_session(svad, enable_words=True, asr_result=item)
     try:
         msgs = await _collect(s.feed_audio(_pcm_ms(2000)))
         assert "words" in msgs[0]
@@ -165,7 +165,7 @@ async def test_backend_acquire_limit_and_release():
     vad = VADEngine()
     vad._model = MagicMock()
     asr = MagicMock()
-    asr.align_enabled = False
+    asr.capabilities = BackendCapabilities(word_timestamps=False)
     backend = VadOfflineBackend(asr, vad, None, max_sessions=2, asr_concurrency=1)
     try:
         assert await backend.acquire() is True
@@ -181,13 +181,13 @@ def test_backend_capabilities_reflect_align():
     vad = VADEngine()
     vad._model = MagicMock()
     asr_aligned = MagicMock()
-    asr_aligned.align_enabled = True
+    asr_aligned.capabilities = BackendCapabilities(word_timestamps=True)
     b1 = VadOfflineBackend(asr_aligned, vad, None)
     assert b1.capabilities["word_timestamps"] is True
     b1.shutdown()
 
     asr_plain = MagicMock()
-    asr_plain.align_enabled = False
+    asr_plain.capabilities = BackendCapabilities(word_timestamps=False)
     b2 = VadOfflineBackend(asr_plain, vad, None)
     assert b2.capabilities["word_timestamps"] is False
     b2.shutdown()
@@ -417,7 +417,7 @@ def test_backend_speaker_capability_and_release():
     vad = VADEngine()
     vad._model = MagicMock()
     asr = MagicMock()
-    asr.align_enabled = False
+    asr.capabilities = BackendCapabilities(word_timestamps=False)
 
     b_on = VadOfflineBackend(asr, vad, None, speaker=FakeSpeakerEngine())
     assert b_on.capabilities["speaker_labels"] is True
@@ -594,7 +594,7 @@ def test_backend_speaker_identification_capability():
     vad = VADEngine()
     vad._model = MagicMock()
     asr = MagicMock()
-    asr.align_enabled = False
+    asr.capabilities = BackendCapabilities(word_timestamps=False)
 
     b = VadOfflineBackend(asr, vad, None, speaker=FakeSpeakerEngine(),
                           speaker_service=FakeSpeakerService())

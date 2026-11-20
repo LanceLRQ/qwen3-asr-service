@@ -18,7 +18,7 @@ import re
 
 from app import config as cfg
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
-from app.utils.result_parser import extract_text, extract_words
+from app.utils.result_parser import extract_words
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ def run_vllm_offline(engine, task, *, progress_callback=None, cancelled=None,
 
         if progress_callback:
             progress_callback(0.1)
-        want_words = with_words and engine.align_enabled
+        want_words = with_words and engine.capabilities.word_timestamps
         # 长音频按静音切块逐块转写：转写阶段 0.1→0.85 逐块报进度 + 块间查取消 + 压峰值显存
         transcribed = _transcribe_progressive(
             engine, wav_path, duration, language, want_words, progress_callback, cancelled)
@@ -122,8 +122,8 @@ def _transcribe_progressive(engine, wav_path, duration, language, want_words,
     for i, (cwav, offset) in enumerate(chunks):
         if cancelled and cancelled():
             return None
-        results = engine.transcribe((cwav, sr), language=language, with_words=want_words)
-        texts.append(extract_text(results))
+        results = engine.transcribe((cwav, sr), language=language, with_words=want_words, chunk_id=str(i))
+        texts.append(results.text)
         if want_words:
             w = extract_words(results, float(offset))
             if w:
@@ -143,7 +143,7 @@ def _collect_warnings(engine, opts: dict, identify_speakers: bool, *,
     w = []
     if opts.get("with_punc") is False:
         w.append("with_punc")            # vLLM 标点由模型原生提供，无法单独关闭
-    if opts.get("with_words") is True and not engine.align_enabled:
+    if opts.get("with_words") is True and not engine.capabilities.word_timestamps:
         w.append("with_words")           # 对齐器未加载
     if opts.get("diarize") is True and not speaker_enabled:
         w.append("diarize")              # 未挂说话人引擎（--enable-speaker 未开/加载失败）
@@ -359,7 +359,7 @@ def _result(segments, full_text, language, engine, warnings, speakers=None) -> d
         "segments": segments,
         "full_text": full_text,
         "language": language,
-        "align_enabled": engine.align_enabled,
+        "align_enabled": engine.capabilities.word_timestamps,
         # vLLM 标点由模型原生提供（恒有，故 True）；非 CT-Transformer 且不可单独关闭，
         # with_punc=false 时进 warnings 表达"无法关闭"。与 standard 的 bool 类型对齐。
         "punc_enabled": True,

@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI, WebSocketDisconnect
 from fastapi.testclient import TestClient
 
+from app.engines.asr_result import BackendCapabilities
 from app.api import ws_routes
 
 
@@ -27,7 +28,7 @@ def test_real_backend_concurrent_limit_1013():
     vad = VADEngine()
     vad._model = MagicMock()
     asr = MagicMock()
-    asr.align_enabled = False
+    asr.capabilities = BackendCapabilities(word_timestamps=False)
     backend = VadOfflineBackend(asr, vad, None, max_sessions=1, asr_concurrency=1)
     client = _client(backend)
     try:
@@ -50,7 +51,7 @@ def test_real_backend_releases_after_disconnect():
     vad = VADEngine()
     vad._model = MagicMock()
     asr = MagicMock()
-    asr.align_enabled = False
+    asr.capabilities = BackendCapabilities(word_timestamps=False)
     backend = VadOfflineBackend(asr, vad, None, max_sessions=1, asr_concurrency=1)
     client = _client(backend)
     try:

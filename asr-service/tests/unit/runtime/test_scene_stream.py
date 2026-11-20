@@ -4,12 +4,12 @@
 异步用例依赖 pytest-asyncio（asyncio_mode=auto）。
 """
 import asyncio
-import types
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
 
 import numpy as np
 
+from app.engines.asr_result import ASRResult, BackendCapabilities
 from app.engines.audio_tagger import TagResult
 from app.engines.vad_engine import VADEngine
 from app.runtime.stream_session import StreamSession, VadOfflineBackend
@@ -40,7 +40,7 @@ def _pcm_ms(ms, sr=16000, amp=3000):
 
 def _session(tagger, *, scene_enable=True, enter=0.0, exit=0.0):
     asr = MagicMock()
-    asr.transcribe_array.return_value = [types.SimpleNamespace(text="hi")]
+    asr.transcribe_array.return_value = ASRResult("hi")
     ex = ThreadPoolExecutor(max_workers=2)
     s = StreamSession("sid", FakeSVAD(), asr, None, ex, asyncio.Semaphore(1),
                       tagger=tagger, scene_enable=scene_enable, scene_enter_sec=enter,
@@ -152,7 +152,7 @@ def test_backend_capability_scene_flag():
     vad = VADEngine()
     vad._model = MagicMock()
     asr = MagicMock()
-    asr.align_enabled = False
+    asr.capabilities = BackendCapabilities(word_timestamps=False)
     on = VadOfflineBackend(asr, vad, None, tagger=SceneTagger())
     off = VadOfflineBackend(asr, vad, None, tagger=None)
     try:

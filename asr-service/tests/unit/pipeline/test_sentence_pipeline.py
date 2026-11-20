@@ -8,6 +8,7 @@ import types
 import numpy as np
 import pytest
 
+from app.engines.asr_result import ASRResult, BackendCapabilities
 from app.pipeline.asr_pipeline import ASRPipeline
 
 
@@ -26,8 +27,8 @@ def run_env(monkeypatch, tmp_path):
 
 
 def _pipe(text):
-    asr = types.SimpleNamespace(align_enabled=False,
-                                transcribe=lambda audio_path, language: text)
+    asr = types.SimpleNamespace(capabilities=BackendCapabilities(),
+                                transcribe=lambda audio_path, language: ASRResult(text))
     vad = types.SimpleNamespace(detect=lambda p: [(0, 4000)])   # 单个处理块 0–4s
     return ASRPipeline(asr_engine=asr, vad_engine=vad, punc_engine=None)
 

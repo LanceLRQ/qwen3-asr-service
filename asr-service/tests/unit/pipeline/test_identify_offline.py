@@ -9,6 +9,7 @@ import types
 import numpy as np
 import pytest
 
+from app.engines.asr_result import ASRResult, BackendCapabilities
 from app.pipeline.asr_pipeline import ASRPipeline
 
 DIM = 192
@@ -69,8 +70,8 @@ def run_env(monkeypatch, tmp_path):
 
 
 def _make_pipe(speaker_engine, speaker_service):
-    asr = types.SimpleNamespace(align_enabled=False,
-                                transcribe=lambda audio_path, language: "你好")
+    asr = types.SimpleNamespace(capabilities=BackendCapabilities(),
+                                transcribe=lambda audio_path, language: ASRResult("你好"))
     vad = types.SimpleNamespace(detect=lambda p: [(0, 3000), (8000, 11000)])
     return ASRPipeline(asr_engine=asr, vad_engine=vad, punc_engine=None,
                        speaker_engine=speaker_engine, speaker_service=speaker_service)

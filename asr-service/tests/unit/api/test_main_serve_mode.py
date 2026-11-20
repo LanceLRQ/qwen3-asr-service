@@ -4,6 +4,7 @@
 mode 正确、不误挂离线接口。standard 分支需加载真实模型，留待 T10 集成测试。
 隔离 setup_logger / cfg 全局副作用。
 """
+from app.engines.asr_result import BackendCapabilities
 import logging
 import threading
 import types
@@ -65,6 +66,7 @@ def _mock_vllm_engine(monkeypatch):
     monkeypatch.setattr(main, "resolve_device", lambda req, device_info=None: "cuda")
 
     class FakeVLLMEngine:
+        capabilities = BackendCapabilities(realtime_incremental=True, word_timestamps=True)
         def __init__(self, *a, **k): pass
         def load(self): pass
         @property
@@ -176,6 +178,7 @@ def test_standard_mode_with_stream_mounts_ws(isolated_create_app, monkeypatch):
         def load(self): pass
         @property
         def align_enabled(self): return True
+        capabilities = BackendCapabilities(word_timestamps=True)
 
     class FakePunc:
         BACKEND = "pytorch"
@@ -409,6 +412,7 @@ def _mock_standard_engines(monkeypatch):
         def load(self): pass
         @property
         def align_enabled(self): return False
+        capabilities = BackendCapabilities()
 
     class FakeTM:
         def __init__(self, *a, **k): pass

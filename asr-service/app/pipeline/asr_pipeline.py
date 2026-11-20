@@ -8,7 +8,7 @@ from app.engines.vad_engine import VADEngine
 from app.engines.punc_engine import PuncEngine
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
 from app.pipeline.sentence_segmenter import segment_sentences
-from app.utils.result_parser import extract_text, extract_words
+from app.utils.result_parser import extract_words
 from app.config import (
     UPLOADS_DIR,
     AUDIO_CHUNKS_DIR,
@@ -81,7 +81,7 @@ class ASRPipeline:
         warnings = []
         if opts.get("with_punc") is True and self.punc is None:
             warnings.append("with_punc")
-        if opts.get("with_words") is True and not self.asr.align_enabled:
+        if opts.get("with_words") is True and not self.asr.capabilities.word_timestamps:
             warnings.append("with_words")
         if opts.get("diarize") is True and self.speaker is None:
             warnings.append("diarize")
@@ -125,7 +125,7 @@ class ASRPipeline:
                     "segments": [],
                     "full_text": "",
                     "language": language,
-                    "align_enabled": self.asr.align_enabled,
+                    "align_enabled": self.asr.capabilities.word_timestamps,
                     "punc_enabled": self.punc is not None,
                 }
                 if self.speaker is not None and diarize:
@@ -144,7 +144,7 @@ class ASRPipeline:
             segments = []
             if cancelled and cancelled():
                 logger.info("[Pipeline] 任务已取消，跳过 ASR 识别")
-            elif not self._remote and hasattr(self.asr, "batch_transcribe"):
+            elif self.asr.capabilities.batch:
                 segments = self._transcribe_batched(
                     chunks, total_chunks, language, cancelled, progress_callback,
                 )
@@ -255,7 +255,7 @@ class ASRPipeline:
                 "segments": segments,
                 "full_text": full_text,
                 "language": language,
-                "align_enabled": self.asr.align_enabled,
+                "align_enabled": self.asr.capabilities.word_timestamps,
                 "punc_enabled": self.punc is not None,
             }
             if speakers_result is not None:
@@ -330,15 +330,15 @@ class ASRPipeline:
                 break
 
             for chunk_info, result in zip(batch_chunks, batch_results):
-                text = self._extract_text([result])
-                words = self._extract_words([result], chunk_info["offset_sec"])
+                text = result.text
+                words = extract_words(result, chunk_info["offset_sec"])
 
                 segment = {
                     "start": chunk_info["offset_sec"],
                     "end": chunk_info["offset_sec"] + chunk_info["duration_sec"],
                     "text": text,
                 }
-                if self.asr.align_enabled and words:
+                if self.asr.capabilities.word_timestamps and words:
                     segment["words"] = words
                 if chunk_info.get("split_after"):
                     segment["split_after"] = True
@@ -381,18 +381,17 @@ class ASRPipeline:
                 )
                 if self._remote and cancelled and cancelled():
                     break
-                text = self._extract_text(results)
-                words = self._extract_words(results, chunk_info["offset_sec"])
+                text = results.text
+                words = extract_words(results, chunk_info["offset_sec"])
 
                 segment = {
                     "start": chunk_info["offset_sec"],
                     "end": chunk_info["offset_sec"] + chunk_info["duration_sec"],
                     "text": text,
                 }
-                if self._remote and results:
-                    # S3-01：统一块结果提供 language 后，移除对单项 Qwen 包装的读取。
-                    segment["language"] = results[0].language
-                if self.asr.align_enabled and words:
+                if self._remote:
+                    segment["language"] = results.language
+                if self.asr.capabilities.word_timestamps and words:
                     segment["words"] = words
                 if chunk_info.get("split_after"):
                     segment["split_after"] = True
@@ -639,14 +638,6 @@ class ASRPipeline:
 
         logger.info(f"切分完成: {len(merged)} 个合并段 -> {len(chunks)} 个 chunk")
         return chunks
-
-    def _extract_text(self, results) -> str:
-        """从 qwen_asr transcribe 结果中提取纯文本（委托共享实现）"""
-        return extract_text(results)
-
-    def _extract_words(self, results, offset_sec: float) -> list[dict] | None:
-        """从 qwen_asr 结果中提取单词级时间戳（委托共享实现）"""
-        return extract_words(results, offset_sec)
 
     def _cleanup(self, original_path: str, wav_path: str | None, chunk_dir: str):
         """清理临时文件"""

@@ -19,7 +19,7 @@ import numpy as np
 
 from app.utils.audio_resampler import pcm_bytes_to_array, resample_to_16k
 from app.utils.language import to_engine_language
-from app.utils.result_parser import extract_text, extract_words
+from app.utils.result_parser import extract_words
 from app.engines.streaming_vad_engine import StreamingVADEngine
 from app.runtime.speaker_cluster import OnlineSpeakerClusterer
 from app.runtime.noise_gate import NoiseFloorTracker, rms_dbfs, should_gate
@@ -408,9 +408,9 @@ class StreamSession:
                 return
         t0 = time.monotonic()
         async with self._asr_sem:                      # 串行化 GPU/ASR
-            res = await self._in_thread(self._asr.transcribe_array, seg, _TARGET_SR, self.language)
+            res = await self._in_thread(self._asr.transcribe_array, seg, _TARGET_SR, self.language, str(self.seg_id))
         decode_ms = (time.monotonic() - t0) * 1000
-        text = extract_text(res)
+        text = res.text
         if self._punc is not None and self._with_punc and text.strip():
             try:
                 text = await self._in_thread(self._punc.restore, text)
@@ -669,7 +669,7 @@ class VadOfflineBackend:
         self._noise_filter = noise_filter
         self._energy_floor_dbfs = energy_floor_dbfs
         self._snr_min_db = snr_min_db
-        self._enable_words = bool(getattr(asr, "align_enabled", False))
+        self._enable_words = asr.capabilities.word_timestamps
         # 在事件循环启动前创建：依赖 Python >=3.10 的 Semaphore 延迟绑定循环语义
         # （setup.sh 已强制 3.10/3.12；<3.10 会在此处 RuntimeError）
         self._asr_sem = asyncio.Semaphore(asr_concurrency)
@@ -681,7 +681,7 @@ class VadOfflineBackend:
         # 临界区仅计数读改写，不阻塞事件循环
         self._count_lock = threading.Lock()
         self.capabilities = {
-            "partial_results": False,
+            "partial_results": asr.capabilities.realtime_incremental,
             "word_timestamps": self._enable_words,
             "languages_auto": True,
             "speaker_labels": speaker is not None,

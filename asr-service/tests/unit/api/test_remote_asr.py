@@ -66,8 +66,8 @@ def test_remote_assembly_and_transcription(isolated_create_app, monkeypatch, tmp
     wav.write_bytes(b"test-audio")
     asr = engine["asr_engine"]
     assert asr.is_remote
-    result, = asr.transcribe(str(wav), language="English")
-    assert (result.language, result.text, result.time_stamps) == ("English", "Hello.", None)
+    result = asr.transcribe(str(wav), language="English")
+    assert (result.language, result.text, result.words) == ("English", "Hello.", None)
     assert len(requests) == 2
     assert "remote_api_key" in caplog.text
     assert "outbound-secret" not in caplog.text
