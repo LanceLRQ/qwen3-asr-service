@@ -329,7 +329,12 @@ def test_openai_adapter_partial_revision_best_effort():
     assert a.translate_partials({"text": "你好世界"})[0]["delta"] == "世界"
     assert a.translate_partials({"text": "你好世界"}) == []      # 无新增 → 不发
     assert a.translate_partials({"text": "你们好"}) == []        # 修订(非纯追加) → best-effort 跳过
-    a.translate_finals({"text": "你们好", "start": 0, "end": 1})  # item_0 → seq 递增 + 基准归零
+    assert a.translate_partials({"text": "你们好呀"}) == []
+    assert a.translate_partials({"text": ""}) == []
+    resumed, = a.translate_partials({"text": "你好世界！"})
+    assert (resumed["delta"], resumed["item_id"]) == ("！", "item_0")
+    completed, = a.translate_finals({"text": "你们好呀", "start": 0, "end": 1})
+    assert (completed["transcript"], completed["item_id"]) == ("你们好呀", "item_0")
     nxt = a.translate_partials({"text": "早"})
     assert nxt[0]["delta"] == "早" and nxt[0]["item_id"] == "item_1"
 
