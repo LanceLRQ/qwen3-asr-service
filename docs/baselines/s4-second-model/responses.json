@@ -1,0 +1,163 @@
+{
+  "models": {
+    "object": "list",
+    "data": [
+      {
+        "id": "pocketsphinx-en-us",
+        "object": "model"
+      }
+    ]
+  },
+  "zh_status": 400,
+  "direct_text": "the bullet train leaves at noon please make me at the station i will bring the yellow pad",
+  "sample_sha256": "2de70de9210b9d3ae7bd2584ebd41ca2131a9cd06e830fa1c5e9e8cca11cd230",
+  "visible_cuda_devices": 0,
+  "plain": {
+    "segments": [
+      {
+        "start": 0.91,
+        "end": 3.03,
+        "text": "the bullet train leaves at noon"
+      },
+      {
+        "start": 3.85,
+        "end": 6.05,
+        "text": "please meet me at the station"
+      },
+      {
+        "start": 6.9,
+        "end": 8.87,
+        "text": "i will bring the yellow band"
+      }
+    ],
+    "full_text": "the bullet train leaves at noonplease meet me at the stationi will bring the yellow band",
+    "language": "en",
+    "align_enabled": true,
+    "punc_enabled": false
+  },
+  "enriched": {
+    "segments": [
+      {
+        "start": 1.23,
+        "end": 2.75,
+        "text": "the bullet train leaves at noon",
+        "words": [
+          {
+            "text": "the",
+            "start": 1.23,
+            "end": 1.23
+          },
+          {
+            "text": "bullet",
+            "start": 1.23,
+            "end": 1.55
+          },
+          {
+            "text": "train",
+            "start": 1.55,
+            "end": 1.87
+          },
+          {
+            "text": "leaves",
+            "start": 1.87,
+            "end": 2.27
+          },
+          {
+            "text": "at",
+            "start": 2.27,
+            "end": 2.43
+          },
+          {
+            "text": "noon",
+            "start": 2.43,
+            "end": 2.75
+          }
+        ],
+        "speaker": "A"
+      },
+      {
+        "start": 4.09,
+        "end": 5.77,
+        "text": "please meet me at the station",
+        "words": [
+          {
+            "text": "please",
+            "start": 4.09,
+            "end": 4.41
+          },
+          {
+            "text": "meet",
+            "start": 4.41,
+            "end": 4.65
+          },
+          {
+            "text": "me",
+            "start": 4.65,
+            "end": 4.89
+          },
+          {
+            "text": "at",
+            "start": 4.89,
+            "end": 5.13
+          },
+          {
+            "text": "the",
+            "start": 5.13,
+            "end": 5.21
+          },
+          {
+            "text": "station",
+            "start": 5.21,
+            "end": 5.77
+          }
+        ],
+        "speaker": "A"
+      },
+      {
+        "start": 7.22,
+        "end": 8.58,
+        "text": "i will bring the yellow band",
+        "words": [
+          {
+            "text": "i",
+            "start": 7.22,
+            "end": 7.3
+          },
+          {
+            "text": "will",
+            "start": 7.3,
+            "end": 7.46
+          },
+          {
+            "text": "bring",
+            "start": 7.46,
+            "end": 7.78
+          },
+          {
+            "text": "the",
+            "start": 7.78,
+            "end": 7.86
+          },
+          {
+            "text": "yellow",
+            "start": 7.86,
+            "end": 8.18
+          },
+          {
+            "text": "band",
+            "start": 8.18,
+            "end": 8.58
+          }
+        ],
+        "speaker": "A"
+      }
+    ],
+    "full_text": "the bullet train leaves at noonplease meet me at the stationi will bring the yellow band",
+    "language": "en",
+    "align_enabled": true,
+    "punc_enabled": false,
+    "speakers": [
+      "A"
+    ]
+  }
+}
