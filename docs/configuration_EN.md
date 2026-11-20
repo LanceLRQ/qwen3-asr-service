@@ -30,7 +30,9 @@ All parameters are passed through `bash start.sh <args>`. Config-file key = long
 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
-| `--serve-mode` | `standard` / `vllm` | `standard` | Serving mode; `vllm` = vLLM native streaming (GPU-only, partial→final realtime + offline `/v2/asr`) |
+| `--serve-mode` | `standard` / `vllm` / `remote` | `standard` | Serving mode; `vllm` = vLLM native streaming (GPU-only, partial→final realtime + offline `/v2/asr`) |
+| `--remote-base-url` | API URL | Unset | Required in remote mode. The offline server exposes its API under this base, e.g. `http://offline:8001/v1`. |
+| `--remote-stream-url` | HTTP(S) origin | Unset | YAML key `remote_stream_url`. With `--enable-stream`, select a separate qwen-asr-demo-streaming server, e.g. `http://demo:8000`. Omit for whole-utterance VAD. |
 | `--device` | `auto` / `cuda` / `cpu` | `auto` | Device; `auto` detects (≥6GB VRAM → 1.7B, 4–6GB → 0.6B, <4GB disables alignment, no GPU falls back to CPU/OpenVINO) |
 | `--model-size` | `0.6b` / `1.7b` | Auto by VRAM | ASR model size |
 | `--enable-align` / `--no-align` | - | Enabled | Alignment model (word-level timestamps); force-disabled in CPU mode |
@@ -53,8 +55,8 @@ All parameters are passed through `bash start.sh <args>`. Config-file key = long
 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
-| `--enable-stream` / `--no-stream` | - | Disabled (enabled in configs generated from the example) | Mount the real-time endpoint `WS /v2/asr/stream` (standard mode) |
-| `--max-stream-sessions` | Number | `16` | Max concurrent real-time sessions (excess connections closed with 1013) |
+| `--enable-stream` / `--no-stream` | - | Disabled (enabled in configs generated from the example) | Mount the real-time endpoint `WS /v2/asr/stream` (standard and remote modes) |
+| `--max-stream-sessions` | Number | `16` | Max concurrent real-time sessions (excess connections closed with 1013). The remote demo backend always admits one session |
 | `--stream-asr-concurrency` | Number | `1` | Real-time ASR decoding concurrency cap (the model layer holds an inference lock; >1 brings no gain) |
 
 ### Far-field Noise Filtering

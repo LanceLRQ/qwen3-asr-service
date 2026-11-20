@@ -28,7 +28,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 import app.config as cfg
-from app.api.ws_routes import receive_while_consuming, verify_ws_token
+from app.api.ws_routes import receive_while_consuming, release_stream_session, verify_ws_token
 from app.engines.remote_asr_engine import RemoteASRError
 
 logger = logging.getLogger(__name__)
@@ -200,6 +200,6 @@ async def run_compat_ws(ws: WebSocket, adapter) -> None:
                 await ct
             except (asyncio.CancelledError, Exception):
                 pass
-        backend.release(session)
+        await release_stream_session(backend, session)
         if ws.client_state == WebSocketState.CONNECTED and ws.application_state == WebSocketState.CONNECTED:
             await ws.close()

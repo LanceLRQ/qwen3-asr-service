@@ -35,7 +35,7 @@
       'scene.preset': '场景预设',
       'preset.balanced': '均衡（人声优先）', 'preset.live': '直播（人声优先+清唱偏置）',
       'preset.music': '音乐优先',
-      'cap.tip.partial_results': '需 vLLM 模式才支持（当前 vad-offline 后端按段输出，不产增量结果）',
+      'cap.tip.partial_results': 'vLLM 原生流式和远端 Qwen 流式后端支持句中更新',
       // 诊断指标
       'diag.sent': '发送速率', 'diag.recv': '接收速率', 'diag.buf': '发送缓冲',
       'diag.frame': '最大帧', 'diag.stall': '渲染延迟',
@@ -108,7 +108,7 @@
       'scene.preset': 'Scene preset',
       'preset.balanced': 'Balanced (vocal-priority)', 'preset.live': 'Live (vocal + a-cappella bias)',
       'preset.music': 'Music-first',
-      'cap.tip.partial_results': 'Requires vLLM mode (the current vad-offline backend emits per segment, not incrementally)',
+      'cap.tip.partial_results': 'Available with native vLLM streaming or the remote Qwen streaming backend',
       'diag.sent': 'Send rate', 'diag.recv': 'Recv rate', 'diag.buf': 'Send buffer',
       'diag.frame': 'Max frame', 'diag.stall': 'Render lag',
       'diag.unit.frame': 'fr/s', 'diag.unit.msg': 'msg/s', 'diag.unit.kb': 'KB',
@@ -277,7 +277,7 @@
         const known = CAP_ORDER.filter(k => k in c);
         const extra = Object.keys(c).filter(k => !CAP_ORDER.includes(k));
         // 已启用排前：成排亮色芯片更易扫读，禁用项弱化随后（sort 稳定，组内保持 CAP_ORDER）
-        // 目前仅「增量结果」带「为何不可用」说明（需 vLLM）；后续若多了再抽成集合/由服务端下发
+        // 目前仅「增量结果」带「为何不可用」说明；后续若多了再抽成集合/由服务端下发
         return known.concat(extra)
           .map(k => ({ key: k, label: t('cap.flag.' + k), on: !!c[k], tip: k === 'partial_results' ? t('cap.tip.partial_results') : '' }))
           .sort((a, b) => Number(b.on) - Number(a.on));

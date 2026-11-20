@@ -61,6 +61,16 @@ async def receive_while_consuming(ws, consumer, deadline):
             await asyncio.gather(receive, return_exceptions=True)
 
 
+async def release_stream_session(backend, session):
+    """关闭远端推理会话后归还准入名额，本地后端只需同步释放。"""
+    try:
+        close = getattr(session, "aclose", None)
+        if close is not None:
+            await close()
+    finally:
+        backend.release(session)
+
+
 @ws_router_stream.websocket("/stream")
 async def stream(ws: WebSocket):
     # 鉴权（在 accept 前，失败以 1008 关闭）
@@ -243,8 +253,9 @@ async def stream(ws: WebSocket):
                 await consume_task
             except (asyncio.CancelledError, Exception):
                 pass
+        await release_stream_session(_backend, session)
         try:
             await ws.send_json(SessionClosed(reason="end").model_dump())
+            await ws.close(code=1000)
         except Exception:
             pass
-        _backend.release(session)

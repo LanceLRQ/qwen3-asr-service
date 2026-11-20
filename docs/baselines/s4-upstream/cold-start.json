@@ -1,0 +1,141 @@
+{
+  "gateway": "ws://127.0.0.1:18843",
+  "audio": {
+    "text": "The blue train leaves the station early in the morning and arrives at noon.",
+    "seconds": 3.714625,
+    "pcm_sha256": "d07931304c76a4bbed278c1d832b68e49c7d796686f346f3cd7c57c4df86b74e"
+  },
+  "session": {
+    "protocol": "native",
+    "case": "two_tail",
+    "started_unix": 1795168283.880841,
+    "events": [
+      {
+        "ms": 3,
+        "audio_ms": 0,
+        "kind": "handshake.ok",
+        "unix_ms": 1795168283884
+      },
+      {
+        "ms": 24,
+        "audio_ms": 0,
+        "kind": "session.created",
+        "event": {
+          "type": "session.created",
+          "protocol": "qwen3-asr-stream",
+          "protocol_version": "1.0",
+          "mode": "remote",
+          "backend": "remote-qwen-streaming",
+          "sample_rate": 16000,
+          "capabilities": {
+            "partial_results": true,
+            "word_timestamps": false,
+            "languages_auto": true,
+            "speaker_labels": false,
+            "output_toggles": false
+          },
+          "limits": {
+            "max_frame_bytes": 2097152,
+            "max_backlog_bytes": 8388608
+          }
+        }
+      },
+      {
+        "ms": 24,
+        "audio_ms": 0,
+        "kind": "utterance.start",
+        "index": 0
+      },
+      {
+        "ms": 3739,
+        "audio_ms": 3715,
+        "kind": "utterance.end",
+        "index": 0
+      },
+      {
+        "ms": 3925,
+        "audio_ms": 3915,
+        "kind": "partial",
+        "event": {
+          "type": "partial",
+          "seg_id": 0,
+          "text": "The blue train."
+        }
+      },
+      {
+        "ms": 4002,
+        "audio_ms": 4015,
+        "kind": "partial",
+        "event": {
+          "type": "partial",
+          "seg_id": 0,
+          "text": "The blue train leaves."
+        }
+      },
+      {
+        "ms": 4088,
+        "audio_ms": 4115,
+        "kind": "partial",
+        "event": {
+          "type": "partial",
+          "seg_id": 0,
+          "text": "The blue train leaves the station."
+        }
+      },
+      {
+        "ms": 4187,
+        "audio_ms": 4215,
+        "kind": "partial",
+        "event": {
+          "type": "partial",
+          "seg_id": 0,
+          "text": "The blue train leaves the station early in the."
+        }
+      },
+      {
+        "ms": 4331,
+        "audio_ms": 4315,
+        "kind": "partial",
+        "event": {
+          "type": "partial",
+          "seg_id": 0,
+          "text": "The blue train leaves the station early in the morning and."
+        }
+      },
+      {
+        "ms": 4396,
+        "audio_ms": 4415,
+        "kind": "partial",
+        "event": {
+          "type": "partial",
+          "seg_id": 0,
+          "text": "The blue train leaves the station early in the morning and arrives."
+        }
+      },
+      {
+        "ms": 4471,
+        "audio_ms": 4515,
+        "kind": "partial",
+        "event": {
+          "type": "partial",
+          "seg_id": 0,
+          "text": "The blue train leaves the station early in the morning and arrives at noon."
+        }
+      },
+      {
+        "ms": 4596,
+        "audio_ms": 4615,
+        "kind": "final",
+        "event": {
+          "type": "final",
+          "seg_id": 0,
+          "text": "The blue train leaves the station early in the morning and arrives at noon.",
+          "start": 200,
+          "end": 4514
+        }
+      }
+    ],
+    "passed": false,
+    "error": "AssertionError('缺少该句尾音送出前的非空 partial')"
+  }
+}

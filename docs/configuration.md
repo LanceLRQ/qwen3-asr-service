@@ -30,7 +30,9 @@
 
 | 参数 | 取值 | 默认值 | 说明 |
 |------|------|--------|------|
-| `--serve-mode` | `standard` / `vllm` | `standard` | 运行模式；`vllm`=vLLM 原生流式（GPU 专用，partial→final 实时 + 离线 `/v2/asr`） |
+| `--serve-mode` | `standard` / `vllm` / `remote` | `standard` | 运行模式；`vllm`=vLLM 原生流式（GPU 专用，partial→final 实时 + 离线 `/v2/asr`） |
+| `--remote-base-url` | API 基址 | 未设置 | remote 必填，指向离线服务，例如 `http://offline:8001/v1`。 |
+| `--remote-stream-url` | HTTP(S) origin | 未设置 | YAML 键为 `remote_stream_url`。开启实时后使用独立的 qwen-asr-demo-streaming 服务，例如 `http://demo:8000`。省略时使用 VAD 整句转写。 |
 | `--device` | `auto` / `cuda` / `cpu` | `auto` | 运行设备，`auto` 自动检测（≥6GB 显存选 1.7B，4–6GB 选 0.6B，<4GB 关对齐，无 GPU 回退 CPU/OpenVINO） |
 | `--model-size` | `0.6b` / `1.7b` | 按显存自动选择 | ASR 模型大小 |
 | `--enable-align` / `--no-align` | - | 开启 | 对齐模型（单词级时间戳）；CPU 模式强制关闭 |
@@ -53,8 +55,8 @@
 
 | 参数 | 取值 | 默认值 | 说明 |
 |------|------|--------|------|
-| `--enable-stream` / `--no-stream` | - | 关闭（example 生成的配置中开启） | 挂载实时端点 `WS /v2/asr/stream`（standard 模式） |
-| `--max-stream-sessions` | 数字 | `16` | 实时最大并发会话数（超额连接以 1013 关闭） |
+| `--enable-stream` / `--no-stream` | - | 关闭（example 生成的配置中开启） | 挂载实时端点 `WS /v2/asr/stream`（standard 和 remote 模式） |
+| `--max-stream-sessions` | 数字 | `16` | 实时最大并发会话数（超额连接以 1013 关闭）。远端 demo 增量后端固定为 1 |
 | `--stream-asr-concurrency` | 数字 | `1` | 实时 ASR 解码并发上限（模型层有推理锁，>1 无收益） |
 
 ### 智能远场过滤

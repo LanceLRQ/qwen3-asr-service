@@ -95,7 +95,8 @@ class TemplateDeleteResponse(BaseModel):
 
 class StreamCapabilities(BaseModel):
     enabled: bool = False
-    backend: str | None = None        # "vad-offline" | "vllm-native"
+    backend: str | None = None        # vad-offline / remote-qwen-streaming / vllm-native
+    max_sessions: int = 0
     path: str | None = None           # "/v2/asr/stream"（统一端点）
     partial_results: bool = False
     word_timestamps: bool = False

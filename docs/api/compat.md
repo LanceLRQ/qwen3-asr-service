@@ -53,11 +53,11 @@
 | 翻译 | ❌ 501 | ➖ 不涉及 |
 | HTTP 流式 | ✅ stream=true（SSE） | ➖ 不涉及 |
 | 实时整句 | ✅ completed | ✅ result-generated |
-| 实时逐字增量 | ✅ delta（仅 vLLM 模式，best-effort）| ✅ 中间结果（仅 vLLM 模式）|
+| 实时增量 | 尽力映射为 delta | 累计中间结果 |
 | 置信度/logprob | ➖ 占位 | ➖ 不提供 |
 | 引导/温度/热词/顺滑 | ❌ 忽略 | ❌ 忽略 |
 
-> 实时（上表最后两行）的挂载与增量能力因模式而异：**standard 和 remote**（VAD-offline）需 `--enable-stream`，仅产整句 final、无逐字增量；**vLLM**（`--serve-mode vllm`，原生流式）流式恒开、实时随兼容开关自动挂载（**无需 `--enable-stream`**），并产逐字增量——DashScope 中间 `result-generated`（`sentence_end:false`）天然累计、干净直发；OpenAI `…delta` 为 **best-effort**（partial 累计且可修订，仅纯追加时取新增后缀作 delta、修订帧跳过，权威全文仍以 `…completed` 为准）。
+> 打开对应协议的兼容开关。standard 和 remote 还需开启 `--enable-stream`。默认的 `vad-offline` 后端逐句返回 final。remote 配置 `--remote-stream-url` 后使用支持增量的 `remote-qwen-streaming`；流式恒开的 `vllm-native` 同样支持增量。当前兼容端点的增量能力见 `compat.realtime_partial`。DashScope 返回累计中间文本，OpenAI 仅在追加时发送新增后缀，跳过修订帧，以 completed 全文为准。
 
 ## 与原生 v2 的取舍
 

@@ -223,3 +223,49 @@ def test_backlog_overflow_closes_session(monkeypatch):
         assert err["fatal"] is True
         assert ws.receive_json()["type"] == "session.closed"
     assert backend.released is True
+
+
+def test_native_disconnect_closes_upstream_before_releasing_slot():
+    from threading import Event
+
+    released = Event()
+    events = []
+
+    class Session(FakeSession):
+        async def aclose(self):
+            events.append("close upstream")
+
+    class Backend(FakeBackend):
+        def create_session(self, sid):
+            return Session()
+
+        def release(self, session):
+            events.append("release slot")
+            released.set()
+
+    with _make_client(Backend()).websocket_connect("/v2/asr/stream") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "start"})
+        ws.send_bytes(b"\x01\x00")
+        ws.receive_json()
+        ws.close()
+        assert released.wait(2)
+    assert events == ["close upstream", "release slot"]
+
+
+async def test_native_stop_sends_normal_websocket_close():
+    client = _make_client(FakeBackend())
+    incoming = asyncio.Queue()
+    for message in ({"type": "websocket.connect"},
+                    {"type": "websocket.receive", "text": '{"type":"start"}'},
+                    {"type": "websocket.receive", "text": '{"type":"stop"}'}):
+        incoming.put_nowait(message)
+    outgoing = []
+
+    async def send(message):
+        outgoing.append(message)
+
+    await client.app({"type": "websocket", "path": "/v2/asr/stream", "query_string": b"",
+                      "headers": [], "subprotocols": []}, incoming.get, send)
+    assert outgoing[-1]["type"] == "websocket.close"
+    assert outgoing[-1]["code"] == 1000

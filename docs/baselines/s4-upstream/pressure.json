@@ -1,0 +1,28 @@
+{
+  "source": "主进程独立实验，客户端计时从首个连接尝试开始",
+  "gateway_port": 18845,
+  "proxy_port": 18844,
+  "upstream_port": 18842,
+  "test_backlog_bytes": 12800,
+  "default_backlog_bytes": 8388608,
+  "frame_bytes": 3200,
+  "frame_ms": 100,
+  "overflow_ms": 328,
+  "cleanup_handshake_http": 403,
+  "recovered_start_stop_ms": 2137,
+  "proxy_event": {
+    "path": "/api/chunk?session_id=da585b2e203a41fcbc77bb7e950a3872",
+    "delay_ms": 2000,
+    "at": 1795167927590
+  },
+  "gateway_log": [
+    "2026-11-20 17:45:25,572 [INFO] app.api.ws_routes: [stream] WS accepted sid=fb13bd3b",
+    "2026-11-20 17:45:25,584 [INFO] httpx: HTTP Request: POST http://127.0.0.1:18844/api/start \"HTTP/1.1 200 OK\"",
+    "2026-11-20 17:45:25,873 [WARNING] app.api.ws_routes: [stream] 处理积压超限断开 sid=fb13bd3b backlog=12800B > 12800B",
+    "INFO:     connection rejected (403 Forbidden)",
+    "2026-11-20 17:45:27,591 [INFO] httpx: HTTP Request: POST http://127.0.0.1:18844/api/chunk?session_id=da585b2e203a41fcbc77bb7e950a3872 \"HTTP/1.1 200 OK\"",
+    "2026-11-20 17:45:27,657 [INFO] httpx: HTTP Request: POST http://127.0.0.1:18844/api/finish?session_id=da585b2e203a41fcbc77bb7e950a3872 \"HTTP/1.1 200 OK\"",
+    "2026-11-20 17:45:27,681 [INFO] app.api.ws_routes: [stream] WS accepted sid=9551c92c",
+    "2026-11-20 17:45:27,682 [INFO] app.api.ws_routes: [stream] 收到 stop sid=9551c92c 累计收字节=0"
+  ]
+}

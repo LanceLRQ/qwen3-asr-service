@@ -12,6 +12,7 @@ from app.utils.arg_schema import ARG_SPECS, build_parser, schema_defaults
 LEGACY_DEFAULTS = {
     "serve_mode": "standard",
     "remote_base_url": None,
+    "remote_stream_url": None,
     "remote_model": "qwen3-asr",
     "remote_api_key": None,
     "remote_timeout": 60.0,

@@ -72,6 +72,8 @@ def test_remote_assembly_and_transcription(isolated_create_app, monkeypatch, tmp
     capabilities = client.get("/v1/capabilities").json()
     assert capabilities["mode"] == "remote" and capabilities["offline_api"]
     assert capabilities["stream"]["enabled"] is True
+    assert capabilities["stream"]["backend"] == "vad-offline"
+    assert capabilities["stream"]["partial_results"] is False
     assert capabilities["stream"]["word_timestamps"] is False
     assert capabilities["compat"]["openai"] and capabilities["compat"]["realtime"]
     assert client.get("/compat/openai/v1/models").json()["data"][0]["id"] == "qwen3-asr"
@@ -155,3 +157,45 @@ def test_remote_sentence_wav(monkeypatch):
     monkeypatch.setattr(engine, "_request", request)
     result = engine.transcribe_array(np.array([-.5, .5]), 16000, "English", "2")
     assert (result.chunk_id, result.language, result.text) == ("2", "English", "Hello")
+
+
+@pytest.mark.parametrize(("enabled", "compat"), [(True, True), (True, False), (False, True)])
+def test_remote_stream_origin_assembly(isolated_create_app, monkeypatch, tmp_path, enabled, compat):
+    from app.runtime import remote_stream_session
+    import app.main as main
+    from app.api import ws_routes
+    from app.api.compat import ws_bridge
+
+    _mock_standard_engines(monkeypatch)
+    monkeypatch.setattr("app.engines.remote_asr_engine.RemoteASREngine.load", lambda self: None)
+    factory = Mock(wraps=remote_stream_session.RemoteStreamBackend)
+    monkeypatch.setattr(remote_stream_session, "RemoteStreamBackend", factory)
+    monkeypatch.setattr(main.cfg, "STREAM_MAX_SEGMENT_SEC", 7)
+    config = tmp_path / "remote.yaml"
+    config.write_text("serve_mode: remote\nremote_base_url: http://offline/v1\n"
+                      "remote_stream_url: http://demo:8000\n")
+    assert main.parse_args(["--config", str(config)]).remote_stream_url == "http://demo:8000"
+    args = main.parse_args(["--config", str(config), "--remote-stream-url", "http://demo:8080",
+                            "--remote-timeout", "3", "--max-stream-sessions", "8",
+                            "--enable-stream" if enabled else "--no-stream"]
+                           + (["--enable-openai-api", "--enable-dashscope-api"] if compat else []))
+    with TestClient(main.create_app(args)) as client:
+        caps = client.get("/v2/capabilities").json()
+        assert client.get("/v1/health").json()["capabilities"] == caps
+        assert caps["mode"] == "remote" and caps["offline_api"]
+        stream = caps["stream"]
+        assert stream["enabled"] is enabled
+        assert stream["partial_results"] is enabled
+        assert stream["backend"] == ("remote-qwen-streaming" if enabled else None)
+        assert not any(stream[key] for key in ("word_timestamps", "speaker_labels", "scene"))
+        assert caps["compat"]["realtime_partial"] is (enabled and compat)
+        if enabled:
+            factory.assert_called_once_with(
+                "http://demo:8080", 3, max_sessions=1, max_utterance_sec=7)
+            backend = ws_routes._backend
+            assert backend.mode == "remote"
+            assert stream["max_sessions"] == 1
+            if compat:
+                assert ws_bridge._backend is backend
+        else:
+            factory.assert_not_called()

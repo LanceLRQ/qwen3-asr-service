@@ -1,0 +1,2688 @@
+{
+  "gateway": "ws://127.0.0.1:18843",
+  "health": {
+    "status": "ready",
+    "mode": "remote",
+    "device": "cpu",
+    "model_size": null,
+    "align_enabled": false,
+    "punc_enabled": false,
+    "speaker_enabled": false,
+    "speaker_db_enabled": false,
+    "audio_tagging_enabled": false,
+    "asr_backend": "remote",
+    "vad_backend": "pytorch",
+    "punc_backend": "disabled",
+    "config_file": "s402-review-gateway.yaml",
+    "capabilities": {
+      "mode": "remote",
+      "offline_api": true,
+      "word_timestamps": false,
+      "speaker_labels": false,
+      "speaker_identification": false,
+      "audio_tagging": false,
+      "scene": false,
+      "scene_preset": "balanced",
+      "scene_presets": [
+        "balanced",
+        "live",
+        "music"
+      ],
+      "stream": {
+        "enabled": true,
+        "backend": "remote-qwen-streaming",
+        "max_sessions": 1,
+        "path": "/v2/asr/stream",
+        "partial_results": true,
+        "word_timestamps": false,
+        "speaker_labels": false,
+        "scene": false
+      },
+      "defaults": {
+        "max_segment": 5,
+        "max_end_silence_ms": 800,
+        "max_segment_sec": 12,
+        "speaker_threshold": 0.5,
+        "speaker_min_seg_ms": 1500,
+        "speaker_max": 8,
+        "speaker_id_threshold": 0.45,
+        "speaker_id_margin": 0.1,
+        "energy_floor_dbfs": -50.0,
+        "snr_min_db": 6.0,
+        "audio_tagging_engine": "panns",
+        "audio_tagging_panns_variant": "16k"
+      },
+      "compat": {
+        "openai": true,
+        "dashscope": true,
+        "realtime": true,
+        "realtime_partial": true
+      }
+    }
+  },
+  "started_unix": 1795168283.880711,
+  "audio": [
+    {
+      "text": "The blue train leaves the station early in the morning and arrives at noon.",
+      "seconds": 3.714625,
+      "pcm_sha256": "d07931304c76a4bbed278c1d832b68e49c7d796686f346f3cd7c57c4df86b74e"
+    },
+    {
+      "text": "Please meet me at the station and remember to bring the yellow bag.",
+      "seconds": 3.45625,
+      "pcm_sha256": "6817750176a53f516c70c66de242765a9bbb009ebb12740fc81ffec0c546ada3"
+    }
+  ],
+  "sessions": [
+    {
+      "protocol": "native",
+      "case": "two_tail",
+      "started_unix": 1795168381.2140267,
+      "events": [
+        {
+          "ms": 1,
+          "audio_ms": 0,
+          "kind": "handshake.ok",
+          "unix_ms": 1795168381215
+        },
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "session.created",
+          "event": {
+            "type": "session.created",
+            "protocol": "qwen3-asr-stream",
+            "protocol_version": "1.0",
+            "mode": "remote",
+            "backend": "remote-qwen-streaming",
+            "sample_rate": 16000,
+            "capabilities": {
+              "partial_results": true,
+              "word_timestamps": false,
+              "languages_auto": true,
+              "speaker_labels": false,
+              "output_toggles": false
+            },
+            "limits": {
+              "max_frame_bytes": 2097152,
+              "max_backlog_bytes": 8388608
+            }
+          }
+        },
+        {
+          "ms": 23,
+          "audio_ms": 0,
+          "kind": "utterance.start",
+          "index": 0
+        },
+        {
+          "ms": 674,
+          "audio_ms": 700,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train."
+          }
+        },
+        {
+          "ms": 1178,
+          "audio_ms": 1200,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves."
+          }
+        },
+        {
+          "ms": 1688,
+          "audio_ms": 1700,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station."
+          }
+        },
+        {
+          "ms": 2204,
+          "audio_ms": 2200,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the."
+          }
+        },
+        {
+          "ms": 2672,
+          "audio_ms": 2700,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the morning and."
+          }
+        },
+        {
+          "ms": 3167,
+          "audio_ms": 3200,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the morning and arrives."
+          }
+        },
+        {
+          "ms": 3673,
+          "audio_ms": 3700,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the morning and arrives at noon."
+          }
+        },
+        {
+          "ms": 3738,
+          "audio_ms": 3715,
+          "kind": "utterance.end",
+          "index": 0
+        },
+        {
+          "ms": 4478,
+          "audio_ms": 4515,
+          "kind": "final",
+          "event": {
+            "type": "final",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the morning and arrives at noon.",
+            "start": 200,
+            "end": 4514
+          }
+        },
+        {
+          "ms": 5739,
+          "audio_ms": 5715,
+          "kind": "utterance.start",
+          "index": 1
+        },
+        {
+          "ms": 6378,
+          "audio_ms": 6415,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please."
+          }
+        },
+        {
+          "ms": 6899,
+          "audio_ms": 6915,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the."
+          }
+        },
+        {
+          "ms": 7404,
+          "audio_ms": 7415,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the station."
+          }
+        },
+        {
+          "ms": 7921,
+          "audio_ms": 7915,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the station, and remember."
+          }
+        },
+        {
+          "ms": 8388,
+          "audio_ms": 8415,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the station, and remember to bring."
+          }
+        },
+        {
+          "ms": 8888,
+          "audio_ms": 8915,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the station, and remember to bring the yellow."
+          }
+        },
+        {
+          "ms": 9196,
+          "audio_ms": 9171,
+          "kind": "utterance.end",
+          "index": 1
+        },
+        {
+          "ms": 9196,
+          "audio_ms": 9171,
+          "kind": "client.stop"
+        },
+        {
+          "ms": 9239,
+          "audio_ms": 9171,
+          "kind": "final",
+          "event": {
+            "type": "final",
+            "seg_id": 1,
+            "text": "Please meet me at the station, and remember to bring the yellow bag.",
+            "start": 5914,
+            "end": 9170
+          }
+        },
+        {
+          "ms": 9239,
+          "audio_ms": 9171,
+          "kind": "session.closed",
+          "event": {
+            "type": "session.closed",
+            "reason": "end"
+          }
+        },
+        {
+          "ms": 9240,
+          "audio_ms": 9171,
+          "kind": "websocket.close",
+          "code": 1000
+        }
+      ],
+      "passed": true
+    },
+    {
+      "protocol": "native",
+      "case": "slow_input",
+      "started_unix": 1795168390.4540565,
+      "events": [
+        {
+          "ms": 1,
+          "audio_ms": 0,
+          "kind": "handshake.ok",
+          "unix_ms": 1795168390455
+        },
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "session.created",
+          "event": {
+            "type": "session.created",
+            "protocol": "qwen3-asr-stream",
+            "protocol_version": "1.0",
+            "mode": "remote",
+            "backend": "remote-qwen-streaming",
+            "sample_rate": 16000,
+            "capabilities": {
+              "partial_results": true,
+              "word_timestamps": false,
+              "languages_auto": true,
+              "speaker_labels": false,
+              "output_toggles": false
+            },
+            "limits": {
+              "max_frame_bytes": 2097152,
+              "max_backlog_bytes": 8388608
+            }
+          }
+        },
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "utterance.start",
+          "index": 0
+        },
+        {
+          "ms": 1031,
+          "audio_ms": 700,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train."
+          }
+        },
+        {
+          "ms": 1837,
+          "audio_ms": 1200,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves."
+          }
+        },
+        {
+          "ms": 2648,
+          "audio_ms": 1700,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station."
+          }
+        },
+        {
+          "ms": 3464,
+          "audio_ms": 2200,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the."
+          }
+        },
+        {
+          "ms": 4232,
+          "audio_ms": 2700,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the morning and."
+          }
+        },
+        {
+          "ms": 5027,
+          "audio_ms": 3200,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the morning and arrives."
+          }
+        },
+        {
+          "ms": 5832,
+          "audio_ms": 3700,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the morning and arrives at noon."
+          }
+        },
+        {
+          "ms": 5966,
+          "audio_ms": 3715,
+          "kind": "utterance.end",
+          "index": 0
+        },
+        {
+          "ms": 6707,
+          "audio_ms": 4515,
+          "kind": "final",
+          "event": {
+            "type": "final",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the morning and arrives at noon.",
+            "start": 200,
+            "end": 4514
+          }
+        },
+        {
+          "ms": 7967,
+          "audio_ms": 5715,
+          "kind": "utterance.start",
+          "index": 1
+        },
+        {
+          "ms": 8966,
+          "audio_ms": 6415,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please."
+          }
+        },
+        {
+          "ms": 9788,
+          "audio_ms": 6915,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the."
+          }
+        },
+        {
+          "ms": 10594,
+          "audio_ms": 7415,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the station."
+          }
+        },
+        {
+          "ms": 11410,
+          "audio_ms": 7915,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the station, and remember."
+          }
+        },
+        {
+          "ms": 12178,
+          "audio_ms": 8415,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the station, and remember to bring."
+          }
+        },
+        {
+          "ms": 12978,
+          "audio_ms": 8915,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the station, and remember to bring the yellow."
+          }
+        },
+        {
+          "ms": 13498,
+          "audio_ms": 9171,
+          "kind": "utterance.end",
+          "index": 1
+        },
+        {
+          "ms": 13498,
+          "audio_ms": 9171,
+          "kind": "client.stop"
+        },
+        {
+          "ms": 13541,
+          "audio_ms": 9171,
+          "kind": "final",
+          "event": {
+            "type": "final",
+            "seg_id": 1,
+            "text": "Please meet me at the station, and remember to bring the yellow bag.",
+            "start": 5914,
+            "end": 9170
+          }
+        },
+        {
+          "ms": 13542,
+          "audio_ms": 9171,
+          "kind": "session.closed",
+          "event": {
+            "type": "session.closed",
+            "reason": "end"
+          }
+        },
+        {
+          "ms": 13542,
+          "audio_ms": 9171,
+          "kind": "websocket.close",
+          "code": 1000
+        }
+      ],
+      "passed": true
+    },
+    {
+      "protocol": "native",
+      "case": "disconnect",
+      "started_unix": 1795168403.9965057,
+      "events": [
+        {
+          "ms": 1,
+          "audio_ms": 0,
+          "kind": "handshake.ok",
+          "unix_ms": 1795168403998
+        },
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "session.created",
+          "event": {
+            "type": "session.created",
+            "protocol": "qwen3-asr-stream",
+            "protocol_version": "1.0",
+            "mode": "remote",
+            "backend": "remote-qwen-streaming",
+            "sample_rate": 16000,
+            "capabilities": {
+              "partial_results": true,
+              "word_timestamps": false,
+              "languages_auto": true,
+              "speaker_labels": false,
+              "output_toggles": false
+            },
+            "limits": {
+              "max_frame_bytes": 2097152,
+              "max_backlog_bytes": 8388608
+            }
+          }
+        },
+        {
+          "ms": 671,
+          "audio_ms": 700,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train."
+          }
+        },
+        {
+          "ms": 671,
+          "audio_ms": 700,
+          "kind": "client.abort",
+          "unix_ms": 1795168404668
+        }
+      ],
+      "passed": true
+    },
+    {
+      "protocol": "native",
+      "case": "reconnect",
+      "started_unix": 1795168404.6684644,
+      "events": [
+        {
+          "ms": 1,
+          "audio_ms": 0,
+          "kind": "handshake.403"
+        },
+        {
+          "ms": 102,
+          "audio_ms": 0,
+          "kind": "handshake.ok",
+          "unix_ms": 1795168404771
+        },
+        {
+          "ms": 123,
+          "audio_ms": 0,
+          "kind": "session.created",
+          "event": {
+            "type": "session.created",
+            "protocol": "qwen3-asr-stream",
+            "protocol_version": "1.0",
+            "mode": "remote",
+            "backend": "remote-qwen-streaming",
+            "sample_rate": 16000,
+            "capabilities": {
+              "partial_results": true,
+              "word_timestamps": false,
+              "languages_auto": true,
+              "speaker_labels": false,
+              "output_toggles": false
+            },
+            "limits": {
+              "max_frame_bytes": 2097152,
+              "max_backlog_bytes": 8388608
+            }
+          }
+        },
+        {
+          "ms": 123,
+          "audio_ms": 0,
+          "kind": "utterance.start",
+          "index": 0
+        },
+        {
+          "ms": 773,
+          "audio_ms": 700,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train."
+          }
+        },
+        {
+          "ms": 1279,
+          "audio_ms": 1200,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves."
+          }
+        },
+        {
+          "ms": 1789,
+          "audio_ms": 1700,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station."
+          }
+        },
+        {
+          "ms": 2305,
+          "audio_ms": 2200,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the."
+          }
+        },
+        {
+          "ms": 2773,
+          "audio_ms": 2700,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the morning and."
+          }
+        },
+        {
+          "ms": 3268,
+          "audio_ms": 3200,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the morning and arrives."
+          }
+        },
+        {
+          "ms": 3774,
+          "audio_ms": 3700,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the morning and arrives at noon."
+          }
+        },
+        {
+          "ms": 3838,
+          "audio_ms": 3715,
+          "kind": "utterance.end",
+          "index": 0
+        },
+        {
+          "ms": 4580,
+          "audio_ms": 4515,
+          "kind": "final",
+          "event": {
+            "type": "final",
+            "seg_id": 0,
+            "text": "The blue train leaves the station early in the morning and arrives at noon.",
+            "start": 200,
+            "end": 4514
+          }
+        },
+        {
+          "ms": 5839,
+          "audio_ms": 5715,
+          "kind": "utterance.start",
+          "index": 1
+        },
+        {
+          "ms": 6477,
+          "audio_ms": 6415,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please."
+          }
+        },
+        {
+          "ms": 6999,
+          "audio_ms": 6915,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the."
+          }
+        },
+        {
+          "ms": 7505,
+          "audio_ms": 7415,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the station."
+          }
+        },
+        {
+          "ms": 8024,
+          "audio_ms": 7915,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the station, and remember."
+          }
+        },
+        {
+          "ms": 8488,
+          "audio_ms": 8415,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the station, and remember to bring."
+          }
+        },
+        {
+          "ms": 8989,
+          "audio_ms": 8915,
+          "kind": "partial",
+          "event": {
+            "type": "partial",
+            "seg_id": 1,
+            "text": "Please meet me at the station, and remember to bring the yellow."
+          }
+        },
+        {
+          "ms": 9295,
+          "audio_ms": 9171,
+          "kind": "utterance.end",
+          "index": 1
+        },
+        {
+          "ms": 9295,
+          "audio_ms": 9171,
+          "kind": "client.stop"
+        },
+        {
+          "ms": 9339,
+          "audio_ms": 9171,
+          "kind": "final",
+          "event": {
+            "type": "final",
+            "seg_id": 1,
+            "text": "Please meet me at the station, and remember to bring the yellow bag.",
+            "start": 5914,
+            "end": 9170
+          }
+        },
+        {
+          "ms": 9339,
+          "audio_ms": 9171,
+          "kind": "session.closed",
+          "event": {
+            "type": "session.closed",
+            "reason": "end"
+          }
+        },
+        {
+          "ms": 9339,
+          "audio_ms": 9171,
+          "kind": "websocket.close",
+          "code": 1000
+        }
+      ],
+      "handshake_403_count": 1,
+      "abort_to_handshake_ms": 103,
+      "passed": true
+    },
+    {
+      "protocol": "openai",
+      "case": "two_tail",
+      "started_unix": 1795168313.1910288,
+      "events": [
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "handshake.ok",
+          "unix_ms": 1795168313214
+        },
+        {
+          "ms": 23,
+          "audio_ms": 0,
+          "kind": "session.created",
+          "event": {
+            "type": "session.created",
+            "session": {
+              "id": "sess_2c1f1e0db09d4ae5b9b7abc3d4dd8944",
+              "object": "realtime.transcription_session",
+              "expires_at": 0,
+              "input_audio_format": "pcm16",
+              "input_audio_transcription": {
+                "model": "qwen3-asr"
+              },
+              "turn_detection": {
+                "type": "server_vad"
+              }
+            }
+          }
+        },
+        {
+          "ms": 23,
+          "audio_ms": 0,
+          "kind": "session.updated",
+          "event": {
+            "type": "session.updated",
+            "session": {
+              "object": "realtime.transcription_session",
+              "audio": {
+                "input": {
+                  "format": {
+                    "type": "audio/pcm",
+                    "rate": 16000
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "ms": 23,
+          "audio_ms": 0,
+          "kind": "utterance.start",
+          "index": 0
+        },
+        {
+          "ms": 673,
+          "audio_ms": 700,
+          "kind": "partial",
+          "event": {
+            "type": "conversation.item.input_audio_transcription.delta",
+            "item_id": "item_0",
+            "content_index": 0,
+            "delta": "The blue train."
+          }
+        },
+        {
+          "ms": 3738,
+          "audio_ms": 3715,
+          "kind": "utterance.end",
+          "index": 0
+        },
+        {
+          "ms": 4479,
+          "audio_ms": 4515,
+          "kind": "final",
+          "event": {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "item_id": "item_0",
+            "content_index": 0,
+            "transcript": "The blue train leaves the station early in the morning and arrives at noon."
+          }
+        },
+        {
+          "ms": 5739,
+          "audio_ms": 5715,
+          "kind": "utterance.start",
+          "index": 1
+        },
+        {
+          "ms": 6379,
+          "audio_ms": 6415,
+          "kind": "partial",
+          "event": {
+            "type": "conversation.item.input_audio_transcription.delta",
+            "item_id": "item_1",
+            "content_index": 0,
+            "delta": "Please."
+          }
+        },
+        {
+          "ms": 9197,
+          "audio_ms": 9171,
+          "kind": "utterance.end",
+          "index": 1
+        },
+        {
+          "ms": 9197,
+          "audio_ms": 9171,
+          "kind": "client.stop"
+        },
+        {
+          "ms": 9240,
+          "audio_ms": 9171,
+          "kind": "final",
+          "event": {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "item_id": "item_1",
+            "content_index": 0,
+            "transcript": "Please meet me at the station, and remember to bring the yellow bag."
+          }
+        },
+        {
+          "ms": 9240,
+          "audio_ms": 9171,
+          "kind": "post_commit_observe.start"
+        },
+        {
+          "ms": 9741,
+          "audio_ms": 9171,
+          "kind": "post_commit_observe.end"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "protocol": "openai",
+      "case": "slow_input",
+      "started_unix": 1795168322.933365,
+      "events": [
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "handshake.ok",
+          "unix_ms": 1795168322956
+        },
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "session.created",
+          "event": {
+            "type": "session.created",
+            "session": {
+              "id": "sess_772114aa83af4f3da5da9444de3966c6",
+              "object": "realtime.transcription_session",
+              "expires_at": 0,
+              "input_audio_format": "pcm16",
+              "input_audio_transcription": {
+                "model": "qwen3-asr"
+              },
+              "turn_detection": {
+                "type": "server_vad"
+              }
+            }
+          }
+        },
+        {
+          "ms": 23,
+          "audio_ms": 0,
+          "kind": "session.updated",
+          "event": {
+            "type": "session.updated",
+            "session": {
+              "object": "realtime.transcription_session",
+              "audio": {
+                "input": {
+                  "format": {
+                    "type": "audio/pcm",
+                    "rate": 16000
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "ms": 23,
+          "audio_ms": 0,
+          "kind": "utterance.start",
+          "index": 0
+        },
+        {
+          "ms": 1033,
+          "audio_ms": 700,
+          "kind": "partial",
+          "event": {
+            "type": "conversation.item.input_audio_transcription.delta",
+            "item_id": "item_0",
+            "content_index": 0,
+            "delta": "The blue train."
+          }
+        },
+        {
+          "ms": 5967,
+          "audio_ms": 3715,
+          "kind": "utterance.end",
+          "index": 0
+        },
+        {
+          "ms": 6708,
+          "audio_ms": 4515,
+          "kind": "final",
+          "event": {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "item_id": "item_0",
+            "content_index": 0,
+            "transcript": "The blue train leaves the station early in the morning and arrives at noon."
+          }
+        },
+        {
+          "ms": 7967,
+          "audio_ms": 5715,
+          "kind": "utterance.start",
+          "index": 1
+        },
+        {
+          "ms": 8966,
+          "audio_ms": 6415,
+          "kind": "partial",
+          "event": {
+            "type": "conversation.item.input_audio_transcription.delta",
+            "item_id": "item_1",
+            "content_index": 0,
+            "delta": "Please."
+          }
+        },
+        {
+          "ms": 13498,
+          "audio_ms": 9171,
+          "kind": "utterance.end",
+          "index": 1
+        },
+        {
+          "ms": 13498,
+          "audio_ms": 9171,
+          "kind": "client.stop"
+        },
+        {
+          "ms": 13542,
+          "audio_ms": 9171,
+          "kind": "final",
+          "event": {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "item_id": "item_1",
+            "content_index": 0,
+            "transcript": "Please meet me at the station, and remember to bring the yellow bag."
+          }
+        },
+        {
+          "ms": 13542,
+          "audio_ms": 9171,
+          "kind": "post_commit_observe.start"
+        },
+        {
+          "ms": 14043,
+          "audio_ms": 9171,
+          "kind": "post_commit_observe.end"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "protocol": "openai",
+      "case": "disconnect",
+      "started_unix": 1795168336.977483,
+      "events": [
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "handshake.ok",
+          "unix_ms": 1795168337000
+        },
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "session.created",
+          "event": {
+            "type": "session.created",
+            "session": {
+              "id": "sess_86f23a35a78b4186865b32e3c1b10ab0",
+              "object": "realtime.transcription_session",
+              "expires_at": 0,
+              "input_audio_format": "pcm16",
+              "input_audio_transcription": {
+                "model": "qwen3-asr"
+              },
+              "turn_detection": {
+                "type": "server_vad"
+              }
+            }
+          }
+        },
+        {
+          "ms": 23,
+          "audio_ms": 0,
+          "kind": "session.updated",
+          "event": {
+            "type": "session.updated",
+            "session": {
+              "object": "realtime.transcription_session",
+              "audio": {
+                "input": {
+                  "format": {
+                    "type": "audio/pcm",
+                    "rate": 16000
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "ms": 673,
+          "audio_ms": 700,
+          "kind": "partial",
+          "event": {
+            "type": "conversation.item.input_audio_transcription.delta",
+            "item_id": "item_0",
+            "content_index": 0,
+            "delta": "The blue train."
+          }
+        },
+        {
+          "ms": 673,
+          "audio_ms": 700,
+          "kind": "client.abort",
+          "unix_ms": 1795168337650
+        }
+      ],
+      "passed": true
+    },
+    {
+      "protocol": "openai",
+      "case": "reconnect",
+      "started_unix": 1795168337.6514504,
+      "events": [
+        {
+          "ms": 3,
+          "audio_ms": 0,
+          "kind": "handshake.403"
+        },
+        {
+          "ms": 124,
+          "audio_ms": 0,
+          "kind": "handshake.ok",
+          "unix_ms": 1795168337776
+        },
+        {
+          "ms": 124,
+          "audio_ms": 0,
+          "kind": "session.created",
+          "event": {
+            "type": "session.created",
+            "session": {
+              "id": "sess_94f01b757e5c4b7a97d4f9fb579d4862",
+              "object": "realtime.transcription_session",
+              "expires_at": 0,
+              "input_audio_format": "pcm16",
+              "input_audio_transcription": {
+                "model": "qwen3-asr"
+              },
+              "turn_detection": {
+                "type": "server_vad"
+              }
+            }
+          }
+        },
+        {
+          "ms": 125,
+          "audio_ms": 0,
+          "kind": "session.updated",
+          "event": {
+            "type": "session.updated",
+            "session": {
+              "object": "realtime.transcription_session",
+              "audio": {
+                "input": {
+                  "format": {
+                    "type": "audio/pcm",
+                    "rate": 16000
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "ms": 125,
+          "audio_ms": 0,
+          "kind": "utterance.start",
+          "index": 0
+        },
+        {
+          "ms": 774,
+          "audio_ms": 700,
+          "kind": "partial",
+          "event": {
+            "type": "conversation.item.input_audio_transcription.delta",
+            "item_id": "item_0",
+            "content_index": 0,
+            "delta": "The blue train."
+          }
+        },
+        {
+          "ms": 3840,
+          "audio_ms": 3715,
+          "kind": "utterance.end",
+          "index": 0
+        },
+        {
+          "ms": 4582,
+          "audio_ms": 4515,
+          "kind": "final",
+          "event": {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "item_id": "item_0",
+            "content_index": 0,
+            "transcript": "The blue train leaves the station early in the morning and arrives at noon."
+          }
+        },
+        {
+          "ms": 5841,
+          "audio_ms": 5715,
+          "kind": "utterance.start",
+          "index": 1
+        },
+        {
+          "ms": 6480,
+          "audio_ms": 6415,
+          "kind": "partial",
+          "event": {
+            "type": "conversation.item.input_audio_transcription.delta",
+            "item_id": "item_1",
+            "content_index": 0,
+            "delta": "Please."
+          }
+        },
+        {
+          "ms": 9297,
+          "audio_ms": 9171,
+          "kind": "utterance.end",
+          "index": 1
+        },
+        {
+          "ms": 9297,
+          "audio_ms": 9171,
+          "kind": "client.stop"
+        },
+        {
+          "ms": 9341,
+          "audio_ms": 9171,
+          "kind": "final",
+          "event": {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "item_id": "item_1",
+            "content_index": 0,
+            "transcript": "Please meet me at the station, and remember to bring the yellow bag."
+          }
+        },
+        {
+          "ms": 9341,
+          "audio_ms": 9171,
+          "kind": "post_commit_observe.start"
+        },
+        {
+          "ms": 9842,
+          "audio_ms": 9171,
+          "kind": "post_commit_observe.end"
+        }
+      ],
+      "handshake_403_count": 1,
+      "abort_to_handshake_ms": 126,
+      "passed": true
+    },
+    {
+      "protocol": "dashscope",
+      "case": "two_tail",
+      "started_unix": 1795168347.4950118,
+      "events": [
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "handshake.ok",
+          "unix_ms": 1795168347517
+        },
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "task-started",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "task-started",
+              "attributes": {}
+            },
+            "payload": {}
+          }
+        },
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "utterance.start",
+          "index": 0
+        },
+        {
+          "ms": 673,
+          "audio_ms": 700,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 1177,
+          "audio_ms": 1200,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 1688,
+          "audio_ms": 1700,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 2205,
+          "audio_ms": 2200,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station early in the.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 2672,
+          "audio_ms": 2700,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station early in the morning and.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 3167,
+          "audio_ms": 3200,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station early in the morning and arrives.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 3673,
+          "audio_ms": 3700,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station early in the morning and arrives at noon.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 3737,
+          "audio_ms": 3715,
+          "kind": "utterance.end",
+          "index": 0
+        },
+        {
+          "ms": 4479,
+          "audio_ms": 4515,
+          "kind": "final",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": 200,
+                  "end_time": 4514,
+                  "text": "The blue train leaves the station early in the morning and arrives at noon.",
+                  "sentence_end": true,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 5738,
+          "audio_ms": 5715,
+          "kind": "utterance.start",
+          "index": 1
+        },
+        {
+          "ms": 6377,
+          "audio_ms": 6415,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 6899,
+          "audio_ms": 6915,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 7404,
+          "audio_ms": 7415,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the station.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 7921,
+          "audio_ms": 7915,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the station, and remember.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 8389,
+          "audio_ms": 8415,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the station, and remember to bring.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 8889,
+          "audio_ms": 8915,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the station, and remember to bring the yellow.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 9195,
+          "audio_ms": 9171,
+          "kind": "utterance.end",
+          "index": 1
+        },
+        {
+          "ms": 9195,
+          "audio_ms": 9171,
+          "kind": "client.stop"
+        },
+        {
+          "ms": 9239,
+          "audio_ms": 9171,
+          "kind": "final",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": 5914,
+                  "end_time": 9170,
+                  "text": "Please meet me at the station, and remember to bring the yellow bag.",
+                  "sentence_end": true,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 9239,
+          "audio_ms": 9171,
+          "kind": "task-finished",
+          "event": {
+            "header": {
+              "task_id": "7b6b505552ae486193bbbf95483aaef0",
+              "event": "task-finished",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {},
+              "usage": null
+            }
+          }
+        }
+      ],
+      "passed": true
+    },
+    {
+      "protocol": "dashscope",
+      "case": "slow_input",
+      "started_unix": 1795168356.7362328,
+      "events": [
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "handshake.ok",
+          "unix_ms": 1795168356758
+        },
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "task-started",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "task-started",
+              "attributes": {}
+            },
+            "payload": {}
+          }
+        },
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "utterance.start",
+          "index": 0
+        },
+        {
+          "ms": 1032,
+          "audio_ms": 700,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 1838,
+          "audio_ms": 1200,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 2647,
+          "audio_ms": 1700,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 3464,
+          "audio_ms": 2200,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station early in the.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 4232,
+          "audio_ms": 2700,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station early in the morning and.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 5028,
+          "audio_ms": 3200,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station early in the morning and arrives.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 5832,
+          "audio_ms": 3700,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station early in the morning and arrives at noon.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 5966,
+          "audio_ms": 3715,
+          "kind": "utterance.end",
+          "index": 0
+        },
+        {
+          "ms": 6707,
+          "audio_ms": 4515,
+          "kind": "final",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": 200,
+                  "end_time": 4514,
+                  "text": "The blue train leaves the station early in the morning and arrives at noon.",
+                  "sentence_end": true,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 7967,
+          "audio_ms": 5715,
+          "kind": "utterance.start",
+          "index": 1
+        },
+        {
+          "ms": 8966,
+          "audio_ms": 6415,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 9788,
+          "audio_ms": 6915,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 10594,
+          "audio_ms": 7415,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the station.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 11410,
+          "audio_ms": 7915,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the station, and remember.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 12177,
+          "audio_ms": 8415,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the station, and remember to bring.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 12977,
+          "audio_ms": 8915,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the station, and remember to bring the yellow.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 13498,
+          "audio_ms": 9171,
+          "kind": "utterance.end",
+          "index": 1
+        },
+        {
+          "ms": 13498,
+          "audio_ms": 9171,
+          "kind": "client.stop"
+        },
+        {
+          "ms": 13542,
+          "audio_ms": 9171,
+          "kind": "final",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": 5914,
+                  "end_time": 9170,
+                  "text": "Please meet me at the station, and remember to bring the yellow bag.",
+                  "sentence_end": true,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 13542,
+          "audio_ms": 9171,
+          "kind": "task-finished",
+          "event": {
+            "header": {
+              "task_id": "f71651c4e29f43dea257478aa66f7b8e",
+              "event": "task-finished",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {},
+              "usage": null
+            }
+          }
+        }
+      ],
+      "passed": true
+    },
+    {
+      "protocol": "dashscope",
+      "case": "disconnect",
+      "started_unix": 1795168370.280253,
+      "events": [
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "handshake.ok",
+          "unix_ms": 1795168370302
+        },
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "task-started",
+          "event": {
+            "header": {
+              "task_id": "4ae1594a5556436eb8fba9d3ac5e5366",
+              "event": "task-started",
+              "attributes": {}
+            },
+            "payload": {}
+          }
+        },
+        {
+          "ms": 671,
+          "audio_ms": 700,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "4ae1594a5556436eb8fba9d3ac5e5366",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 671,
+          "audio_ms": 700,
+          "kind": "client.abort",
+          "unix_ms": 1795168370952
+        }
+      ],
+      "passed": true
+    },
+    {
+      "protocol": "dashscope",
+      "case": "reconnect",
+      "started_unix": 1795168370.9539735,
+      "events": [
+        {
+          "ms": 22,
+          "audio_ms": 0,
+          "kind": "handshake.ok",
+          "unix_ms": 1795168370976
+        },
+        {
+          "ms": 24,
+          "audio_ms": 0,
+          "kind": "task-started",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "task-started",
+              "attributes": {}
+            },
+            "payload": {}
+          }
+        },
+        {
+          "ms": 24,
+          "audio_ms": 0,
+          "kind": "utterance.start",
+          "index": 0
+        },
+        {
+          "ms": 673,
+          "audio_ms": 700,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 1179,
+          "audio_ms": 1200,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 1689,
+          "audio_ms": 1700,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 2206,
+          "audio_ms": 2200,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station early in the.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 2674,
+          "audio_ms": 2700,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station early in the morning and.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 3168,
+          "audio_ms": 3200,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station early in the morning and arrives.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 3674,
+          "audio_ms": 3700,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "The blue train leaves the station early in the morning and arrives at noon.",
+                  "sentence_end": false,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 3739,
+          "audio_ms": 3715,
+          "kind": "utterance.end",
+          "index": 0
+        },
+        {
+          "ms": 4481,
+          "audio_ms": 4515,
+          "kind": "final",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": 200,
+                  "end_time": 4514,
+                  "text": "The blue train leaves the station early in the morning and arrives at noon.",
+                  "sentence_end": true,
+                  "sentence_id": 1
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 5740,
+          "audio_ms": 5715,
+          "kind": "utterance.start",
+          "index": 1
+        },
+        {
+          "ms": 6380,
+          "audio_ms": 6415,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 6901,
+          "audio_ms": 6915,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 7407,
+          "audio_ms": 7415,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the station.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 7923,
+          "audio_ms": 7915,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the station, and remember.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 8392,
+          "audio_ms": 8415,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the station, and remember to bring.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 8891,
+          "audio_ms": 8915,
+          "kind": "partial",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": null,
+                  "end_time": null,
+                  "text": "Please meet me at the station, and remember to bring the yellow.",
+                  "sentence_end": false,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 9197,
+          "audio_ms": 9171,
+          "kind": "utterance.end",
+          "index": 1
+        },
+        {
+          "ms": 9197,
+          "audio_ms": 9171,
+          "kind": "client.stop"
+        },
+        {
+          "ms": 9241,
+          "audio_ms": 9171,
+          "kind": "final",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "result-generated",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {
+                "sentence": {
+                  "begin_time": 5914,
+                  "end_time": 9170,
+                  "text": "Please meet me at the station, and remember to bring the yellow bag.",
+                  "sentence_end": true,
+                  "sentence_id": 2
+                }
+              },
+              "usage": null
+            }
+          }
+        },
+        {
+          "ms": 9241,
+          "audio_ms": 9171,
+          "kind": "task-finished",
+          "event": {
+            "header": {
+              "task_id": "a58a403cd60349bcae9b8fec2c255e87",
+              "event": "task-finished",
+              "attributes": {}
+            },
+            "payload": {
+              "output": {},
+              "usage": null
+            }
+          }
+        }
+      ],
+      "handshake_403_count": 0,
+      "abort_to_handshake_ms": 24,
+      "passed": true
+    }
+  ],
+  "native_warm_run_started_unix": 1795168381.2138975
+}

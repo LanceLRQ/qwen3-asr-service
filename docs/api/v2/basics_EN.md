@@ -148,7 +148,8 @@ Returns the current serving mode and capability declaration (clients can use it 
 | audio_tagging | Whether audio tagging is enabled (`--enable-audio-tagging`; gates `POST /v2/audio/tag` and the offline `audio_events` field) |
 | scene | Whether scene detection is available (the offline `segments[].scene` field) |
 | stream.enabled | Whether the real-time endpoint is mounted (standard and remote require `--enable-stream`; vLLM always mounts it) |
-| stream.backend | `vad-offline` / `vllm-native` |
+| stream.backend | `vad-offline` / `remote-qwen-streaming` / `vllm-native` |
+| stream.max_sessions | Concurrent session limit (0 when disabled, 1 for the remote streaming demo) |
 | stream.partial_results | Whether intermediate `partial` results are produced (false for vad-offline) |
 | stream.word_timestamps | Whether `final` carries word-level timestamps (standard follows alignment; false for vLLM) |
 | stream.speaker_labels | Whether real-time `final` carries speaker labels |

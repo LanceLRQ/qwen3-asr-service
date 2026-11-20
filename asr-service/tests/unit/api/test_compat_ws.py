@@ -436,3 +436,27 @@ def test_repeated_commits_during_slow_flush_preserve_audio_boundaries(ws_app):
         assert ws.receive_json()["type"] == "session.updated"
         assert ws.receive_json()["type"].endswith(".completed")
     assert calls == ["commit", b"ab", "commit", b"end"]
+
+
+def test_compat_disconnect_closes_upstream_before_releasing_slot(ws_app):
+    from threading import Event
+
+    released = Event()
+    events = []
+
+    class Session(FakePartialSession):
+        async def aclose(self):
+            events.append("close upstream")
+
+    class Backend(FakeBackend):
+        def release(self, session):
+            events.append("release slot")
+            released.set()
+
+    with ws_app(Backend(session_factory=Session)).websocket_connect(OPENAI_WS) as ws:
+        ws.receive_json()
+        ws.send_json({"type": "input_audio_buffer.append", "audio": "AQA="})
+        ws.receive_json()
+        ws.close()
+        assert released.wait(2)
+    assert events == ["close upstream", "release slot"]

@@ -1,0 +1,35 @@
+{
+  "captured_unix": 1795167757.4416127,
+  "demo_url": "http://127.0.0.1:18842",
+  "demo_http_status": 200,
+  "listener": "LISTEN 0      128    127.0.0.1:18842 0.0.0.0:* users:((\"qwen-asr-demo-s\",pid=76352,fd=40))",
+  "argv": [
+    "qwen-asr-demo-streaming",
+    "--asr-model-path",
+    "models/asr/1.7b",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "18842",
+    "--chunk-size-sec",
+    "0.5",
+    "--gpu-memory-utilization",
+    "0.68"
+  ],
+  "packages": {
+    "qwen-asr": "0.0.6",
+    "vllm": "0.14.0",
+    "torch": "2.9.1"
+  },
+  "engine_log": "(EngineCore_DP0 pid=76441) INFO 11-20 17:40:49 [core.py:97] Initializing a V1 LLM engine (v0.14.0) with config: model='models/asr/1.7b' [\u2026] device_config=cuda [\u2026]",
+  "weights": {
+    "model-00001-of-00002.safetensors": {
+      "bytes": 4220320824,
+      "sha256": "a4cd1f1a04d90b757dc7f7dd26254e69a013b19e80efe590a83c6a3bde8608d6"
+    },
+    "model-00002-of-00002.safetensors": {
+      "bytes": 478200688,
+      "sha256": "6e0b9d9e09e2e0238e7ef3cc8a484ab387e91b90f1900bedf88bc92d7929ccfc"
+    }
+  }
+}

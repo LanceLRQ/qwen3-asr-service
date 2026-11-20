@@ -481,11 +481,46 @@ def _assemble_standard(app: FastAPI, args) -> None:
     task_manager = TaskManager(max_queue_size=cfg.MAX_QUEUE_SIZE, store=task_store)
 
     task_manager.set_processor(offline_processor(task_manager, pipeline.run))
+    stream_enabled = cfg.ENABLE_STREAM
+    stream_backend = None
+    incremental_remote = stream_enabled and remote and bool(args.remote_stream_url)
+    session_limit = 1 if incremental_remote else cfg.MAX_STREAM_SESSIONS
+    if incremental_remote:
+        from app.runtime.remote_stream_session import RemoteStreamBackend
+        stream_backend = RemoteStreamBackend(
+            args.remote_stream_url, args.remote_timeout, max_sessions=session_limit,
+            max_utterance_sec=cfg.STREAM_MAX_SEGMENT_SEC)
+    elif stream_enabled:
+        from app.runtime.stream_session import VadOfflineBackend
+        stream_backend = VadOfflineBackend(
+            asr_engine, vad_engine, punc_engine, mode=cfg.SERVE_MODE,
+            speaker=None if remote else speaker_engine,
+            speaker_service=linked_speaker_service,
+            max_sessions=cfg.MAX_STREAM_SESSIONS,
+            asr_concurrency=cfg.STREAM_ASR_CONCURRENCY,
+            max_segment_sec=cfg.STREAM_MAX_SEGMENT_SEC,
+            vad_chunk_ms=cfg.STREAM_VAD_CHUNK_MS,
+            noise_filter=cfg.STREAM_NOISE_FILTER,
+            energy_floor_dbfs=cfg.STREAM_ENERGY_FLOOR_DBFS,
+            snr_min_db=cfg.STREAM_SNR_MIN_DB,
+            tagger=tagger,
+            scene_enable=cfg.SCENE_ENABLE,
+            scene_enter_sec=cfg.SCENE_ENTER_SEC,
+            scene_exit_sec=cfg.SCENE_EXIT_SEC,
+            scene_silence_dbfs=cfg.SCENE_SILENCE_DBFS,
+            scene_vocal_priority=cfg.SCENE_VOCAL_PRIORITY,
+            scene_singing_min=cfg.SCENE_SINGING_MIN,
+            scene_singing_bias=cfg.SCENE_SINGING_BIAS,
+            scene_weights=cfg.SCENE_WEIGHTS or None,
+            tag_interval_ms=cfg.AUDIO_TAGGING_INTERVAL_MS,
+            tag_topk=cfg.AUDIO_TAGGING_TOPK,
+            scene_map=scene_map,
+        )
     task_manager.start()
 
     # 构建服务信息（mode-aware，供 /health、/capabilities 使用）
     from app.runtime import scene_mapper
-    stream_enabled = cfg.ENABLE_STREAM
+    stream_caps = stream_backend.capabilities if stream_backend is not None else {}
     capabilities = {
         "mode": cfg.SERVE_MODE,
         "offline_api": asr_engine.capabilities.offline,
@@ -498,12 +533,13 @@ def _assemble_standard(app: FastAPI, args) -> None:
         "scene_presets": list(scene_mapper.SCENE_PRESETS.keys()),
         "stream": {
             "enabled": stream_enabled,
-            "backend": "vad-offline" if stream_enabled else None,
+            "max_sessions": session_limit if stream_enabled else 0,
+            "backend": stream_backend.backend if stream_enabled else None,
             "path": "/v2/asr/stream" if stream_enabled else None,
-            "partial_results": asr_engine.capabilities.realtime_incremental,
-            "word_timestamps": stream_enabled and asr_engine.capabilities.word_timestamps,
-            "speaker_labels": speaker_enabled and stream_enabled and not remote,
-            "scene": tagging_enabled and cfg.SCENE_ENABLE if stream_enabled else False,
+            "partial_results": stream_caps.get("partial_results", False),
+            "word_timestamps": stream_caps.get("word_timestamps", False),
+            "speaker_labels": stream_caps.get("speaker_labels", False),
+            "scene": stream_caps.get("scene", False),
         },
         # 可覆盖参数的当前生效默认值（反映实际配置，供 Web UI 占位提示）
         "defaults": {
@@ -522,11 +558,12 @@ def _assemble_standard(app: FastAPI, args) -> None:
         },
     }
     if remote:
+        compat_stream = stream_enabled and (cfg.ENABLE_OPENAI_API or cfg.ENABLE_DASHSCOPE_API)
         capabilities["compat"] = {
             "openai": cfg.ENABLE_OPENAI_API,
             "dashscope": cfg.ENABLE_DASHSCOPE_API,
-            "realtime": stream_enabled and (cfg.ENABLE_OPENAI_API or cfg.ENABLE_DASHSCOPE_API),
-            "realtime_partial": False,
+            "realtime": compat_stream,
+            "realtime_partial": compat_stream and capabilities["stream"]["partial_results"],
         }
     service_info = {
         "status": "ready",
@@ -567,37 +604,11 @@ def _assemble_standard(app: FastAPI, args) -> None:
                     f"自动登记={'开' if cfg.SPEAKER_AUTO_ENROLL else '关'}）")
 
     # 实时 Route B：按 --enable-stream 挂载统一端点 WS /v2/asr/stream
-    stream_backend = None
-    if stream_enabled:
+    if stream_backend is not None:
         from app.api.ws_routes import ws_router_stream, init_ws_stream
-        from app.runtime.stream_session import VadOfflineBackend
-        stream_backend = VadOfflineBackend(
-            asr_engine, vad_engine, punc_engine, mode=cfg.SERVE_MODE,
-            speaker=None if remote else speaker_engine,
-            speaker_service=linked_speaker_service,
-            max_sessions=cfg.MAX_STREAM_SESSIONS,
-            asr_concurrency=cfg.STREAM_ASR_CONCURRENCY,
-            max_segment_sec=cfg.STREAM_MAX_SEGMENT_SEC,
-            vad_chunk_ms=cfg.STREAM_VAD_CHUNK_MS,
-            noise_filter=cfg.STREAM_NOISE_FILTER,
-            energy_floor_dbfs=cfg.STREAM_ENERGY_FLOOR_DBFS,
-            snr_min_db=cfg.STREAM_SNR_MIN_DB,
-            tagger=tagger,
-            scene_enable=cfg.SCENE_ENABLE,
-            scene_enter_sec=cfg.SCENE_ENTER_SEC,
-            scene_exit_sec=cfg.SCENE_EXIT_SEC,
-            scene_silence_dbfs=cfg.SCENE_SILENCE_DBFS,
-            scene_vocal_priority=cfg.SCENE_VOCAL_PRIORITY,
-            scene_singing_min=cfg.SCENE_SINGING_MIN,
-            scene_singing_bias=cfg.SCENE_SINGING_BIAS,
-            scene_weights=cfg.SCENE_WEIGHTS or None,
-            tag_interval_ms=cfg.AUDIO_TAGGING_INTERVAL_MS,
-            tag_topk=cfg.AUDIO_TAGGING_TOPK,
-            scene_map=scene_map,
-        )
         init_ws_stream(stream_backend)
         app.include_router(ws_router_stream)
-        logger.info("实时转写已启用：WS /v2/asr/stream（路线B / vad-offline）")
+        logger.info("实时转写已启用：WS /v2/asr/stream（%s）", stream_backend.backend)
 
     # 兼容接口（/compat/*）：可选挂载，与 v1/v2 完全隔离（错误信封按异常类型分派）
     enable_openai = getattr(args, "enable_openai_api", False)
@@ -615,7 +626,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
         if stream_backend is not None:
             from app.api.compat.openai_ws_routes import build_openai_ws_router
             app.include_router(build_openai_ws_router())
-            logger.info("OpenAI 实时兼容已启用：WS /compat/openai/v1/realtime（整句，无逐字增量）")
+            logger.info("OpenAI 实时兼容已启用：WS /compat/openai/v1/realtime")
         elif stream_enabled is False:
             logger.info("OpenAI 实时兼容未挂载：需 --enable-stream")
     if enable_dashscope:
@@ -625,7 +636,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
         if stream_backend is not None:
             from app.api.compat.dashscope_ws_routes import build_dashscope_ws_router
             app.include_router(build_dashscope_ws_router())
-            logger.info("DashScope 实时兼容已启用：WS /compat/dashscope/api-ws/v1/inference（整句，无中间结果）")
+            logger.info("DashScope 实时兼容已启用：WS /compat/dashscope/api-ws/v1/inference")
         elif stream_enabled is False:
             logger.info("DashScope 实时兼容未挂载：需 --enable-stream")
 
@@ -805,6 +816,7 @@ def _assemble_vllm(app: FastAPI, args) -> None:
         "stream": {
             "enabled": True,
             "backend": "vllm-native",
+            "max_sessions": cfg.MAX_STREAM_SESSIONS,
             "path": "/v2/asr/stream",
             "partial_results": engine.capabilities.realtime_incremental,
             "word_timestamps": False,

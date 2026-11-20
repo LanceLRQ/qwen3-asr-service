@@ -53,11 +53,11 @@ When the service is started with `--api-key`, all compat endpoints require `Auth
 | Translation | ❌ 501 | ➖ n/a |
 | HTTP streaming | ✅ stream=true (SSE) | ➖ n/a |
 | Realtime whole-sentence | ✅ completed | ✅ result-generated |
-| Realtime per-token delta | ✅ delta (vLLM mode only, best-effort) | ✅ intermediate results (vLLM mode only) |
+| Realtime increments | Best-effort delta | Cumulative intermediate results |
 | Confidence/logprob | ➖ placeholder | ➖ not provided |
 | Prompt/temperature/hotwords/disfluency | ❌ ignored | ❌ ignored |
 
-> The realtime rows (last two above) differ by serving mode: **standard and remote** (VAD-offline) need `--enable-stream` and emit only whole-sentence finals, no per-token increments; **vLLM** (`--serve-mode vllm`, native streaming) has streaming always on, mounts realtime compat with the compat switches (**no `--enable-stream` needed**), and emits per-token increments — DashScope intermediate `result-generated` (`sentence_end:false`) is naturally cumulative and forwarded cleanly; OpenAI `…delta` is **best-effort** (partials are cumulative and may be revised, so only a pure append yields a delta suffix, revision frames are skipped, and the authoritative full text is still the `…completed` event).
+> Enable the corresponding compatibility flag. Standard and remote modes also require `--enable-stream`. The `vad-offline` backend emits whole-sentence finals. Setting `--remote-stream-url` selects `remote-qwen-streaming`, which supports increments, as does `vllm-native` (streaming always enabled). Check `compat.realtime_partial` for the active configuration. DashScope sends cumulative intermediate text. OpenAI emits delta suffixes for appends and skips revisions. The completed event carries the authoritative transcript.
 
 ## Compat vs native v2
 

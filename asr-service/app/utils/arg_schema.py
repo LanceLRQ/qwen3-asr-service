@@ -45,12 +45,16 @@ ARG_SPECS = (
         key="serve_mode", flags=("--serve-mode",), default="standard",
         choices=("standard", "vllm", "remote"), group="服务",
         help="服务运行模式：standard=transformers/OpenVINO 离线+实时(路线B)；"
-             "remote=远端转写（离线、整句实时）；vllm=vLLM 原生流式(Phase 3) (default: standard)",
+             "remote=远端转写（离线、整句或增量实时）；vllm=vLLM 原生流式(Phase 3) (default: standard)",
         help_en="Service run mode: standard=transformers/OpenVINO offline+realtime "
-                "(route B); remote=remote offline and whole-utterance realtime; vllm=vLLM native streaming (Phase 3) (default: standard)",
+                "(route B); remote=remote offline and whole-utterance or incremental realtime; vllm=vLLM native streaming (Phase 3) (default: standard)",
     ),
     ArgSpec("remote_base_url", ("--remote-base-url",), group="远端 ASR",
             help="上游 API 基址（含 /v1）", help_en="Upstream API base URL including /v1"),
+    ArgSpec("remote_stream_url", ("--remote-stream-url",), group="远端 ASR",
+            help="remote 实时增量后端 qwen-asr-demo-streaming 的 HTTP origin（如 http://host:8000，固定单会话）",
+            help_en="HTTP origin of qwen-asr-demo-streaming for incremental remote realtime "
+                    "(e.g. http://host:8000, one session)"),
     ArgSpec("remote_model", ("--remote-model",), default=cfg.REMOTE_MODEL, group="远端 ASR",
             help="上游模型别名", help_en="Upstream model ID"),
     ArgSpec("remote_api_key", ("--remote-api-key",), group="远端 ASR",
@@ -151,8 +155,8 @@ ARG_SPECS = (
     ArgSpec(
         key="max_stream_sessions", flags=("--max-stream-sessions",), default=None, type=int,
         group="实时转写",
-        help=f"实时最大并发会话数 (default: {cfg.MAX_STREAM_SESSIONS})",
-        help_en=f"Max concurrent realtime sessions (default: {cfg.MAX_STREAM_SESSIONS})",
+        help=f"实时最大并发会话数（远端增量 demo 固定为 1）(default: {cfg.MAX_STREAM_SESSIONS})",
+        help_en=f"Max concurrent realtime sessions (remote streaming demo: 1) (default: {cfg.MAX_STREAM_SESSIONS})",
     ),
     ArgSpec(
         key="stream_asr_concurrency", flags=("--stream-asr-concurrency",), default=None, type=int,

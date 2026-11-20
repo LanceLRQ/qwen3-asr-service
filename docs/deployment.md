@@ -8,6 +8,20 @@
 
 远端整句模式的词级对齐和说话人标注仅用于离线任务；实时会话的能力见 `GET /v2/capabilities` 中的 `stream`。三种实时协议的延迟与断连实测见[实时验收](baselines/s4-realtime/README.md)。替换识别模型的配置和结果见 [PocketSphinx 英文离线验收](baselines/s4-second-model/README.md)。
 
+### 远端增量部署与验收矩阵
+
+在上游 Qwen ASR 环境运行 `qwen-asr-demo-streaming --host 127.0.0.1 --port 8000`。网关保留离线 API 基址和模型配置，加上 `--enable-stream --remote-stream-url http://127.0.0.1:8000`。分机部署时填写网关可访问的 demo 地址，只填 origin，省略 API 路径。原生和兼容端点共享一个实时会话名额，每个 demo 实例应专供一个网关进程使用。
+
+| remote 网关配置 | 预期 `stream.backend` | 验收项 |
+|---|---|---|
+| 关闭实时，demo 地址可填可不填 | `null` | 离线请求使用 `remote_base_url`。 |
+| 开启实时，省略 demo 地址 | `vad-offline` | 每个 VAD 段返回一个 final。 |
+| 开启实时，提供 demo 地址 | `remote-qwen-streaming` | 原生先返回 partial，再返回 final。核对 `partial_results=true`、`max_sessions=1`，实时词时间和说话人标注均关闭。 |
+
+按需打开两个兼容开关，在 `GET /v2/capabilities` 核对 `compat.realtime_partial`。保持第一条连接时，第二条并发连接应被拒绝；关闭第一条后，新连接应能接入。三个配置下均应能通过独立的离线上游完成离线转写。
+
+实测上游版本、三种协议的逐事件记录和积压实验见[远端增量验收](baselines/s4-upstream/README.md)。
+
 ## 目录
 
 - [系统要求](#系统要求)

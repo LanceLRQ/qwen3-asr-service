@@ -8,6 +8,20 @@ To enable whole-utterance realtime on the same remote deployment, add `--enable-
 
 In remote mode, word alignment and speaker labels apply to offline jobs. Inspect the `stream` object in `GET /v2/capabilities` for realtime features. See the [realtime measurements](baselines/s4-realtime/README.md) and the [PocketSphinx offline example](baselines/s4-second-model/README.md).
 
+### Remote incremental deployment and acceptance matrix
+
+Run `qwen-asr-demo-streaming --host 127.0.0.1 --port 8000` in the upstream Qwen ASR environment. On the gateway, keep the offline API base and model configured and add `--enable-stream --remote-stream-url http://127.0.0.1:8000`. Use an address reachable from the gateway when deploying on separate hosts. Supply the demo origin without an API path. Each demo instance serves one active realtime session across the native and compatibility endpoints. Dedicate one demo instance to one gateway process.
+
+| Gateway configuration in remote mode | Expected `stream.backend` | Expected result |
+|---|---|---|
+| Streaming disabled, with or without a demo URL | `null` | Offline requests use `remote_base_url`. |
+| Streaming enabled, demo URL omitted | `vad-offline` | One final per VAD segment. |
+| Streaming enabled, demo URL supplied | `remote-qwen-streaming` | Native partials followed by a final. Verify `partial_results=true`, `max_sessions=1`, and no realtime word timestamps or speaker labels. |
+
+Enable each compatibility flag under test. Check `compat.realtime_partial` in `GET /v2/capabilities`. Verify a second concurrent connection is refused and a new connection succeeds after the first closes. The offline endpoint should still transcribe via its own upstream in all three cases.
+
+The [remote streaming validation](baselines/s4-upstream/README.md) records the upstream version, events for all three protocols, and the backlog test.
+
 ## Table of Contents
 
 - [System Requirements](#system-requirements)

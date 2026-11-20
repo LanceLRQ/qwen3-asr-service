@@ -5,8 +5,9 @@
 # 优先级：命令行显式参数 > 本文件 > 环境变量 > 内置默认值；--no-config 可完全跳过本文件。
 # 注意：真实配置 config.yaml 可能含 api_key，已加入 .gitignore 请勿提交，建议 chmod 600 config.yaml。
 
-serve_mode: standard        # standard | remote（远端转写，可开整句实时） | vllm（vllm=vLLM 原生流式，GPU 专用，含 partial→final；调优见下方 vLLM 段）
+serve_mode: standard        # standard | remote（远端转写，可选整句或增量实时） | vllm（vllm=vLLM 原生流式，GPU 专用，含 partial→final；调优见下方 vLLM 段）
 # remote_base_url: http://127.0.0.1:18764/v1
+# remote_stream_url: http://127.0.0.1:8000  # 独立 qwen-asr-demo-streaming 的 origin，启用实时后固定单会话；省略时按 VAD 整句转写
 # remote_model: qwen3-asr
 # remote_api_key: ""        # 可通过环境变量 ASR_REMOTE_API_KEY 提供
 # remote_timeout: 60.0

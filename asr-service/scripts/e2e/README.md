@@ -72,6 +72,8 @@ scripts/e2e/run.sh "${args[@]}" --only v2-stream
 | 异步 | multipart 上传到 `POST /v2/asr`，用返回的 task_id 轮询 `GET /v2/tasks/{task_id}`。completed 后读取 result.full_text 和 result.segments。 | failed 时读取 error，cancelled 或 not_found 时停止轮询。等待超时后可凭 task_id 继续查询。 |
 | 实时 | 连接 `/v2/asr/stream` 后读取 session.created，发送携带 audio_fs 的 start，再按采样率发送单声道 PCM16 小端二进制帧。发送 stop 后读完逐句 final，收到 session.closed 即退出连接。 | 密钥错误会拒绝连接。音频帧过大或积压超限时服务返回 error。 |
 
+使用远端增量时，网关在启用实时的基础上设置 `--remote-stream-url`。客户端按 `seg_id` 用最新的 `partial.text` 替换当前句，收到 `final` 后定稿。三种客户端的可运行示例见[远端增量验收](../../../docs/baselines/s4-upstream/README.md)。
+
 要取消排队中或执行中的任务，向同一任务地址发送带鉴权的 DELETE 请求。启用 `enable_task_store` 后可跨重启查询已完成的结果；重启时未完成的任务标记为 failed。对仅存在于持久化库的历史任务发 DELETE 会删除记录。[任务生命周期](../../../docs/api/v2/tasks.md)
 
 本地 mock 复用上述三个客户端和服务端路由，返回固定文本“你好世界”。以下命令验证协议，识别质量需用真实模型及语音另行验收。

@@ -151,7 +151,8 @@ GET /v2/capabilities
 | audio_tagging | 音频标注是否启用（`--enable-audio-tagging`，决定 `POST /v2/audio/tag` 是否可用） |
 | scene | 场景识别是否启用（决定离线 `segments[].scene` 与实时 `scene` 消息是否产出） |
 | stream.enabled | 实时端点是否已挂载（standard 和 remote 需 `--enable-stream`，vLLM 恒开） |
-| stream.backend | `vad-offline` / `vllm-native` |
+| stream.backend | `vad-offline` / `remote-qwen-streaming` / `vllm-native` |
+| stream.max_sessions | 实时会话并发上限（关闭时为 0，远端增量 demo 固定为 1） |
 | stream.partial_results | 是否产生中间结果 `partial`（vad-offline 后端为 false） |
 | stream.word_timestamps | `final` 是否带单词级时间戳（standard 随对齐开关，vLLM 为 false） |
 | stream.speaker_labels | 实时 `final` 是否带说话人标签 |
