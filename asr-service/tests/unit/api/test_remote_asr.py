@@ -99,3 +99,19 @@ def test_remote_credential_precedence(monkeypatch, tmp_path):
     config.write_text("remote_api_key: from-file\n")
     assert parse_args(["--config", str(config)]).remote_api_key == "from-file"
     assert parse_args(["--config", str(config), "--remote-api-key", "from-cli"]).remote_api_key == "from-cli"
+
+
+def test_invalid_upstream_response_has_public_error(monkeypatch, tmp_path):
+    from app.engines.remote_asr_engine import RemoteASREngine, RemoteASRError
+
+    def invalid_response(request):
+        return httpx.Response(200, text="private upstream details")
+
+    monkeypatch.setattr(httpx.Client, "_init_transport",
+                        lambda *a, **kw: httpx.MockTransport(invalid_response))
+    chunk = tmp_path / "chunk.wav"
+    chunk.touch()
+    engine = RemoteASREngine("http://upstream/v1", "qwen3-asr", "secret", 1)
+    with pytest.raises(RemoteASRError, match="格式") as error:
+        engine.transcribe(str(chunk))
+    assert "private" not in str(error.value) and "secret" not in str(error.value)

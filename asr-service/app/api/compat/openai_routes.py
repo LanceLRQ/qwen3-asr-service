@@ -71,7 +71,7 @@ async def _save_upload(file: UploadFile) -> str:
                         413, f"File too large (>{MAX_AUDIO_FILE_SIZE}MB)",
                         param="file", code="invalid_value")
                 f.write(chunk)
-    except OpenAICompatError:
+    except BaseException:
         if os.path.exists(save_path):
             os.remove(save_path)
         raise
@@ -106,7 +106,7 @@ async def create_transcription(
     path = await _save_upload(file)
     try:
         task_id = _task_manager.submit(
-            file_path=path, language=to_engine_language(language), wav_name=file.filename,
+            file_path=path, owns_file=True, language=to_engine_language(language), wav_name=file.filename,
             options={"with_words": want_word_ts})
     except queue.Full:
         os.remove(path)

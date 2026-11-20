@@ -133,7 +133,7 @@ async def _process_parent(rec: ParentRec) -> None:
                 # submit 是同步阻塞（队列 + 可选 SQLite 写）→ to_thread 避免阻塞事件循环
                 sub.inner_id = await asyncio.to_thread(
                     _task_manager.submit,
-                    file_path=path, language=rec.language,
+                    file_path=path, owns_file=True, language=rec.language,
                     wav_name=os.path.basename(sub.file_url) or "audio.wav",
                     options=rec.options)
             except queue.Full:
@@ -202,6 +202,7 @@ async def query_task(task_id: str, request: Request):
     rec = _get_rec(task_id)
     results = []
     for sub in rec.subtasks:
+        code, message = sub.code, sub.message
         if sub.status == "FAILED":        # 下载失败/队列满（固定终态）
             st, url = "FAILED", None
         elif sub.inner_id is None:        # 尚未入队（后台进行中）
@@ -209,14 +210,16 @@ async def query_task(task_id: str, request: Request):
         else:
             t = _task_manager.get_task(sub.inner_id) or {}
             st = v2status_to_dashscope(t.get("status", "pending"))
+            if st == "FAILED":
+                code, message = "InternalError", t.get("error")
             url = (_transcription_url(request, task_id, sub.idx)
                    if t.get("status") == "completed" else None)
         results.append({
             "file_url": sub.file_url,
             "transcription_url": url,
             "subtask_status": st,
-            "code": sub.code,
-            "message": sub.message,
+            "code": code,
+            "message": message,
         })
 
     # 单一来源：父状态与计数都从 statuses 派生，避免两处规则漂移

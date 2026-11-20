@@ -108,7 +108,7 @@ async def fetch_to_local(url: str, *, max_mb: int, timeout_s: int,
     except httpx.HTTPError as e:
         _safe_remove(save_path)
         raise FetchError("FetchNetworkError", f"下载网络错误: {e}") from e
-    except FetchError:
+    except BaseException:
         _safe_remove(save_path)
         raise
     return save_path

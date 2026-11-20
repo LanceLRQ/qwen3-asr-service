@@ -8,6 +8,10 @@ import httpx
 from app.utils.language import to_iso_language
 
 
+class RemoteASRError(RuntimeError):
+    """可向任务调用方公开的上游错误，不含服务地址、密钥或响应正文。"""
+
+
 class RemoteASREngine:
     is_remote = True
     align_enabled = False
@@ -25,25 +29,44 @@ class RemoteASREngine:
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self.timeout = timeout
 
+    def _request(self, method: str, path: str, **kwargs) -> dict:
+        try:
+            with httpx.Client(headers=self._headers, timeout=self.timeout, trust_env=False) as client:
+                response = client.request(method, self.base_url + path, **kwargs)
+                response.raise_for_status()
+        except httpx.TimeoutException:
+            raise RemoteASRError("远端 ASR 请求超时") from None
+        except httpx.HTTPStatusError as exc:
+            raise RemoteASRError(f"远端 ASR 返回 HTTP {exc.response.status_code}") from None
+        except httpx.RequestError:
+            raise RemoteASRError("远端 ASR 连接失败") from None
+
+        try:
+            payload = response.json()
+        except ValueError:
+            raise RemoteASRError("远端 ASR 响应格式错误") from None
+        if not isinstance(payload, dict):
+            raise RemoteASRError("远端 ASR 响应格式错误")
+        return payload
+
     def load(self):
-        with httpx.Client(headers=self._headers, timeout=self.timeout, trust_env=False) as client:
-            response = client.get(f"{self.base_url}/models")
-            response.raise_for_status()
-            if not any(model["id"] == self.model for model in response.json()["data"]):
-                raise ValueError("上游未提供配置的 remote_model")
+        models = self._request("GET", "/models").get("data")
+        if not isinstance(models, list):
+            raise RemoteASRError("远端 ASR 模型清单格式错误")
+        if not any(isinstance(model, dict) and model.get("id") == self.model for model in models):
+            raise ValueError("上游未提供配置的 remote_model")
 
     def transcribe(self, audio_path: str, language: str | None = None) -> list:
         data = {"model": self.model}
         hint = to_iso_language(language)
         if hint:
             data["language"] = hint
-        with open(audio_path, "rb") as audio, httpx.Client(
-            headers=self._headers, timeout=self.timeout, trust_env=False
-        ) as client:
-            response = client.post(f"{self.base_url}/audio/transcriptions", data=data,
-                                   files={"file": (Path(audio_path).name, audio, "audio/wav")})
-            response.raise_for_status()
-            text = response.json()["text"]
+        with open(audio_path, "rb") as audio:
+            payload = self._request("POST", "/audio/transcriptions", data=data,
+                                    files={"file": (Path(audio_path).name, audio, "audio/wav")})
+        text = payload.get("text")
+        if not isinstance(text, str):
+            raise RemoteASRError("远端 ASR 转写响应格式错误")
         prefix, marker, body = text.partition("<asr_text>")
         detected = None
         if marker:

@@ -3,8 +3,10 @@ import threading
 import uuid
 import logging
 import time
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime
+from app.engines.remote_asr_engine import RemoteASRError
 from app.config import TASK_TIMEOUT, TASK_RESULT_TTL, TASK_CLEANUP_INTERVAL
 
 logger = logging.getLogger(__name__)
@@ -17,6 +19,7 @@ class TaskManager:
         self._cancel_events: dict[str, threading.Event] = {}  # task_id -> cancel event
         self._done_events: dict[str, threading.Event] = {}    # task_id -> 终态通知（同步等待用）
         self._lock = threading.Lock()
+        self._submit_lock = threading.Lock()
         self._worker_thread = None
         self._cleanup_thread = None
         self._process_fn = None
@@ -44,14 +47,15 @@ class TaskManager:
 
     def submit(self, file_path: str, language: str | None = None,
                wav_name: str | None = None, identify_speakers: bool = False,
-               options: dict | None = None) -> str:
-        """提交任务，返回 task_id。options=按请求覆盖项（仅内存，不落库）。"""
+               options: dict | None = None, *, owns_file: bool = False) -> str:
+        """成功入队后接管 owns_file 标记的文件。options 仅在内存中传递。"""
         task_id = str(uuid.uuid4())
         task = {
             "task_id": task_id,
             "status": "pending",
             "progress": 0.0,
             "file_path": file_path,
+            "owns_file": owns_file,
             "language": language,
             "wav_name": wav_name,
             "identify_speakers": identify_speakers,
@@ -62,14 +66,17 @@ class TaskManager:
             "finished_at": None,
         }
 
-        with self._lock:
-            self._tasks[task_id] = task
-            self._cancel_events[task_id] = threading.Event()
-            self._done_events[task_id] = threading.Event()
-
-        self._queue.put_nowait(task_id)  # 队列满时抛出 queue.Full
-        if self._store:
-            self._store.insert_task(task)
+        # 串行生产者保证预留的队列位置可用。先落库，再向 worker 和查询方发布。
+        with self._submit_lock:
+            if self.is_stopping or self._queue.full():
+                raise queue.Full
+            if self._store:
+                self._store.insert_task(task)
+            with self._lock:
+                self._tasks[task_id] = task
+                self._cancel_events[task_id] = threading.Event()
+                self._done_events[task_id] = threading.Event()
+                self._queue.put_nowait(task_id)
         logger.info(f"任务已提交: {task_id}")
         return task_id
 
@@ -131,14 +138,16 @@ class TaskManager:
                 task["status"] = "cancelled"
                 task["error"] = "任务已取消"
                 task["finished_at"] = datetime.now().isoformat()
-                self._signal_done(task_id)   # pending 直接终态，唤醒同步等待方
                 logger.info(f"任务已取消 (pending): {task_id}")
             else:
                 # processing 中，pipeline 将在下一个 chunk 边界检测到取消
                 logger.info(f"任务取消请求已发送 (processing): {task_id}")
 
-        if status == "pending" and self._store:
-            self._store.finalize_task(task)
+        if status == "pending":
+            self._release_input(task)
+            if self._store:
+                self._store.finalize_task(task)
+            self._signal_done(task_id)
         return status
 
     def is_cancelled(self, task_id: str) -> bool:
@@ -165,6 +174,17 @@ class TaskManager:
             return None
         return self.get_task(task_id)
 
+    @staticmethod
+    def _release_input(task):
+        if task.get("owns_file"):
+            Path(task["file_path"]).unlink(missing_ok=True)
+
+    def _process(self, task):
+        try:
+            return self._process_fn(task)
+        finally:
+            self._release_input(task)
+
     def _worker(self):
         """工作线程：串行处理任务，使用线程池实现真超时"""
         while not self._stop_event.is_set():
@@ -189,47 +209,55 @@ class TaskManager:
 
             cancel_event = self._cancel_events.get(task_id)
             start_time = time.time()
+            future = None
+            deadline_expired = False
             try:
-                future = self._executor.submit(self._process_fn, task)
-                result = future.result(timeout=TASK_TIMEOUT)
-                elapsed = time.time() - start_time
-
+                future = self._executor.submit(self._process, task)
+                # exception() 返回处理器自身的异常，只会因等待到期抛出 TimeoutError。
+                try:
+                    future.exception(timeout=TASK_TIMEOUT)
+                except FuturesTimeoutError:
+                    deadline_expired = True
+                if not deadline_expired:
+                    result = future.result()
+                elif future.cancel():
+                    self._release_input(task)
                 with self._lock:
-                    if cancel_event and cancel_event.is_set():
+                    if cancel_event.is_set():
                         task["status"] = "cancelled"
-                        task["result"] = result
-                        task["error"] = "任务已取消，返回部分结果"
-                        task["finished_at"] = datetime.now().isoformat()
-                        logger.info(f"任务已取消 (processing, partial): {task_id}")
+                        task["result"] = None if deadline_expired else result
+                        task["error"] = "任务已取消" if deadline_expired else "任务已取消，返回部分结果"
+                    elif deadline_expired:
+                        cancel_event.set()
+                        task["status"] = "failed"
+                        task["error"] = f"处理超时（>{TASK_TIMEOUT}s）"
                     else:
                         task["status"] = "completed"
                         task["progress"] = 1.0
                         task["result"] = result
-                        task["finished_at"] = datetime.now().isoformat()
-                        logger.info(f"任务完成: {task_id} ({elapsed:.1f}s)")
-                if self._store:
-                    self._store.finalize_task(task)
-            except FuturesTimeoutError:
-                elapsed = time.time() - start_time
-                future.cancel()
-                with self._lock:
-                    task["status"] = "failed"
-                    task["error"] = f"处理超时（>{TASK_TIMEOUT}s）"
                     task["finished_at"] = datetime.now().isoformat()
-                if self._store:
-                    self._store.finalize_task(task)
-                logger.error(f"任务超时: {task_id} ({elapsed:.0f}s)")
             except Exception as e:
-                if self._stop_event.is_set():
-                    break
+                if future is None or future.cancelled():
+                    self._release_input(task)
                 with self._lock:
-                    task["status"] = "failed"
-                    task["error"] = "内部处理错误，请检查服务日志"
+                    cancelled = cancel_event.is_set()
+                    task["status"] = "cancelled" if cancelled else "failed"
+                    task["error"] = str(e) if isinstance(e, RemoteASRError) else "内部处理错误，请检查服务日志"
+                    if cancelled:
+                        task["error"] = "任务已取消"
                     task["finished_at"] = datetime.now().isoformat()
+                if not cancelled:
+                    logger.error(f"任务失败: {task_id}, 错误: {e}", exc_info=True)
+            finally:
+                elapsed = time.time() - start_time
                 if self._store:
                     self._store.finalize_task(task)
-                logger.error(f"任务失败: {task_id}, 错误: {e}", exc_info=True)
-            finally:
+                if task["status"] == "completed":
+                    logger.info("任务完成: %s (%.1fs)", task_id, elapsed)
+                elif task["status"] == "cancelled":
+                    logger.info("任务已取消 (processing): %s", task_id)
+                elif deadline_expired:
+                    logger.error("任务超时: %s (%.0fs)", task_id, elapsed)
                 self._signal_done(task_id)   # 所有终态分支统一唤醒同步等待方
                 self._queue.task_done()
 
@@ -240,7 +268,13 @@ class TaskManager:
         调用方不应在此时关闭 task_store 连接（避免与 finalize 落库竞态）。
         """
         logger.info("正在终止任务管理器...")
-        self._stop_event.set()
+        with self._submit_lock:
+            self._stop_event.set()
+        with self._lock:
+            active = [tid for tid, task in self._tasks.items()
+                      if task["status"] in ("pending", "processing")]
+        for task_id in active:
+            self.cancel_task(task_id)
         self._executor.shutdown(wait=False, cancel_futures=True)
         if self._worker_thread and self._worker_thread.is_alive():
             self._worker_thread.join(timeout=5)

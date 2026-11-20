@@ -89,7 +89,7 @@ async def _save_upload(file: UploadFile) -> tuple[str, str]:
                         detail=f"文件过大（>{MAX_AUDIO_FILE_SIZE}MB），最大支持 {MAX_AUDIO_FILE_SIZE}MB",
                     )
                 f.write(chunk)
-    except HTTPException:
+    except BaseException:
         if os.path.exists(save_path):
             os.remove(save_path)
         raise
@@ -151,7 +151,7 @@ async def submit_asr(
     # 3. 提交到任务队列
     try:
         task_id = _task_manager.submit(
-            file_path=save_path,
+            file_path=save_path, owns_file=True,
             language=to_engine_language(language),
             wav_name=file.filename,
             identify_speakers=identify_speakers,
