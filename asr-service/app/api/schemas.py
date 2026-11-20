@@ -106,6 +106,7 @@ class StreamCapabilities(BaseModel):
 class CapabilitiesResponse(BaseModel):
     mode: str                          # "standard" | "vllm"
     offline_api: bool
+    word_timestamps: bool = False     # 离线词时间（识别后端或已装配的独立对齐器）
     speaker_labels: bool = False       # 说话人分离总开关（离线+实时同一开关）
     speaker_identification: bool = False   # 声纹库真名识别（enroll/identify 可用）
     audio_tagging: bool = False        # 通用音频事件标注（离线 audio_events）

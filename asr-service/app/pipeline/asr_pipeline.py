@@ -83,6 +83,10 @@ class ASRPipeline:
         # 声纹识别真正能跑的前提：声纹库 + 说话人引擎 + diarize 同时就位（diarize 关时
         # 不聚类，identify/id 阈值全部失效）——任一缺失即软提示，避免静默丢弃
         spk_id_ready = self.speaker_service is not None and self.speaker is not None and diarize
+        if opts.get("scene_preset") and (self.tagger is None or not self.settings.SCENE_ENABLE):
+            warnings.append("scene_preset")
+        if return_speaker_id and not (identify_speakers and spk_id_ready):
+            warnings.append("return_speaker_id")
         if identify_speakers and not spk_id_ready:
             warnings.append("identify_speakers")
         if (id_threshold is not None or id_margin is not None) and not spk_id_ready:

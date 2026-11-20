@@ -6,7 +6,7 @@
 
 standard 和 vLLM 模式在本机加载 Qwen3-ASR。standard 在 GPU 上使用 Transformers，在 CPU 上使用 OpenVINO；vLLM 模式加载自己的 CUDA 引擎。OpenAI 和 DashScope 兼容接口供外部客户端调用，各有独立开关。各模式均可通过 `--web` / `--no-web` 控制 Web UI。
 
-当前由 `app/main.py` 装配引擎、处理流程、任务存储及路由。OpenAI 同步文件转写也会提交离线任务并等待结果。规划中，引擎负责识别、对齐和说话人处理，Python 流程负责组合结果，API 层负责接收请求并返回响应；队列与任务存储由服务层管理。remote 模式将本地 VAD 切出的音频块提交给独立的 Qwen HTTP 服务，由本地流程完成分句和可选的说话人处理。该模式支持离线任务，句内边界按字符比例估时，暂不提供词级对齐或实时输入。各入口的能力见[运行模式对照表](vllm-vs-standard.md)。
+服务在 `app/main.py` 装配引擎、离线流程、任务存储及路由。OpenAI 同步文件转写仍会提交任务并等待结果。Python 调用方可以直接执行同一离线流程。remote 模式逐块向独立 Qwen 服务发送音频，本地完成分句、可选说话人处理和可选词级对齐（`--remote-enable-align`）。没有词时间时，块内分句按字符比例估时。实时输入由 standard 和 vLLM 模式提供。[程序内调用与后端契约](development.md)
 
 ## 项目结构
 

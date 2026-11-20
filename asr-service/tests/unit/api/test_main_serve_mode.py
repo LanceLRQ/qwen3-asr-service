@@ -98,6 +98,7 @@ def test_vllm_mode_mounts_stream_and_common(isolated_create_app, monkeypatch):
     health = client.get("/v1/health").json()
     assert health["mode"] == "vllm"
     assert health["capabilities"]["offline_api"] is True       # Phase 1：离线已接入
+    assert health["capabilities"]["word_timestamps"] is True
     assert health["align_enabled"] is True                     # 对齐器（词级时间戳）
     assert health["punc_enabled"] is True                      # 模型原生标点
     stream = health["capabilities"]["stream"]
@@ -204,6 +205,7 @@ def test_standard_mode_with_stream_mounts_ws(isolated_create_app, monkeypatch):
 
     # capabilities 反映实时已启用
     caps = client.get("/v1/capabilities").json()
+    assert caps["word_timestamps"] is True
     assert caps["mode"] == "standard"
     assert caps["offline_api"] is True
     assert caps["stream"]["enabled"] is True

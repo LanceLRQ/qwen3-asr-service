@@ -489,6 +489,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
     capabilities = {
         "mode": cfg.SERVE_MODE,
         "offline_api": asr_engine.capabilities.offline,
+        "word_timestamps": enable_align,
         "speaker_labels": speaker_enabled,
         "speaker_identification": speaker_db_enabled,
         "audio_tagging": tagging_enabled,
@@ -798,6 +799,7 @@ def _assemble_vllm(app: FastAPI, args) -> None:
     capabilities = {
         "mode": "vllm",
         "offline_api": engine.capabilities.offline,
+        "word_timestamps": engine.capabilities.word_timestamps,
         "speaker_labels": speaker_enabled,             # Phase 2：离线说话人分离
         "speaker_identification": speaker_db_enabled,  # Phase 2：声纹识别（需声纹库）
         "stream": {

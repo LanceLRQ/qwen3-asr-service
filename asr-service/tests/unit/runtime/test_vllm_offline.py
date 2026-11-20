@@ -147,10 +147,11 @@ def test_segment_clamps_corrupt_duration():
 def test_warnings_all():
     w = vo._collect_warnings(
         _Engine(align=False),
-        {"with_punc": False, "with_words": True, "diarize": True, "speaker_id_threshold": 0.5},
+        {"with_punc": False, "with_words": True, "diarize": True, "speaker_id_threshold": 0.5,
+         "scene_preset": "balanced", "return_speaker_id": True},
         identify_speakers=True)
     assert set(w) == {"with_punc", "with_words", "diarize",
-                      "identify_speakers", "speaker_id_threshold/margin"}
+                      "identify_speakers", "speaker_id_threshold/margin", "scene_preset", "return_speaker_id"}
 
 
 def test_warnings_clean_when_align_on():

@@ -4,6 +4,16 @@
 
 面向贡献者：开发环境、测试、端到端冒烟、关键代码约定。架构与处理流程见 [架构说明](architecture.md)，参数全表见 [配置文档](configuration.md)。
 
+## 在 Python 中调用离线流程
+
+从 `asr-service/` 目录执行 `venv/bin/python -m examples.offline /path/to/speech.wav`。该[示例](../asr-service/examples/offline.py)在 standard 环境中加载引擎，通过 `ASRPipeline.run` 返回结构化结果；处理多份文件时可复用已加载的实例。vLLM 的入口为 `run_vllm_offline(engine, audio_path, ...)`。这些入口属于项目内部接口。
+
+每次调用创建独立的临时工作目录。成功、失败或取消后，调用方的输入文件都保留。HTTP 上传文件由接入层移交给任务管理器清理。直接调用可以传进度与取消回调，无需任务数据库或 HTTP 服务。
+
+离线后端为每个输入返回 `ASRResult`，携带片段标识、文本、可选语言和可选的 `WordTime`。词时间以秒计，从该片段起点算起。后端负责转换供应方响应，并显式声明离线、批处理、词时间及实时增量能力。流程层将时间换算为全局秒数，协议层负责输出单位。查询 `GET /v2/capabilities` 的 `word_timestamps` 可获知当前组合的离线词时间能力。远端模式可用 `--remote-enable-align` 加载独立本地对齐器，单次请求可用 `with_words=false` 跳过对齐。
+
+六种运行组合的实测结果见 [S3 离线验收](baselines/s3-offline/README.md)。
+
 ## 目录
 
 - [1. 开发环境](#1-开发环境)

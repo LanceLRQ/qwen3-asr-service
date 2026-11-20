@@ -73,6 +73,7 @@ GET /v2/health
   "capabilities": {
     "mode": "standard",
     "offline_api": true,
+    "word_timestamps": true,
     "speaker_labels": false,
     "speaker_identification": false,
     "stream": {
@@ -117,6 +118,7 @@ Returns the current serving mode and capability declaration (clients can use it 
 {
   "mode": "standard",
   "offline_api": true,
+  "word_timestamps": true,
   "speaker_labels": true,
   "speaker_identification": false,
   "audio_tagging": false,
@@ -140,6 +142,7 @@ Returns the current serving mode and capability declaration (clients can use it 
 
 | Field | Description |
 |-------|-------------|
+| word_timestamps | Whether offline transcription can return word times with the loaded components. For realtime, check `stream.word_timestamps`. |
 | speaker_labels | Whether speaker diarization is enabled (offline capability; see `stream.speaker_labels` for realtime) |
 | speaker_identification | Whether voiceprint real-name identification is available (enrollment / identify / transcription integration) |
 | audio_tagging | Whether audio tagging is enabled (`--enable-audio-tagging`; gates `POST /v2/audio/tag` and the offline `audio_events` field) |

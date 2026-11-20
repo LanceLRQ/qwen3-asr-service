@@ -67,9 +67,12 @@ def test_warnings_for_unavailable_features(run_env, tmp_path):
     pipe = _make_pipe()      # 无 speaker / punc / service
     result = pipe.run(
         str(tmp_path / "a.mp3"), identify_speakers=True,
-        options={"diarize": True, "with_punc": True, "speaker_id_threshold": 0.5},
+        options={"diarize": True, "with_punc": True, "speaker_id_threshold": 0.5,
+                 "scene_preset": "balanced", "return_speaker_id": True},
     )
     w = result["warnings"]
+    assert "scene_preset" in w
+    assert "return_speaker_id" in w
     assert "diarize" in w
     assert "with_punc" in w
     assert "identify_speakers" in w

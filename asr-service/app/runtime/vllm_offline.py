@@ -172,6 +172,10 @@ def _collect_warnings(engine, opts: dict, identify_speakers: bool, *,
         w.append("with_words")           # 对齐器未加载
     if opts.get("diarize") is True and not speaker_enabled:
         w.append("diarize")              # 未挂说话人引擎（--enable-speaker 未开/加载失败）
+    if opts.get("scene_preset"):
+        w.append("scene_preset")
+    if opts.get("return_speaker_id") and not (identify_speakers and spk_id_ready):
+        w.append("return_speaker_id")
     if identify_speakers and not spk_id_ready:
         w.append("identify_speakers")
     if (opts.get("speaker_id_threshold") is not None

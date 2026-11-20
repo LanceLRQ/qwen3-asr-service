@@ -4,6 +4,16 @@
 
 For contributors: dev environment, testing, end-to-end smoke, key code conventions. For architecture and pipeline see [Architecture](architecture_EN.md); for the full parameter table see [Configuration](configuration_EN.md).
 
+## Call the offline pipeline from Python
+
+From `asr-service/`, run `venv/bin/python -m examples.offline /path/to/speech.wav` in the standard environment. The [example](../asr-service/examples/offline.py) loads the engines once and returns the structured result from `ASRPipeline.run`. A caller can reuse the pipeline across files. The vLLM strategy exposes `run_vllm_offline(engine, audio_path, ...)`. These are project-internal APIs.
+
+The pipeline owns its per-call temporary directory. It preserves the input on success, cancellation and failure. HTTP adapters transfer ownership of uploaded files to the task manager. Direct callers can supply progress and cancellation callbacks without opening a database or starting the HTTP service.
+
+An offline engine returns `ASRResult` for each input, carrying chunk identity, text, optional language, and optional `WordTime` entries in seconds from the start of that chunk. Convert vendor responses inside the engine. Declare offline, batch, word-time and incremental decoding capabilities explicitly. The pipeline converts to global seconds once; protocol adapters handle public units. For effective offline timestamps, query `GET /v2/capabilities` and read `word_timestamps`. In remote mode, `--remote-enable-align` loads a separate local aligner. Request `with_words=false` to skip alignment for a file.
+
+See the [S3 offline comparison](baselines/s3-offline/README.md) for measurements across six runtime configurations.
+
 ## Table of Contents
 
 - [1. Dev environment](#1-dev-environment)

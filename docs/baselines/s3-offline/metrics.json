@@ -1,0 +1,565 @@
+{
+  "standard": {
+    "backend": "qwen_asr",
+    "word_timestamps": true,
+    "speaker_labels": true,
+    "samples": {
+      "short": {
+        "audio_s": 3.925,
+        "client_elapsed_s": 0.362,
+        "control_elapsed_s": 0.363,
+        "text_equal_to_control": true,
+        "segments": 1,
+        "control_segments": 1,
+        "words": 6,
+        "control_words": 6,
+        "speaker_labels": [
+          "A"
+        ],
+        "warnings": [],
+        "mean_abs_boundary_delta_s": [
+          0.0,
+          0.0
+        ],
+        "speaker_label_changes": 0
+      },
+      "dialogue": {
+        "audio_s": 9.765,
+        "client_elapsed_s": 0.517,
+        "control_elapsed_s": 0.519,
+        "text_equal_to_control": true,
+        "segments": 3,
+        "control_segments": 3,
+        "words": 18,
+        "control_words": 18,
+        "speaker_labels": [
+          "A"
+        ],
+        "warnings": [],
+        "mean_abs_boundary_delta_s": [
+          0.0,
+          0.0
+        ],
+        "speaker_label_changes": 0
+      },
+      "silence": {
+        "audio_s": 5.0,
+        "client_elapsed_s": 0.105,
+        "control_elapsed_s": 0.107,
+        "text_equal_to_control": true,
+        "segments": 0,
+        "control_segments": 0,
+        "words": 0,
+        "control_words": 0,
+        "speaker_labels": [],
+        "warnings": []
+      },
+      "noise": {
+        "audio_s": 5.0,
+        "client_elapsed_s": 0.105,
+        "control_elapsed_s": 0.107,
+        "text_equal_to_control": true,
+        "segments": 0,
+        "control_segments": 0,
+        "words": 0,
+        "control_words": 0,
+        "speaker_labels": [],
+        "warnings": []
+      },
+      "long": {
+        "audio_s": 88.65,
+        "client_elapsed_s": 2.229,
+        "control_elapsed_s": 2.225,
+        "text_equal_to_control": true,
+        "segments": 30,
+        "control_segments": 30,
+        "words": 180,
+        "control_words": 180,
+        "speaker_labels": [
+          "A",
+          "B",
+          "C"
+        ],
+        "warnings": [],
+        "mean_abs_boundary_delta_s": [
+          0.0,
+          0.0
+        ],
+        "speaker_label_changes": 0
+      }
+    },
+    "stream_events": [
+      "session.created",
+      "final",
+      "session.closed"
+    ]
+  },
+  "vllm": {
+    "backend": "vllm",
+    "word_timestamps": true,
+    "speaker_labels": true,
+    "samples": {
+      "short": {
+        "audio_s": 3.925,
+        "client_elapsed_s": 0.207,
+        "control_elapsed_s": 0.317,
+        "text_equal_to_control": true,
+        "segments": 1,
+        "control_segments": 1,
+        "words": 6,
+        "control_words": 6,
+        "speaker_labels": [
+          "A"
+        ],
+        "warnings": [],
+        "mean_abs_boundary_delta_s": [
+          0.0,
+          0.0
+        ],
+        "speaker_label_changes": 0
+      },
+      "dialogue": {
+        "audio_s": 9.765,
+        "client_elapsed_s": 0.361,
+        "control_elapsed_s": 0.362,
+        "text_equal_to_control": true,
+        "segments": 3,
+        "control_segments": 3,
+        "words": 18,
+        "control_words": 18,
+        "speaker_labels": [
+          "A"
+        ],
+        "warnings": [],
+        "mean_abs_boundary_delta_s": [
+          0.0,
+          0.0
+        ],
+        "speaker_label_changes": 0
+      },
+      "silence": {
+        "audio_s": 5.0,
+        "client_elapsed_s": 0.31,
+        "control_elapsed_s": 0.31,
+        "text_equal_to_control": true,
+        "segments": 4,
+        "control_segments": 4,
+        "words": 13,
+        "control_words": 13,
+        "speaker_labels": [
+          "A"
+        ],
+        "warnings": [],
+        "mean_abs_boundary_delta_s": [
+          0.0,
+          0.0
+        ],
+        "speaker_label_changes": 0
+      },
+      "noise": {
+        "audio_s": 5.0,
+        "client_elapsed_s": 0.258,
+        "control_elapsed_s": 0.207,
+        "text_equal_to_control": true,
+        "segments": 2,
+        "control_segments": 2,
+        "words": 2,
+        "control_words": 2,
+        "speaker_labels": [
+          "A"
+        ],
+        "warnings": [],
+        "mean_abs_boundary_delta_s": [
+          0.0,
+          0.0
+        ],
+        "speaker_label_changes": 0
+      },
+      "long": {
+        "audio_s": 88.65,
+        "client_elapsed_s": 2.237,
+        "control_elapsed_s": 2.328,
+        "text_equal_to_control": true,
+        "segments": 24,
+        "control_segments": 24,
+        "words": 180,
+        "control_words": 180,
+        "speaker_labels": [
+          "A",
+          "B",
+          "C"
+        ],
+        "warnings": [],
+        "mean_abs_boundary_delta_s": [
+          0.0,
+          0.0
+        ],
+        "speaker_label_changes": 0
+      }
+    },
+    "stream_events": [
+      "session.created",
+      "partial",
+      "partial",
+      "final",
+      "session.closed"
+    ]
+  },
+  "remote-only": {
+    "backend": "remote",
+    "word_timestamps": false,
+    "speaker_labels": false,
+    "samples": {
+      "dialogue": {
+        "audio_s": 9.765,
+        "client_elapsed_s": 0.722,
+        "control_elapsed_s": 0.773,
+        "text_equal_to_control": true,
+        "segments": 3,
+        "control_segments": 3,
+        "words": 0,
+        "control_words": 0,
+        "speaker_labels": [],
+        "warnings": [
+          "with_words",
+          "diarize"
+        ],
+        "mean_abs_boundary_delta_s": [
+          0.0,
+          0.0
+        ]
+      }
+    }
+  },
+  "remote-align": {
+    "backend": "remote",
+    "word_timestamps": true,
+    "speaker_labels": false,
+    "samples": {
+      "dialogue": {
+        "audio_s": 9.765,
+        "client_elapsed_s": 0.825,
+        "control_elapsed_s": 0.773,
+        "text_equal_to_control": true,
+        "segments": 3,
+        "control_segments": 3,
+        "words": 18,
+        "control_words": 0,
+        "speaker_labels": [],
+        "warnings": [
+          "diarize"
+        ],
+        "mean_abs_boundary_delta_s": [
+          0.2667,
+          0.2833
+        ]
+      }
+    }
+  },
+  "remote-speaker": {
+    "backend": "remote",
+    "word_timestamps": false,
+    "speaker_labels": true,
+    "samples": {
+      "short": {
+        "audio_s": 3.925,
+        "client_elapsed_s": 0.363,
+        "control_elapsed_s": 0.313,
+        "text_equal_to_control": true,
+        "segments": 1,
+        "control_segments": 1,
+        "words": 0,
+        "control_words": 0,
+        "speaker_labels": [
+          "A"
+        ],
+        "warnings": [
+          "with_words"
+        ],
+        "mean_abs_boundary_delta_s": [
+          0.0,
+          0.0
+        ],
+        "speaker_label_changes": 0
+      },
+      "dialogue": {
+        "audio_s": 9.765,
+        "client_elapsed_s": 0.825,
+        "control_elapsed_s": 0.773,
+        "text_equal_to_control": true,
+        "segments": 3,
+        "control_segments": 3,
+        "words": 0,
+        "control_words": 0,
+        "speaker_labels": [
+          "A"
+        ],
+        "warnings": [
+          "with_words"
+        ],
+        "mean_abs_boundary_delta_s": [
+          0.0,
+          0.0
+        ],
+        "speaker_label_changes": 0
+      },
+      "silence": {
+        "audio_s": 5.0,
+        "client_elapsed_s": 0.107,
+        "control_elapsed_s": 0.107,
+        "text_equal_to_control": true,
+        "segments": 0,
+        "control_segments": 0,
+        "words": 0,
+        "control_words": 0,
+        "speaker_labels": [],
+        "warnings": [
+          "with_words"
+        ]
+      },
+      "noise": {
+        "audio_s": 5.0,
+        "client_elapsed_s": 0.105,
+        "control_elapsed_s": 0.107,
+        "text_equal_to_control": true,
+        "segments": 0,
+        "control_segments": 0,
+        "words": 0,
+        "control_words": 0,
+        "speaker_labels": [],
+        "warnings": [
+          "with_words"
+        ]
+      },
+      "long": {
+        "audio_s": 88.65,
+        "client_elapsed_s": 6.183,
+        "control_elapsed_s": 6.373,
+        "text_equal_to_control": true,
+        "segments": 30,
+        "control_segments": 30,
+        "words": 0,
+        "control_words": 0,
+        "speaker_labels": [
+          "A",
+          "B",
+          "C"
+        ],
+        "warnings": [
+          "with_words"
+        ],
+        "mean_abs_boundary_delta_s": [
+          0.0,
+          0.0
+        ],
+        "speaker_label_changes": 0
+      }
+    }
+  },
+  "remote-all": {
+    "backend": "remote",
+    "word_timestamps": true,
+    "speaker_labels": true,
+    "samples": {
+      "short": {
+        "audio_s": 3.925,
+        "client_elapsed_s": 0.362,
+        "control_elapsed_s": 0.313,
+        "text_equal_to_control": true,
+        "segments": 1,
+        "control_segments": 1,
+        "words": 6,
+        "control_words": 0,
+        "speaker_labels": [
+          "A"
+        ],
+        "warnings": [],
+        "mean_abs_boundary_delta_s": [
+          0.32,
+          0.28
+        ],
+        "speaker_label_changes": 0
+      },
+      "dialogue": {
+        "audio_s": 9.765,
+        "client_elapsed_s": 0.878,
+        "control_elapsed_s": 0.773,
+        "text_equal_to_control": true,
+        "segments": 3,
+        "control_segments": 3,
+        "words": 18,
+        "control_words": 0,
+        "speaker_labels": [
+          "A"
+        ],
+        "warnings": [],
+        "mean_abs_boundary_delta_s": [
+          0.2667,
+          0.2833
+        ],
+        "speaker_label_changes": 0,
+        "aligned_segments": [
+          {
+            "start": 1.23,
+            "end": 2.75,
+            "text": "The blue train leaves at noon.",
+            "words": [
+              {
+                "text": "The",
+                "start": 1.23,
+                "end": 1.31
+              },
+              {
+                "text": "blue",
+                "start": 1.31,
+                "end": 1.47
+              },
+              {
+                "text": "train",
+                "start": 1.55,
+                "end": 1.87
+              },
+              {
+                "text": "leaves",
+                "start": 1.95,
+                "end": 2.27
+              },
+              {
+                "text": "at",
+                "start": 2.27,
+                "end": 2.43
+              },
+              {
+                "text": "noon",
+                "start": 2.43,
+                "end": 2.75
+              }
+            ],
+            "speaker": "A"
+          },
+          {
+            "start": 4.09,
+            "end": 5.77,
+            "text": "Please meet me at the station.",
+            "words": [
+              {
+                "text": "Please",
+                "start": 4.09,
+                "end": 4.41
+              },
+              {
+                "text": "meet",
+                "start": 4.41,
+                "end": 4.65
+              },
+              {
+                "text": "me",
+                "start": 4.65,
+                "end": 4.89
+              },
+              {
+                "text": "at",
+                "start": 4.89,
+                "end": 5.13
+              },
+              {
+                "text": "the",
+                "start": 5.13,
+                "end": 5.21
+              },
+              {
+                "text": "station",
+                "start": 5.21,
+                "end": 5.77
+              }
+            ],
+            "speaker": "A"
+          },
+          {
+            "start": 7.14,
+            "end": 8.58,
+            "text": "I will bring the yellow bag.",
+            "words": [
+              {
+                "text": "I",
+                "start": 7.14,
+                "end": 7.3
+              },
+              {
+                "text": "will",
+                "start": 7.3,
+                "end": 7.46
+              },
+              {
+                "text": "bring",
+                "start": 7.46,
+                "end": 7.78
+              },
+              {
+                "text": "the",
+                "start": 7.78,
+                "end": 7.86
+              },
+              {
+                "text": "yellow",
+                "start": 7.86,
+                "end": 8.18
+              },
+              {
+                "text": "bag",
+                "start": 8.18,
+                "end": 8.58
+              }
+            ],
+            "speaker": "A"
+          }
+        ]
+      },
+      "silence": {
+        "audio_s": 5.0,
+        "client_elapsed_s": 0.107,
+        "control_elapsed_s": 0.107,
+        "text_equal_to_control": true,
+        "segments": 0,
+        "control_segments": 0,
+        "words": 0,
+        "control_words": 0,
+        "speaker_labels": [],
+        "warnings": []
+      },
+      "noise": {
+        "audio_s": 5.0,
+        "client_elapsed_s": 0.107,
+        "control_elapsed_s": 0.107,
+        "text_equal_to_control": true,
+        "segments": 0,
+        "control_segments": 0,
+        "words": 0,
+        "control_words": 0,
+        "speaker_labels": [],
+        "warnings": []
+      },
+      "long": {
+        "audio_s": 88.65,
+        "client_elapsed_s": 6.682,
+        "control_elapsed_s": 6.373,
+        "text_equal_to_control": false,
+        "segments": 30,
+        "control_segments": 30,
+        "words": 180,
+        "control_words": 0,
+        "speaker_labels": [
+          "A",
+          "B",
+          "C"
+        ],
+        "warnings": [],
+        "mean_abs_boundary_delta_s": [
+          0.4295,
+          0.3655
+        ],
+        "speaker_label_changes": 0
+      }
+    }
+  }
+}

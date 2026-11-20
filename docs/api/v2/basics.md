@@ -73,6 +73,7 @@ GET /v2/health
   "capabilities": {
     "mode": "standard",
     "offline_api": true,
+    "word_timestamps": true,
     "speaker_labels": false,
     "speaker_identification": false,
     "audio_tagging": false,
@@ -120,6 +121,7 @@ GET /v2/capabilities
 {
   "mode": "standard",
   "offline_api": true,
+  "word_timestamps": true,
   "speaker_labels": true,
   "speaker_identification": false,
   "audio_tagging": true,
@@ -143,6 +145,7 @@ GET /v2/capabilities
 
 | 字段 | 说明 |
 |------|------|
+| word_timestamps | 当前装配能否为离线转写生成词级时间。实时能力见 `stream.word_timestamps`。 |
 | speaker_labels | 说话人分离是否启用（离线能力；实时能力见 `stream.speaker_labels`） |
 | speaker_identification | 声纹库真名识别是否可用（登记 / identify / 转写联动） |
 | audio_tagging | 音频标注是否启用（`--enable-audio-tagging`，决定 `POST /v2/audio/tag` 是否可用） |
