@@ -821,3 +821,14 @@ async def test_disconnect_preserves_inference_slot_until_worker_finishes():
     finally:
         finish.set()
         executor.shutdown()
+
+
+@pytest.mark.parametrize("mode,expected", [("remote", False), ("standard", True)])
+def test_vad_offline_language_capability(mode, expected):
+    vad = VADEngine()
+    vad._model = MagicMock()
+    backend = VadOfflineBackend(MagicMock(), vad, mode=mode)
+    try:
+        assert backend.capabilities["languages_auto"] is expected
+    finally:
+        backend.shutdown()

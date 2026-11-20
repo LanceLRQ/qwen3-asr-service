@@ -694,7 +694,8 @@ class VadOfflineBackend:
         self.capabilities = {
             "partial_results": asr.capabilities.realtime_incremental,
             "word_timestamps": self._enable_words,
-            "languages_auto": True,
+            # 通用 HTTP 模型清单只确认模型存在，不能证明上游支持自动语种。
+            "languages_auto": mode == "standard",
             "speaker_labels": speaker is not None,
             "speaker_identification": speaker is not None and speaker_service is not None,
             "noise_filter_tunable": True,   # 客户端可在 start 覆盖 noise_filter/energy_floor_dbfs/snr_min_db

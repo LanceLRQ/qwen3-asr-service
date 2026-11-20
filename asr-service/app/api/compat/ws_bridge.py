@@ -51,6 +51,7 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
     """单轮会话（一次 run-task 周期 / OpenAI 整个连接）。返回是否继续复用连接。"""
     frame_q: asyncio.Queue = asyncio.Queue()
     state = {"backlog": 0}
+    committed = False  # 同一音频边界只需冲刷一次
 
     async def _emit(f):
         # partial（vLLM 路线 A）：adapter 实现 translate_partials → 下发增量（R2）；未实现 → 跳过
@@ -129,7 +130,9 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
                     return False
                 state["backlog"] += len(payload)
                 frame_q.put_nowait(payload)
-            elif kind == "flush":
+                committed = False
+            elif kind == "flush" and not committed:
+                committed = True
                 frame_q.put_nowait(_SOFT_FLUSH)
             elif kind == "end":
                 frame_q.put_nowait(_HARD_END)

@@ -392,3 +392,47 @@ def test_slow_consumer_released_on_disconnect_or_overflow(ws_app, monkeypatch, p
             assert code == "backlog_overflow"
     assert cancelled.wait(2)
     assert backend.released == 1
+
+
+def test_repeated_commits_during_slow_flush_preserve_audio_boundaries(ws_app):
+    import asyncio
+    import threading
+
+    started = threading.Event()
+    calls = []
+
+    class SlowFlush(FakeSession):
+        def __init__(self):
+            self.resume = asyncio.Event()
+
+        async def flush(self):
+            calls.append("commit")
+            started.set()
+            await self.resume.wait()
+            if False:
+                yield
+
+        def configure(self, msg):
+            self.resume.set()
+            return []
+
+        async def feed_audio(self, pcm):
+            calls.append(pcm)
+            if pcm == b"end":
+                yield FINAL
+
+    with ws_app(FakeBackend(SlowFlush)).websocket_connect(OPENAI_WS) as ws:
+        ws.receive_json()
+        commit = {"type": "input_audio_buffer.commit"}
+        ws.send_json(commit)
+        assert started.wait(2)
+        for _ in range(32):
+            ws.send_json(commit)
+        ws.send_json({"type": "input_audio_buffer.append", "audio": "YWI="})
+        for _ in range(32):
+            ws.send_json(commit)
+        ws.send_json({"type": "input_audio_buffer.append", "audio": "ZW5k"})
+        ws.send_json({"type": "session.update"})
+        assert ws.receive_json()["type"] == "session.updated"
+        assert ws.receive_json()["type"].endswith(".completed")
+    assert calls == ["commit", b"ab", "commit", b"end"]
