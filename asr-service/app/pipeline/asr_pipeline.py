@@ -32,6 +32,7 @@ class ASRPipeline:
         scene_map=None,
     ):
         self.asr = asr_engine
+        self._remote = getattr(asr_engine, "is_remote", False) is True
         self.vad = vad_engine
         self.punc = punc_engine
         self.speaker = speaker_engine
@@ -143,7 +144,7 @@ class ASRPipeline:
             segments = []
             if cancelled and cancelled():
                 logger.info("[Pipeline] 任务已取消，跳过 ASR 识别")
-            elif hasattr(self.asr, "batch_transcribe"):
+            elif not self._remote and hasattr(self.asr, "batch_transcribe"):
                 segments = self._transcribe_batched(
                     chunks, total_chunks, language, cancelled, progress_callback,
                 )
@@ -151,6 +152,9 @@ class ASRPipeline:
                 segments = self._transcribe_sequential(
                     chunks, total_chunks, language, cancelled, progress_callback,
                 )
+
+            if self._remote:
+                language = next((s["language"] for s in segments if s.get("language")), language)
 
             # 词级时间戳降级：请求 with_words=false 时剥离 ASR 已产出的 words
             if not with_words:
@@ -375,6 +379,8 @@ class ASRPipeline:
                     audio_path=chunk_info["path"],
                     language=language,
                 )
+                if self._remote and cancelled and cancelled():
+                    break
                 text = self._extract_text(results)
                 words = self._extract_words(results, chunk_info["offset_sec"])
 
@@ -383,6 +389,9 @@ class ASRPipeline:
                     "end": chunk_info["offset_sec"] + chunk_info["duration_sec"],
                     "text": text,
                 }
+                if self._remote and results:
+                    # S3-01：统一块结果提供 language 后，移除对单项 Qwen 包装的读取。
+                    segment["language"] = results[0].language
                 if self.asr.align_enabled and words:
                     segment["words"] = words
                 if chunk_info.get("split_after"):
@@ -391,6 +400,8 @@ class ASRPipeline:
                 if text.strip():
                     segments.append(segment)
             except Exception as e:
+                if self._remote:
+                    raise
                 logger.error(f"chunk {i} 识别失败: {e}")
                 segments.append({
                     "start": chunk_info["offset_sec"],
