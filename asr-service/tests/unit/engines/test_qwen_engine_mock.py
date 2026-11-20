@@ -177,3 +177,15 @@ def test_load_passes_configured_asr_batch_size(mocker):
 def test_engine_rejects_non_positive_asr_batch_size(value):
     with pytest.raises(ValueError, match="asr_batch_size 必须为正整数"):
         QwenASREngine(device="cpu", enable_align=False, asr_batch_size=value)
+
+
+@pytest.mark.parametrize("batch", [False, True])
+def test_request_without_words_skips_loaded_aligner(batch):
+    eng = QwenASREngine(enable_align=True)
+    eng._model = MagicMock()
+    eng._model.transcribe.return_value = [SimpleNamespace(text="", language=None, time_stamps=None)]
+    audio = ["chunk.wav"] if batch else "chunk.wav"
+    transcribe = eng.batch_transcribe if batch else eng.transcribe
+    transcribe(audio, with_words=False)
+    eng._model.transcribe.assert_called_once_with(
+        audio=audio, language=None, return_time_stamps=False)

@@ -8,8 +8,9 @@ from fastapi.testclient import TestClient
 from .test_main_serve_mode import _mock_standard_engines, isolated_create_app
 
 
-@pytest.mark.parametrize("device", ["cuda", "cpu"])
-def test_remote_assembly_and_transcription(isolated_create_app, monkeypatch, tmp_path, caplog, device):
+@pytest.mark.parametrize(("device", "align"), [("cuda", False), ("cpu", False),
+                                               ("cpu", True), ("cuda", "failure")])
+def test_remote_assembly_and_transcription(isolated_create_app, monkeypatch, tmp_path, caplog, device, align):
     import app.main as main
 
     _mock_standard_engines(monkeypatch)
@@ -20,6 +21,13 @@ def test_remote_assembly_and_transcription(isolated_create_app, monkeypatch, tmp
     for path in ("app.engines.qwen_asr_engine.ensure_model",
                  "app.utils.openvino_model_downloader.ensure_openvino_model"):
         monkeypatch.setattr(path, lambda *a, **kw: pytest.fail("local ASR download"))
+    loads = []
+    def load_alignment(where):
+        loads.append(where)
+        if align == "failure":
+            raise RuntimeError("failed")
+        return object()
+    monkeypatch.setattr("app.engines.forced_alignment.ForcedAlignment.load", load_alignment)
     engine = {}
     def capture_pipeline(**kwargs):
         engine.update(kwargs)
@@ -48,7 +56,8 @@ def test_remote_assembly_and_transcription(isolated_create_app, monkeypatch, tmp
     args = main.parse_args(["--no-config", "--serve-mode", "remote", "--remote-base-url",
                             "http://upstream/v1/", "--remote-model", "qwen3-asr",
                             "--remote-api-key", "outbound-secret", "--remote-timeout", "3",
-                            "--enable-stream", "--web", "--no-punc", "--enable-openai-api"])
+                            "--enable-stream", "--web", "--no-punc", "--enable-openai-api"]
+                           + (["--remote-enable-align"] if align else []))
     monkeypatch.setattr(main.cfg, "ENABLE_WEB", False)
     monkeypatch.setattr(main, "setup_logger", lambda: None)
     monkeypatch.setattr(main.cfg, "ENABLE_OPENAI_API", False)
@@ -57,7 +66,9 @@ def test_remote_assembly_and_transcription(isolated_create_app, monkeypatch, tmp
     client = TestClient(app)
     health = client.get("/v2/health").json()
     assert health["mode"] == health["asr_backend"] == "remote"
-    assert health["align_enabled"] is False
+    assert health["align_enabled"] is (align is True)
+    assert bool(engine["aligner"]) == (align is True)
+    assert loads == (["cuda:0" if device == "cuda" else "cpu"] if align else [])
     capabilities = client.get("/v1/capabilities").json()
     assert capabilities["mode"] == "remote" and capabilities["offline_api"]
     assert capabilities["stream"]["enabled"] is False

@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import soundfile as sf
 
+from app.engines.forced_alignment import resolve_words, valid_words
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
 from app.pipeline.sentence_segmenter import segment_sentences
 from app.utils.result_parser import extract_words
@@ -22,10 +23,11 @@ class ASRPipeline:
         speaker_service=None,
         tagger=None,
         scene_map=None,
-        *, work_dir=None, settings=cfg,
+        *, work_dir=None, settings=cfg, aligner=None,
     ):
         self.work_dir = work_dir
         self.settings = settings
+        self.aligner = aligner
         self.asr = asr_engine
         self._remote = getattr(asr_engine, "is_remote", False) is True
         self.vad = vad_engine
@@ -70,10 +72,11 @@ class ASRPipeline:
         id_margin = opts.get("speaker_id_margin")
         return_speaker_id = bool(opts.get("return_speaker_id", False))
         # 合法但功能未启用的参数 → 软提示（不报错），随 result 返回
+        align_enabled = self.asr.capabilities.word_timestamps or self.aligner is not None
         warnings = []
         if opts.get("with_punc") is True and self.punc is None:
             warnings.append("with_punc")
-        if opts.get("with_words") is True and not self.asr.capabilities.word_timestamps:
+        if opts.get("with_words") is True and not align_enabled:
             warnings.append("with_words")
         if opts.get("diarize") is True and self.speaker is None:
             warnings.append("diarize")
@@ -115,7 +118,7 @@ class ASRPipeline:
                     "segments": [],
                     "full_text": "",
                     "language": language,
-                    "align_enabled": self.asr.capabilities.word_timestamps,
+                    "align_enabled": align_enabled,
                     "punc_enabled": self.punc is not None,
                 }
                 if self.speaker is not None and diarize:
@@ -136,20 +139,12 @@ class ASRPipeline:
                 logger.info("[Pipeline] 任务已取消，跳过 ASR 识别")
             elif self.asr.capabilities.batch:
                 segments = self._transcribe_batched(
-                    chunks, total_chunks, language, cancelled, progress_callback,
+                    chunks, total_chunks, language, cancelled, progress_callback, with_words,
                 )
             else:
                 segments = self._transcribe_sequential(
-                    chunks, total_chunks, language, cancelled, progress_callback,
+                    chunks, total_chunks, language, cancelled, progress_callback, with_words,
                 )
-
-            if self._remote:
-                language = next((s["language"] for s in segments if s.get("language")), language)
-
-            # 词级时间戳降级：请求 with_words=false 时剥离 ASR 已产出的 words
-            if not with_words:
-                for seg in segments:
-                    seg.pop("words", None)
 
             # 4. 标点恢复（可选）
             if self.punc and with_punc:
@@ -164,6 +159,22 @@ class ASRPipeline:
                         except Exception as e:
                             logger.warning(f"标点恢复失败，使用原始文本: {e}")
                 logger.info(f"[Pipeline] 标点恢复完成: {punc_count}/{len(segments)} 个段落有变化")
+
+            if with_words and align_enabled:
+                paths = {chunk["offset_sec"]: chunk["path"] for chunk in chunks}
+                for seg in segments:
+                    if seg["text"] == "[识别失败]":
+                        continue
+                    words = resolve_words(
+                        seg["text"], seg.pop("words", None), seg["start"], seg["end"],
+                        self.aligner, paths[seg["start"]], seg.get("language") or language)
+                    if words:
+                        seg["words"] = words
+                    elif "with_words" not in warnings:
+                        warnings.append("with_words")
+
+            if self._remote:
+                language = next((s["language"] for s in segments if s.get("language")), language)
 
             # 4.5 说话人分离（可选；容错：失败只丢标签，不破坏转写）。
             #     先在全局 VAD 时间轴聚类，给每个 ASR 处理块打 speaker——供 4.6 分句
@@ -190,6 +201,13 @@ class ASRPipeline:
             segments = segment_sentences(
                 segments, max_segment=max_segment, long_pause_ms=self.settings.SENTENCE_LONG_PAUSE_MS,
                 short_pause_ms=self.settings.SENTENCE_SHORT_PAUSE_MS)
+
+            for seg in segments:
+                if seg.get("words") and not valid_words(
+                        seg["text"], seg["words"], seg["start"], seg["end"]):
+                    del seg["words"]
+                    if "with_words" not in warnings:
+                        warnings.append("with_words")
 
             # 4.7 句子级说话人标签精修 + 声纹识别/自动登记（可选）
             if diar is not None:
@@ -247,7 +265,7 @@ class ASRPipeline:
                 "segments": segments,
                 "full_text": full_text,
                 "language": language,
-                "align_enabled": self.asr.capabilities.word_timestamps,
+                "align_enabled": align_enabled,
                 "punc_enabled": self.punc is not None,
             }
             if speakers_result is not None:
@@ -265,6 +283,7 @@ class ASRPipeline:
         language: str | None,
         cancelled,
         progress_callback,
+        with_words=True,
     ) -> list[dict]:
         """按 batch 分批调用 ASR 推理，每批之间更新进度和检查取消"""
         batch_size = getattr(self.asr, "batch_size", None) or self.settings.ASR_BATCH_SIZE
@@ -275,6 +294,7 @@ class ASRPipeline:
             f"[Pipeline] ASR 批量处理: {total_chunks} 个 chunk, batch_size={batch_size}"
         )
 
+        word_options = {"with_words": with_words} if self.asr.capabilities.word_timestamps else {}
         for batch_start in range(0, total_chunks, batch_size):
             if cancelled and cancelled():
                 logger.info(
@@ -295,12 +315,13 @@ class ASRPipeline:
                 batch_results = self.asr.batch_transcribe(
                     audio_paths=batch_paths,
                     language=language,
+                    **word_options,
                 )
             except Exception as e:
                 logger.error(f"批次推理失败，回退到逐条处理: {e}")
                 fallback = self._transcribe_sequential(
                     chunks[batch_start:], total_chunks, language,
-                    cancelled, progress_callback,
+                    cancelled, progress_callback, with_words,
                 )
                 segments.extend(fallback)
                 break
@@ -312,21 +333,22 @@ class ASRPipeline:
                 )
                 fallback = self._transcribe_sequential(
                     chunks[batch_start:], total_chunks, language,
-                    cancelled, progress_callback,
+                    cancelled, progress_callback, with_words,
                 )
                 segments.extend(fallback)
                 break
 
             for chunk_info, result in zip(batch_chunks, batch_results):
                 text = result.text
-                words = extract_words(result, chunk_info["offset_sec"])
+                words = extract_words(result, chunk_info["offset_sec"]) if word_options.get("with_words") else None
 
                 segment = {
                     "start": chunk_info["offset_sec"],
                     "end": chunk_info["offset_sec"] + chunk_info["duration_sec"],
                     "text": text,
+                    "language": result.language,
                 }
-                if self.asr.capabilities.word_timestamps and words:
+                if words:
                     segment["words"] = words
                 if chunk_info.get("split_after"):
                     segment["split_after"] = True
@@ -349,9 +371,11 @@ class ASRPipeline:
         language: str | None,
         cancelled,
         progress_callback,
+        with_words=True,
     ) -> list[dict]:
         """逐 chunk 串行 ASR 识别（fallback 路径）"""
         segments = []
+        word_options = {"with_words": with_words} if self.asr.capabilities.word_timestamps else {}
         for i, chunk_info in enumerate(chunks):
             if cancelled and cancelled():
                 logger.info(f"[Pipeline] 任务已取消，已完成 {i}/{total_chunks} 个 chunk")
@@ -366,20 +390,20 @@ class ASRPipeline:
                 results = self.asr.transcribe(
                     audio_path=chunk_info["path"],
                     language=language,
+                    **word_options,
                 )
                 if self._remote and cancelled and cancelled():
                     break
                 text = results.text
-                words = extract_words(results, chunk_info["offset_sec"])
+                words = extract_words(results, chunk_info["offset_sec"]) if word_options.get("with_words") else None
 
                 segment = {
                     "start": chunk_info["offset_sec"],
                     "end": chunk_info["offset_sec"] + chunk_info["duration_sec"],
                     "text": text,
+                    "language": results.language,
                 }
-                if self._remote:
-                    segment["language"] = results.language
-                if self.asr.capabilities.word_timestamps and words:
+                if words:
                     segment["words"] = words
                 if chunk_info.get("split_after"):
                     segment["split_after"] = True

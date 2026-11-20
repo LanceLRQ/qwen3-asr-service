@@ -81,6 +81,7 @@ class QwenASREngine:
         self,
         audio_path: str,
         language: str | None = None,
+        with_words: bool = True,
     ) -> ASRResult:
         """
         对单个音频执行 ASR 识别。
@@ -92,17 +93,23 @@ class QwenASREngine:
             raise RuntimeError("ASR 模型未加载，请先调用 load()")
 
         with self._infer_lock:
-            results = self._model.transcribe(
-                audio=audio_path,
-                language=language,
-                return_time_stamps=self._enable_align,
-            )
+            want_words = self._enable_align and with_words
+            try:
+                results = self._model.transcribe(
+                    audio=audio_path, language=language, return_time_stamps=want_words)
+            except Exception:
+                if not want_words:
+                    raise
+                logger.warning("含时间戳的转写失败，尝试仅转写")
+                results = self._model.transcribe(
+                    audio=audio_path, language=language, return_time_stamps=False)
         return from_qwen(results, audio_path)
 
     def batch_transcribe(
         self,
         audio_paths: list[str],
         language: str | None = None,
+        with_words: bool = True,
     ) -> list[ASRResult]:
         """
         批量音频 ASR 识别，利用 Qwen3ASRModel 内部按 max_inference_batch_size 分批并行推理。
@@ -124,9 +131,14 @@ class QwenASREngine:
             results = self._model.transcribe(
                 audio=audio_paths,
                 language=language,
-                return_time_stamps=self._enable_align,
+                return_time_stamps=self._enable_align and with_words,
             )
         return [from_qwen([item], path) for item, path in zip(results, audio_paths, strict=True)]
+
+    @property
+    def aligner(self):
+        from app.engines.forced_alignment import ForcedAlignment
+        return ForcedAlignment(self._model.forced_aligner, self._infer_lock) if self._enable_align else None
 
     def transcribe_array(
         self,

@@ -10,6 +10,7 @@ serve_mode: standard        # standard | remote（远端离线） | vllm（vllm=
 # remote_model: qwen3-asr
 # remote_api_key: ""        # 可通过环境变量 ASR_REMOTE_API_KEY 提供
 # remote_timeout: 60.0
+# remote_enable_align: false # 开启后仅加载本地对齐模型，按音频块对齐远端返回的文本
 
 device: auto                # auto | cuda | cpu（auto 自动检测：有 GPU 用 cuda，否则回退 cpu）
 model_size: 0.6b            # 0.6b | 1.7b（删除本行 = 按显存自动选择）

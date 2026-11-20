@@ -19,6 +19,7 @@ import re
 
 from app import config as cfg
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
+from app.engines.forced_alignment import MAX_ALIGNMENT_SECONDS, resolve_words, valid_words
 from app.utils.result_parser import extract_words
 
 logger = logging.getLogger(__name__)
@@ -70,8 +71,24 @@ def run_vllm_offline(engine, audio_path, *, language=None, options=None, identif
             engine, wav_path, duration, language, want_words, progress_callback, cancelled, settings)
         if transcribed is None:                       # 转写途中取消
             return _result([], "", language, engine, warnings)
-        full_text, words = transcribed
-        segments = _segment(full_text, words, duration, max_segment, settings)
+        full_text = "".join(chunk["text"] for chunk in transcribed).strip()
+        if want_words and any(c["text"].strip() and not c["words"] for c in transcribed):
+            warnings.append("with_words")
+            segments = []
+            for c in transcribed:
+                if c["words"]:
+                    segments.extend(_segment(c["text"], c["words"], duration, max_segment, settings))
+                elif c["text"].strip():
+                    segments.append({k: c[k] for k in ("start", "end", "text")})
+        else:
+            words = [w for c in transcribed for w in c["words"] or ()]
+            segments = _segment(full_text, words, duration, max_segment, settings)
+        for seg in segments:
+            if seg.get("words") and not valid_words(
+                    seg["text"], seg["words"], seg["start"], seg["end"]):
+                del seg["words"]
+                if "with_words" not in warnings:
+                    warnings.append("with_words")
 
         # 说话人分离/识别（可选；容错——失败只丢标签，不破坏转写）
         speakers = None
@@ -94,7 +111,7 @@ def _transcribe_progressive(engine, wav_path, duration, language, want_words,
                             progress_callback, cancelled, settings):
     """长音频按静音切块逐块转写，转写阶段 0.1→0.85 逐块报进度、块间查取消。
 
-    返回 (full_text, words) ；途中取消返回 None。短音频（≤VLLM_OFFLINE_CHUNK_SEC）整段
+    返回带绝对时间的识别块；途中取消返回 None。短音频（≤VLLM_OFFLINE_CHUNK_SEC）整段
     单块直转（行为不变）。切块经 engine.split_chunks（qwen_asr 同款静音切块，块拼接=原音频）
     →与整段转写质量一致，且每次只对齐一块、峰值显存随块走。词时间戳按块 offset 归到绝对时间。
     """
@@ -104,26 +121,41 @@ def _transcribe_progressive(engine, wav_path, duration, language, want_words,
     if wav.ndim > 1:                                  # 兜底：多声道取均值（阶段0已单声道）
         wav = wav.mean(axis=1)
 
+    if want_words:
+        chunk_sec = min(chunk_sec, MAX_ALIGNMENT_SECONDS)
     if duration <= chunk_sec:
         chunks = [(wav, 0.0)]
     else:
-        chunks = engine.split_chunks(wav, sr, chunk_sec) or [(wav, 0.0)]
+        chunks = engine.split_chunks(wav, sr, chunk_sec)
+        if not chunks:
+            size = int(chunk_sec * sr)
+            chunks = [(wav[i:i + size], i / sr) for i in range(0, len(wav), size)]
 
     total = len(chunks)
     span = _PROGRESS_TRANSCRIBE_HI - _PROGRESS_TRANSCRIBE_LO
-    texts, words = [], []
+    transcribed = []
     for i, (cwav, offset) in enumerate(chunks):
         if cancelled and cancelled():
             return None
-        results = engine.transcribe((cwav, sr), language=language, with_words=want_words, chunk_id=str(i))
-        texts.append(results.text)
+        audio = (cwav, sr)
+        try:
+            results = engine.transcribe(audio, language=language, with_words=want_words, chunk_id=str(i))
+        except Exception:
+            if not want_words:
+                raise
+            logger.warning("含时间戳的转写失败，尝试仅转写")
+            results = engine.transcribe(audio, language=language, with_words=False, chunk_id=str(i))
+        text = results.text
+        next_offset = chunks[i + 1][1] if i + 1 < total else len(wav) / sr
+        end = min(float(offset) + len(cwav) / sr, next_offset, duration)
+        words = None
         if want_words:
-            w = extract_words(results, float(offset))
-            if w:
-                words.extend(w)
+            words = resolve_words(text, extract_words(results, float(offset)), float(offset),
+                                  end, getattr(engine, "aligner", None), audio, results.language or language)
+        transcribed.append({"text": text, "start": float(offset), "end": end, "words": words})
         if progress_callback:
             progress_callback(round(_PROGRESS_TRANSCRIBE_LO + span * (i + 1) / total, 3))
-    return "".join(texts).strip(), (words or None)
+    return transcribed
 
 
 def _collect_warnings(engine, opts: dict, identify_speakers: bool, *,
@@ -266,6 +298,8 @@ def _segment(full_text: str, words, duration: float, max_segment, settings=cfg) 
             if segments:
                 segments[-1]["text"] += text
             continue
+        if not segments:
+            text = full_text[:c1]  # 首个有词片段同时保留开头的标点和空白
         start = min(w["start"] for w in sw)
         end = max(w["end"] for w in sw)                  # min/max 保证 end>=start
         if max_seg and end - start > max_seg * _DURATION_CLAMP_FACTOR:

@@ -78,3 +78,34 @@ def test_remote_cancel_during_request(remote_pipe, make_wav):
                              cancelled=lambda: remote_pipe.asr.transcribe.called)
     remote_pipe.asr.transcribe.assert_called_once()
     assert result["segments"] == []
+
+
+def test_remote_aligns_final_text_on_each_chunk(remote_pipe, make_wav):
+    import soundfile as sf
+
+    seen = []
+
+    def align(path, text, language):
+        assert sf.info(path).duration == 1
+        seen.append((text, language))
+        return [{"text": text.rstrip("。"), "start": 0.1, "end": 0.8}]
+
+    remote_pipe.aligner = SimpleNamespace(align=align)
+    remote_pipe.punc = SimpleNamespace(restore=lambda s: s.replace("句", "段"))
+    result = remote_pipe.run(make_wav(4), language="Chinese")
+    assert result["align_enabled"]
+    assert seen == [("第一段。", "Chinese"), ("第二段。", "Chinese")]
+    assert [s["words"][0]["start"] for s in result["segments"]] == [0.6, 2.6]
+    assert "warnings" not in result
+
+
+@pytest.mark.parametrize("requested", [False, True])
+def test_remote_aligner_failure_and_request_opt_out(remote_pipe, make_wav, requested):
+    align = Mock(side_effect=ValueError("unsupported language"))
+    remote_pipe.aligner = SimpleNamespace(align=align)
+    result = remote_pipe.run(make_wav(4), options={"with_words": requested})
+    assert result["full_text"] == "第一句。第二句。"
+    assert result["align_enabled"]
+    assert all("words" not in seg for seg in result["segments"])
+    assert result.get("warnings", []) == (["with_words"] if requested else [])
+    assert align.call_count == (2 if requested else 0)

@@ -15,6 +15,7 @@ LEGACY_DEFAULTS = {
     "remote_model": "qwen3-asr",
     "remote_api_key": None,
     "remote_timeout": 60.0,
+    "remote_enable_align": False,
     "device": "auto",
     "model_size": None,
     "enable_align": True,

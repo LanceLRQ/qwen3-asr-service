@@ -141,6 +141,11 @@ class VLLMASREngine:
                 audio=audio, language=language, return_time_stamps=want_ts)
         return from_qwen(results, audio if isinstance(audio, str) and chunk_id is None else chunk_id)
 
+    @property
+    def aligner(self):
+        from app.engines.forced_alignment import ForcedAlignment
+        return ForcedAlignment(self._model.forced_aligner, self._infer_lock) if self._enable_align else None
+
     def split_chunks(self, wav, sr, chunk_sec):
         """按低能量（静音）边界把长音频切块，返回 [(chunk_wav, offset_sec)]。
 

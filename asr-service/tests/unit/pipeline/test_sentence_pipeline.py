@@ -47,3 +47,31 @@ def test_long_chunk_not_cut_by_duration_default(run_env, tmp_path):
     result = pipe.run(str(tmp_path / "a.mp3"))
     assert len(result["segments"]) == 1
     assert result["segments"][0]["text"] == "这是一句没有句末标点的较长句子"
+
+
+@pytest.mark.parametrize("batch", [False, True])
+@pytest.mark.parametrize("requested", [False, True])
+def test_local_words_use_backend_once_after_punctuation(run_env, batch, requested):
+    from unittest.mock import Mock
+    from app.engines.asr_result import WordTime
+
+    native = ASRResult("你好", "Chinese", (WordTime("你好", 0.2, 0.5),))
+    engine = types.SimpleNamespace(
+        capabilities=BackendCapabilities(word_timestamps=True, batch=batch),
+        batch_transcribe=Mock(return_value=[native]),
+        transcribe=Mock(return_value=native))
+    aligner = Mock()
+    pipe = ASRPipeline(engine, types.SimpleNamespace(detect=lambda _: [(1000, 3000)]),
+                       types.SimpleNamespace(restore=lambda text: text + "。"),
+                       aligner=aligner, work_dir=run_env)
+    result = pipe.run("input.wav", options={"with_words": requested})
+    assert result["align_enabled"] and "warnings" not in result
+    segment, = result["segments"]
+    assert segment["text"] == "你好。"
+    if requested:
+        assert segment["words"] == [{"text": "你好", "start": 1.2, "end": 1.5}]
+    else:
+        assert "words" not in segment
+    method = engine.batch_transcribe if batch else engine.transcribe
+    assert method.call_args.kwargs["with_words"] is requested
+    aligner.align.assert_not_called()

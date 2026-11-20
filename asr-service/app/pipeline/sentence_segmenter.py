@@ -66,6 +66,9 @@ def segment_sentences(chunks, *, max_segment=None,
 
     def append_piece(piece, hard_after):
         nonlocal buf
+        # 局部对齐失败时将缺词片段单独输出，保留相邻片段的有效词时间。
+        if buf is not None and bool(buf["words"]) != bool(piece["words"]):
+            flush()
         if buf is None:
             buf = {
                 "text": piece["text"],
@@ -77,8 +80,6 @@ def segment_sentences(chunks, *, max_segment=None,
         else:
             buf["text"] += piece["text"]
             if piece["words"]:
-                if buf["words"] is None:
-                    buf["words"] = []
                 buf["words"].extend(piece["words"])
             buf["end"] = max(buf["end"], piece["end"])
         if hard_after:

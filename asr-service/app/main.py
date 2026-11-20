@@ -346,7 +346,16 @@ def _assemble_standard(app: FastAPI, args) -> None:
         sys.exit(1)
 
     # 更新对齐状态（可能在加载时降级）
-    enable_align = asr_engine.align_enabled
+    aligner = None
+    if remote and getattr(args, "remote_enable_align", False):
+        from app.engines.forced_alignment import ForcedAlignment
+        try:
+            aligner = ForcedAlignment.load(device_map)
+        except Exception as e:
+            logger.warning("独立对齐器加载失败，降级为仅转写: %s", e)
+    elif asr_backend == "qwen_asr":
+        aligner = getattr(asr_engine, "aligner", None)
+    enable_align = asr_engine.capabilities.word_timestamps or aligner is not None
 
     # 标点引擎（可选）
     punc_engine = None
@@ -440,6 +449,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
     # 创建 Pipeline
     pipeline = ASRPipeline(
         asr_engine=asr_engine,
+        aligner=aligner,
         vad_engine=vad_engine,
         punc_engine=punc_engine,
         speaker_engine=speaker_engine,
@@ -823,7 +833,7 @@ def _assemble_vllm(app: FastAPI, args) -> None:
         "mode": "vllm",
         "device": device,
         "model_size": model_size,
-        "align_enabled": engine.align_enabled,
+        "align_enabled": engine.capabilities.word_timestamps,
         "punc_enabled": True,        # 模型原生标点（恒有，不可单独关；详见能力对照文档）
         "speaker_enabled": speaker_enabled,
         "speaker_db_enabled": speaker_db_enabled,

@@ -55,6 +55,11 @@ ARG_SPECS = (
             help="上游模型别名", help_en="Upstream model ID"),
     ArgSpec("remote_api_key", ("--remote-api-key",), group="远端 ASR",
             help="上游 Bearer 密钥", help_en="Upstream bearer token"),
+    ArgSpec("remote_enable_align", ("--remote-enable-align",), type=bool, default=False,
+            group="远端 ASR", help="远端转写后用本地模型对齐",
+            help_en="Align remote transcripts with the local forced aligner",
+            negative_flags=("--no-remote-align",), negative_help="关闭远端转写对齐",
+            negative_help_en="Disable local alignment of remote transcripts"),
     ArgSpec("remote_timeout", ("--remote-timeout",), default=cfg.REMOTE_TIMEOUT, type=float,
             group="远端 ASR", help="上游 HTTP 超时（秒）", help_en="HTTP timeout in seconds"),
     ArgSpec(

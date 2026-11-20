@@ -256,3 +256,15 @@ def test_english_single_letter_sentence_end_splits():
     # 修复 #6：真实单字母句末（Plan A.）应正常切句
     segs = segment_sentences([{"start": 0.0, "end": 4.0, "text": "Plan A. Then go."}])
     assert [s["text"] for s in segs] == ["Plan A.", " Then go."]
+
+
+def test_adjacent_chunks_keep_partial_alignment_local():
+    chunks = [
+        {"text": "你好", "start": 0.0, "end": 1.0,
+         "words": [{"text": "你好", "start": 0.0, "end": 1.0}]},
+        {"text": "世界", "start": 1.0, "end": 2.0},
+    ]
+    segments = segment_sentences(chunks)
+    assert [s["text"] for s in segments] == ["你好", "世界"]
+    assert segments[0]["words"] == chunks[0]["words"]
+    assert "words" not in segments[1]

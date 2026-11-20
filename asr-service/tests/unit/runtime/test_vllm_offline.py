@@ -369,3 +369,35 @@ def test_run_transcribe_progressive_cancel_midway(monkeypatch, tmp_path):
 
     assert r["full_text"] == "" and r["segments"] == []
     assert len(eng.transcribe_calls) == 1                        # 只转写首块即被取消
+
+
+def test_partial_alignment_keeps_text_and_other_chunks(monkeypatch, tmp_path):
+    _prog_patch(monkeypatch, tmp_path, duration=400.0)
+    eng = _Engine(chunk_results=[
+        _trans("第一。", [("旧词", 0, 0.4)]),
+        _trans("第二。", [("第二", 0, 0.4)])])
+    r = vo.run_vllm_offline(eng, "/x.wav")
+    assert r["warnings"] == ["with_words"]
+    assert r["full_text"] == "第一。第二。"
+    first, second = r["segments"]
+    assert "words" not in first
+    assert second["words"] == [{"text": "第二", "start": 3.0, "end": 3.4}]
+
+
+def test_timestamp_inference_failure_retries_text_only(patched):
+    from unittest.mock import Mock
+
+    eng = _Engine()
+    eng.transcribe = Mock(side_effect=[ValueError("alignment failed"), _trans("保留文本")])
+    r = vo.run_vllm_offline(eng, "/x.wav")
+    assert [c.kwargs["with_words"] for c in eng.transcribe.call_args_list] == [True, False]
+    assert r["full_text"] == "保留文本"
+    assert r["warnings"] == ["with_words"]
+    assert "words" not in r["segments"][0]
+
+
+def test_segments_preserve_leading_punctuation_with_verified_words(patched):
+    eng = _Engine(result=_trans("！你好。", [("你好", 0, 0.4)]))
+    r = vo.run_vllm_offline(eng, "/x.wav")
+    assert r["segments"][0]["text"] == r["full_text"] == "！你好。"
+    assert r["segments"][0]["words"] == [{"text": "你好", "start": 0, "end": 0.4}]

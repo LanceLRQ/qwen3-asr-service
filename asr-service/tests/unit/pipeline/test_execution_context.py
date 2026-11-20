@@ -29,7 +29,7 @@ def test_input_and_workspace_ownership(mode, outcome, monkeypatch, tmp_path):
 
     monkeypatch.setattr(module, "convert_to_wav", convert)
     monkeypatch.setattr(module, "get_audio_duration", lambda path: 2)
-    monkeypatch.setattr(vllm_offline, "_transcribe_progressive", lambda *args: ("ok", None))
+    monkeypatch.setattr(vllm_offline, "_transcribe_progressive", lambda *args: [])
     if mode == "standard":
         vad = Mock(detect=Mock(return_value=[(0, 1000)] if outcome == "cancel" else []))
         pipeline = asr_pipeline.ASRPipeline(engine, vad, work_dir=tmp_path)
