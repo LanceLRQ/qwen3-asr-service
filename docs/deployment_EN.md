@@ -4,6 +4,10 @@
 
 For an independently deployed Qwen3-ASR HTTP server, see the [remote offline deployment and validation guide](baselines/s2-remote/README.md).
 
+To enable whole-utterance realtime on the same remote deployment, add `--enable-stream` and the client’s compatibility flag (`--enable-openai-api` or `--enable-dashscope-api`). Local VAD segments the audio before each upstream transcription. Send the protocol’s stop signal to receive the last utterance.
+
+In remote mode, word alignment and speaker labels apply to offline jobs. Inspect the `stream` object in `GET /v2/capabilities` for realtime features. See the [realtime measurements](baselines/s4-realtime/README.md) and the [PocketSphinx offline example](baselines/s4-second-model/README.md).
+
 ## Table of Contents
 
 - [System Requirements](#system-requirements)

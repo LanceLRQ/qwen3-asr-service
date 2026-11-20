@@ -45,9 +45,9 @@ ARG_SPECS = (
         key="serve_mode", flags=("--serve-mode",), default="standard",
         choices=("standard", "vllm", "remote"), group="服务",
         help="服务运行模式：standard=transformers/OpenVINO 离线+实时(路线B)；"
-             "remote=远端离线；vllm=vLLM 原生流式(Phase 3) (default: standard)",
+             "remote=远端转写（离线、整句实时）；vllm=vLLM 原生流式(Phase 3) (default: standard)",
         help_en="Service run mode: standard=transformers/OpenVINO offline+realtime "
-                "(route B); remote=remote offline; vllm=vLLM native streaming (Phase 3) (default: standard)",
+                "(route B); remote=remote offline and whole-utterance realtime; vllm=vLLM native streaming (Phase 3) (default: standard)",
     ),
     ArgSpec("remote_base_url", ("--remote-base-url",), group="远端 ASR",
             help="上游 API 基址（含 /v1）", help_en="Upstream API base URL including /v1"),
@@ -142,9 +142,9 @@ ARG_SPECS = (
     ArgSpec(
         key="enable_stream", flags=("--enable-stream",), default=False, type=bool,
         group="实时转写",
-        help="挂载实时转写端点 WS /v2/asr/stream（路线B，standard 模式）",
+        help="挂载实时转写端点 WS /v2/asr/stream（standard 和 remote 模式）",
         help_en="Mount realtime transcription endpoint WS /v2/asr/stream "
-                "(route B, standard mode)",
+                "(standard and remote modes)",
         negative_flags=("--no-stream",), negative_help="不挂载实时转写端点（覆盖配置文件）",
         negative_help_en="Do not mount the realtime endpoint (overrides config file)",
     ),

@@ -5,7 +5,7 @@
 # 优先级：命令行显式参数 > 本文件 > 环境变量 > 内置默认值；--no-config 可完全跳过本文件。
 # 注意：真实配置 config.yaml 可能含 api_key，已加入 .gitignore 请勿提交，建议 chmod 600 config.yaml。
 
-serve_mode: standard        # standard | remote（远端离线） | vllm（vllm=vLLM 原生流式，GPU 专用，含 partial→final；调优见下方 vLLM 段）
+serve_mode: standard        # standard | remote（远端转写，可开整句实时） | vllm（vllm=vLLM 原生流式，GPU 专用，含 partial→final；调优见下方 vLLM 段）
 # remote_base_url: http://127.0.0.1:18764/v1
 # remote_model: qwen3-asr
 # remote_api_key: ""        # 可通过环境变量 ASR_REMOTE_API_KEY 提供
@@ -27,7 +27,7 @@ asr_batch_size: 32          # 离线推理每批 chunk 数（亦影响 CPU/OpenV
 # max_queue_size: 100       # 任务队列最大长度
 
 # ── 实时转写 ──
-enable_stream: true         # WS /v2/asr/stream（standard 模式）
+enable_stream: true         # WS /v2/asr/stream（standard 和 remote 模式）
 # max_stream_sessions: 16   # 实时最大并发会话数
 # stream_asr_concurrency: 1 # 实时 ASR 解码并发上限（模型层有推理锁，>1 无收益）
 

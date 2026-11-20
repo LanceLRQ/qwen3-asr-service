@@ -4,6 +4,10 @@
 
 接入独立部署的 Qwen3-ASR HTTP 服务，见[远端离线部署与验证](baselines/s2-remote/README.md)。
 
+远端整句实时可复用同一配置，在服务启动命令后加 `--enable-stream`，按客户端需要添加 `--enable-openai-api` 或 `--enable-dashscope-api`。本地 VAD 切出语音段后，上游逐段转写。客户端在结束时发送协议规定的结束信号以接收尾句。
+
+远端整句模式的词级对齐和说话人标注仅用于离线任务；实时会话的能力见 `GET /v2/capabilities` 中的 `stream`。三种实时协议的延迟与断连实测见[实时验收](baselines/s4-realtime/README.md)。替换识别模型的配置和结果见 [PocketSphinx 英文离线验收](baselines/s4-second-model/README.md)。
+
 ## 目录
 
 - [系统要求](#系统要求)

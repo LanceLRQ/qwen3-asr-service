@@ -150,7 +150,7 @@ GET /v2/capabilities
 | speaker_identification | 声纹库真名识别是否可用（登记 / identify / 转写联动） |
 | audio_tagging | 音频标注是否启用（`--enable-audio-tagging`，决定 `POST /v2/audio/tag` 是否可用） |
 | scene | 场景识别是否启用（决定离线 `segments[].scene` 与实时 `scene` 消息是否产出） |
-| stream.enabled | 实时端点是否已挂载（standard 需 `--enable-stream`，vLLM 恒开） |
+| stream.enabled | 实时端点是否已挂载（standard 和 remote 需 `--enable-stream`，vLLM 恒开） |
 | stream.backend | `vad-offline` / `vllm-native` |
 | stream.partial_results | 是否产生中间结果 `partial`（vad-offline 后端为 false） |
 | stream.word_timestamps | `final` 是否带单词级时间戳（standard 随对齐开关，vLLM 为 false） |
