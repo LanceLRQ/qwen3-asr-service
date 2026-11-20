@@ -1,0 +1,56 @@
+{
+  "samples": {
+    "short": {
+      "audio_s": 3.925,
+      "processing_s": 0.3,
+      "rtf": 0.07643312101910828,
+      "queue_upper_bound_s": 0.002280798000128925,
+      "word_errors": 0,
+      "reference_words": 6,
+      "wer": 0.0,
+      "start_mae_to_clip_s": 0.22999999999999998,
+      "end_mae_to_clip_s": 0.17499999999999982
+    },
+    "dialogue": {
+      "audio_s": 9.765,
+      "processing_s": 0.5,
+      "rtf": 0.05120327700972862,
+      "queue_upper_bound_s": 0.002540467000017088,
+      "word_errors": 0,
+      "reference_words": 18,
+      "wer": 0.0,
+      "start_mae_to_clip_s": 0.19333333333333322,
+      "end_mae_to_clip_s": 0.18166666666666695
+    },
+    "silence": {
+      "audio_s": 5.0,
+      "processing_s": 0.1,
+      "rtf": 0.02,
+      "queue_upper_bound_s": 0.0022058960000777006,
+      "word_errors": 0,
+      "reference_words": 0,
+      "wer": null
+    },
+    "noise": {
+      "audio_s": 5.0,
+      "processing_s": 0.1,
+      "rtf": 0.02,
+      "queue_upper_bound_s": 0.001982345000214991,
+      "word_errors": 0,
+      "reference_words": 0,
+      "wer": null
+    },
+    "long": {
+      "audio_s": 88.65,
+      "processing_s": 2.2,
+      "rtf": 0.024816694867456288,
+      "queue_upper_bound_s": 0.00943869699995048,
+      "word_errors": 5,
+      "reference_words": 180,
+      "wer": 0.027777777777777776,
+      "start_mae_to_clip_s": 0.19416666666666543,
+      "end_mae_to_clip_s": 0.15416666666666734
+    }
+  },
+  "gpu_sampled_peak_mib": 6828
+}

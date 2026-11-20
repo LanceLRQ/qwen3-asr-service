@@ -1,0 +1,16 @@
+serve_mode: standard
+device: cuda
+model_size: 1.7b
+enable_align: true
+enable_speaker: true
+enable_speaker_db: false
+enable_task_store: false
+enable_audio_tagging: false
+use_punc: false
+max_segment: 5
+enable_stream: true
+enable_openai_api: true
+host: 127.0.0.1
+port: 18763
+web: true
+api_key: ""

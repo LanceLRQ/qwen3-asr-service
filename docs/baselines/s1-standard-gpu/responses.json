@@ -1,0 +1,1635 @@
+{
+  "health": {
+    "status": "ready",
+    "mode": "standard",
+    "device": "cuda",
+    "model_size": "1.7b",
+    "align_enabled": true,
+    "punc_enabled": false,
+    "speaker_enabled": true,
+    "speaker_db_enabled": false,
+    "audio_tagging_enabled": false,
+    "asr_backend": "qwen_asr",
+    "vad_backend": "pytorch",
+    "punc_backend": "disabled",
+    "config_file": "config.yaml",
+    "capabilities": {
+      "mode": "standard",
+      "offline_api": true,
+      "speaker_labels": true,
+      "speaker_identification": false,
+      "audio_tagging": false,
+      "scene": false,
+      "scene_preset": "balanced",
+      "scene_presets": [
+        "balanced",
+        "live",
+        "music"
+      ],
+      "stream": {
+        "enabled": true,
+        "backend": "vad-offline",
+        "path": "/v2/asr/stream",
+        "partial_results": false,
+        "word_timestamps": true,
+        "speaker_labels": true,
+        "scene": false
+      },
+      "defaults": {
+        "max_segment": 5,
+        "max_end_silence_ms": 800,
+        "max_segment_sec": 12,
+        "speaker_threshold": 0.5,
+        "speaker_min_seg_ms": 1500,
+        "speaker_max": 8,
+        "speaker_id_threshold": 0.45,
+        "speaker_id_margin": 0.1,
+        "energy_floor_dbfs": -50.0,
+        "snr_min_db": 6.0,
+        "audio_tagging_engine": "panns",
+        "audio_tagging_panns_variant": "16k"
+      },
+      "compat": {}
+    }
+  },
+  "capabilities": {
+    "mode": "standard",
+    "offline_api": true,
+    "speaker_labels": true,
+    "speaker_identification": false,
+    "audio_tagging": false,
+    "scene": false,
+    "scene_preset": "balanced",
+    "scene_presets": [
+      "balanced",
+      "live",
+      "music"
+    ],
+    "stream": {
+      "enabled": true,
+      "backend": "vad-offline",
+      "path": "/v2/asr/stream",
+      "partial_results": false,
+      "word_timestamps": true,
+      "speaker_labels": true,
+      "scene": false
+    },
+    "defaults": {
+      "max_segment": 5,
+      "max_end_silence_ms": 800,
+      "max_segment_sec": 12,
+      "speaker_threshold": 0.5,
+      "speaker_min_seg_ms": 1500,
+      "speaker_max": 8,
+      "speaker_id_threshold": 0.45,
+      "speaker_id_margin": 0.1,
+      "energy_floor_dbfs": -50.0,
+      "snr_min_db": 6.0,
+      "audio_tagging_engine": "panns",
+      "audio_tagging_panns_variant": "16k"
+    },
+    "compat": {}
+  },
+  "web_ui_status": 404,
+  "sync": {
+    "text": "The blue train leaves at noon."
+  },
+  "async": {
+    "short": {
+      "submitted": {
+        "task_id": "74eef3ec-5660-48f1-b975-6de02324ba8f"
+      },
+      "observed": [
+        {
+          "status": "processing",
+          "seconds": 0.002280798000128925
+        },
+        {
+          "status": "completed",
+          "seconds": 0.36322847800011004
+        }
+      ],
+      "terminal": {
+        "task_id": "74eef3ec-5660-48f1-b975-6de02324ba8f",
+        "status": "completed",
+        "progress": 1.0,
+        "result": {
+          "segments": [
+            {
+              "start": 1.23,
+              "end": 2.75,
+              "text": "The blue train leaves at noon.",
+              "words": [
+                {
+                  "text": "The",
+                  "start": 1.23,
+                  "end": 1.31
+                },
+                {
+                  "text": "blue",
+                  "start": 1.31,
+                  "end": 1.47
+                },
+                {
+                  "text": "train",
+                  "start": 1.55,
+                  "end": 1.87
+                },
+                {
+                  "text": "leaves",
+                  "start": 1.95,
+                  "end": 2.27
+                },
+                {
+                  "text": "at",
+                  "start": 2.27,
+                  "end": 2.43
+                },
+                {
+                  "text": "noon",
+                  "start": 2.43,
+                  "end": 2.75
+                }
+              ],
+              "speaker": "A"
+            }
+          ],
+          "full_text": "The blue train leaves at noon.",
+          "language": "English",
+          "align_enabled": true,
+          "punc_enabled": false,
+          "speakers": [
+            "A"
+          ]
+        },
+        "error": null,
+        "wav_name": "short.wav",
+        "created_at": "2026-11-20T16:31:33.502328",
+        "finished_at": "2026-11-20T16:31:33.851571"
+      }
+    },
+    "dialogue": {
+      "submitted": {
+        "task_id": "d9e4d49b-258f-4b2b-a5e0-576b5e24cc2c"
+      },
+      "observed": [
+        {
+          "status": "processing",
+          "seconds": 0.002540467000017088
+        },
+        {
+          "status": "completed",
+          "seconds": 0.5189098309999736
+        }
+      ],
+      "terminal": {
+        "task_id": "d9e4d49b-258f-4b2b-a5e0-576b5e24cc2c",
+        "status": "completed",
+        "progress": 1.0,
+        "result": {
+          "segments": [
+            {
+              "start": 1.23,
+              "end": 2.75,
+              "text": "The blue train leaves at noon.",
+              "words": [
+                {
+                  "text": "The",
+                  "start": 1.23,
+                  "end": 1.31
+                },
+                {
+                  "text": "blue",
+                  "start": 1.31,
+                  "end": 1.47
+                },
+                {
+                  "text": "train",
+                  "start": 1.55,
+                  "end": 1.87
+                },
+                {
+                  "text": "leaves",
+                  "start": 1.95,
+                  "end": 2.27
+                },
+                {
+                  "text": "at",
+                  "start": 2.27,
+                  "end": 2.43
+                },
+                {
+                  "text": "noon",
+                  "start": 2.43,
+                  "end": 2.75
+                }
+              ],
+              "speaker": "A"
+            },
+            {
+              "start": 4.09,
+              "end": 5.77,
+              "text": "Please meet me at the station.",
+              "words": [
+                {
+                  "text": "Please",
+                  "start": 4.09,
+                  "end": 4.41
+                },
+                {
+                  "text": "meet",
+                  "start": 4.41,
+                  "end": 4.65
+                },
+                {
+                  "text": "me",
+                  "start": 4.65,
+                  "end": 4.89
+                },
+                {
+                  "text": "at",
+                  "start": 4.89,
+                  "end": 5.13
+                },
+                {
+                  "text": "the",
+                  "start": 5.13,
+                  "end": 5.21
+                },
+                {
+                  "text": "station",
+                  "start": 5.21,
+                  "end": 5.77
+                }
+              ],
+              "speaker": "A"
+            },
+            {
+              "start": 7.14,
+              "end": 8.58,
+              "text": "I will bring the yellow bag.",
+              "words": [
+                {
+                  "text": "I",
+                  "start": 7.14,
+                  "end": 7.3
+                },
+                {
+                  "text": "will",
+                  "start": 7.3,
+                  "end": 7.46
+                },
+                {
+                  "text": "bring",
+                  "start": 7.46,
+                  "end": 7.78
+                },
+                {
+                  "text": "the",
+                  "start": 7.78,
+                  "end": 7.86
+                },
+                {
+                  "text": "yellow",
+                  "start": 7.86,
+                  "end": 8.18
+                },
+                {
+                  "text": "bag",
+                  "start": 8.18,
+                  "end": 8.58
+                }
+              ],
+              "speaker": "A"
+            }
+          ],
+          "full_text": "The blue train leaves at noon.Please meet me at the station.I will bring the yellow bag.",
+          "language": "English",
+          "align_enabled": true,
+          "punc_enabled": false,
+          "speakers": [
+            "A"
+          ]
+        },
+        "error": null,
+        "wav_name": "dialogue.wav",
+        "created_at": "2026-11-20T16:31:33.865782",
+        "finished_at": "2026-11-20T16:31:34.343585"
+      }
+    },
+    "silence": {
+      "submitted": {
+        "task_id": "912ddf3c-1eb7-4a5a-8fe7-d2a07dbab162"
+      },
+      "observed": [
+        {
+          "status": "processing",
+          "seconds": 0.0022058960000777006
+        },
+        {
+          "status": "completed",
+          "seconds": 0.10734759299998586
+        }
+      ],
+      "terminal": {
+        "task_id": "912ddf3c-1eb7-4a5a-8fe7-d2a07dbab162",
+        "status": "completed",
+        "progress": 1.0,
+        "result": {
+          "segments": [],
+          "full_text": "",
+          "language": "English",
+          "align_enabled": true,
+          "punc_enabled": false,
+          "speakers": []
+        },
+        "error": null,
+        "wav_name": "silence.wav",
+        "created_at": "2026-11-20T16:31:34.384329",
+        "finished_at": "2026-11-20T16:31:34.455002"
+      }
+    },
+    "noise": {
+      "submitted": {
+        "task_id": "619b32cf-9ec7-49f3-b2d7-a80ed0d51c96"
+      },
+      "observed": [
+        {
+          "status": "processing",
+          "seconds": 0.001982345000214991
+        },
+        {
+          "status": "completed",
+          "seconds": 0.10666516700007378
+        }
+      ],
+      "terminal": {
+        "task_id": "619b32cf-9ec7-49f3-b2d7-a80ed0d51c96",
+        "status": "completed",
+        "progress": 1.0,
+        "result": {
+          "segments": [],
+          "full_text": "",
+          "language": "English",
+          "align_enabled": true,
+          "punc_enabled": false,
+          "speakers": []
+        },
+        "error": null,
+        "wav_name": "noise.wav",
+        "created_at": "2026-11-20T16:31:34.491630",
+        "finished_at": "2026-11-20T16:31:34.560057"
+      }
+    },
+    "long": {
+      "submitted": {
+        "task_id": "ffc8d2ae-df60-4f03-8534-a97684357cc9"
+      },
+      "observed": [
+        {
+          "status": "processing",
+          "seconds": 0.00943869699995048
+        },
+        {
+          "status": "completed",
+          "seconds": 2.2247450229999686
+        }
+      ],
+      "terminal": {
+        "task_id": "ffc8d2ae-df60-4f03-8534-a97684357cc9",
+        "status": "completed",
+        "progress": 1.0,
+        "result": {
+          "segments": [
+            {
+              "start": 1.23,
+              "end": 2.75,
+              "text": "The blue train leaves at noon.",
+              "words": [
+                {
+                  "text": "The",
+                  "start": 1.23,
+                  "end": 1.31
+                },
+                {
+                  "text": "blue",
+                  "start": 1.31,
+                  "end": 1.47
+                },
+                {
+                  "text": "train",
+                  "start": 1.55,
+                  "end": 1.87
+                },
+                {
+                  "text": "leaves",
+                  "start": 1.95,
+                  "end": 2.27
+                },
+                {
+                  "text": "at",
+                  "start": 2.27,
+                  "end": 2.43
+                },
+                {
+                  "text": "noon",
+                  "start": 2.43,
+                  "end": 2.75
+                }
+              ],
+              "speaker": "A"
+            },
+            {
+              "start": 4.09,
+              "end": 5.77,
+              "text": "Please meet me at the station.",
+              "words": [
+                {
+                  "text": "Please",
+                  "start": 4.09,
+                  "end": 4.41
+                },
+                {
+                  "text": "meet",
+                  "start": 4.41,
+                  "end": 4.65
+                },
+                {
+                  "text": "me",
+                  "start": 4.65,
+                  "end": 4.89
+                },
+                {
+                  "text": "at",
+                  "start": 4.89,
+                  "end": 5.13
+                },
+                {
+                  "text": "the",
+                  "start": 5.13,
+                  "end": 5.21
+                },
+                {
+                  "text": "station",
+                  "start": 5.21,
+                  "end": 5.77
+                }
+              ],
+              "speaker": "B"
+            },
+            {
+              "start": 7.14,
+              "end": 8.66,
+              "text": "I will bring the yellow gag.",
+              "words": [
+                {
+                  "text": "I",
+                  "start": 7.14,
+                  "end": 7.3
+                },
+                {
+                  "text": "will",
+                  "start": 7.3,
+                  "end": 7.46
+                },
+                {
+                  "text": "bring",
+                  "start": 7.46,
+                  "end": 7.78
+                },
+                {
+                  "text": "the",
+                  "start": 7.78,
+                  "end": 7.86
+                },
+                {
+                  "text": "yellow",
+                  "start": 7.86,
+                  "end": 8.26
+                },
+                {
+                  "text": "gag",
+                  "start": 8.26,
+                  "end": 8.66
+                }
+              ],
+              "speaker": "C"
+            },
+            {
+              "start": 9.94,
+              "end": 11.54,
+              "text": "The blue train leaves at noon.",
+              "words": [
+                {
+                  "text": "The",
+                  "start": 9.94,
+                  "end": 10.02
+                },
+                {
+                  "text": "blue",
+                  "start": 10.02,
+                  "end": 10.26
+                },
+                {
+                  "text": "train",
+                  "start": 10.26,
+                  "end": 10.66
+                },
+                {
+                  "text": "leaves",
+                  "start": 10.66,
+                  "end": 11.06
+                },
+                {
+                  "text": "at",
+                  "start": 11.06,
+                  "end": 11.22
+                },
+                {
+                  "text": "noon",
+                  "start": 11.22,
+                  "end": 11.54
+                }
+              ],
+              "speaker": "A"
+            },
+            {
+              "start": 12.85,
+              "end": 14.53,
+              "text": "Please meet me at the station.",
+              "words": [
+                {
+                  "text": "Please",
+                  "start": 12.85,
+                  "end": 13.17
+                },
+                {
+                  "text": "meet",
+                  "start": 13.17,
+                  "end": 13.41
+                },
+                {
+                  "text": "me",
+                  "start": 13.41,
+                  "end": 13.65
+                },
+                {
+                  "text": "at",
+                  "start": 13.65,
+                  "end": 13.89
+                },
+                {
+                  "text": "the",
+                  "start": 13.89,
+                  "end": 13.97
+                },
+                {
+                  "text": "station",
+                  "start": 13.97,
+                  "end": 14.53
+                }
+              ],
+              "speaker": "B"
+            },
+            {
+              "start": 15.97,
+              "end": 17.41,
+              "text": "I will bring the yellow bag.",
+              "words": [
+                {
+                  "text": "I",
+                  "start": 15.97,
+                  "end": 16.05
+                },
+                {
+                  "text": "will",
+                  "start": 16.13,
+                  "end": 16.21
+                },
+                {
+                  "text": "bring",
+                  "start": 16.21,
+                  "end": 16.61
+                },
+                {
+                  "text": "the",
+                  "start": 16.61,
+                  "end": 16.61
+                },
+                {
+                  "text": "yellow",
+                  "start": 16.69,
+                  "end": 17.01
+                },
+                {
+                  "text": "bag",
+                  "start": 17.01,
+                  "end": 17.41
+                }
+              ],
+              "speaker": "C"
+            },
+            {
+              "start": 18.76,
+              "end": 20.28,
+              "text": "The blue train leaves at noon.",
+              "words": [
+                {
+                  "text": "The",
+                  "start": 18.76,
+                  "end": 18.84
+                },
+                {
+                  "text": "blue",
+                  "start": 18.84,
+                  "end": 19.0
+                },
+                {
+                  "text": "train",
+                  "start": 19.08,
+                  "end": 19.4
+                },
+                {
+                  "text": "leaves",
+                  "start": 19.48,
+                  "end": 19.8
+                },
+                {
+                  "text": "at",
+                  "start": 19.8,
+                  "end": 19.96
+                },
+                {
+                  "text": "noon",
+                  "start": 19.96,
+                  "end": 20.28
+                }
+              ],
+              "speaker": "A"
+            },
+            {
+              "start": 21.62,
+              "end": 23.3,
+              "text": "Please meet me at the station.",
+              "words": [
+                {
+                  "text": "Please",
+                  "start": 21.62,
+                  "end": 21.94
+                },
+                {
+                  "text": "meet",
+                  "start": 21.94,
+                  "end": 22.18
+                },
+                {
+                  "text": "me",
+                  "start": 22.18,
+                  "end": 22.42
+                },
+                {
+                  "text": "at",
+                  "start": 22.42,
+                  "end": 22.66
+                },
+                {
+                  "text": "the",
+                  "start": 22.66,
+                  "end": 22.74
+                },
+                {
+                  "text": "station",
+                  "start": 22.74,
+                  "end": 23.3
+                }
+              ],
+              "speaker": "B"
+            },
+            {
+              "start": 24.67,
+              "end": 26.19,
+              "text": "I will bring the yellow gag.",
+              "words": [
+                {
+                  "text": "I",
+                  "start": 24.67,
+                  "end": 24.83
+                },
+                {
+                  "text": "will",
+                  "start": 24.83,
+                  "end": 24.99
+                },
+                {
+                  "text": "bring",
+                  "start": 24.99,
+                  "end": 25.31
+                },
+                {
+                  "text": "the",
+                  "start": 25.31,
+                  "end": 25.39
+                },
+                {
+                  "text": "yellow",
+                  "start": 25.39,
+                  "end": 25.79
+                },
+                {
+                  "text": "gag",
+                  "start": 25.79,
+                  "end": 26.19
+                }
+              ],
+              "speaker": "C"
+            },
+            {
+              "start": 27.47,
+              "end": 29.07,
+              "text": "The blue train leaves at noon.",
+              "words": [
+                {
+                  "text": "The",
+                  "start": 27.47,
+                  "end": 27.55
+                },
+                {
+                  "text": "blue",
+                  "start": 27.55,
+                  "end": 27.79
+                },
+                {
+                  "text": "train",
+                  "start": 27.79,
+                  "end": 28.19
+                },
+                {
+                  "text": "leaves",
+                  "start": 28.19,
+                  "end": 28.59
+                },
+                {
+                  "text": "at",
+                  "start": 28.59,
+                  "end": 28.75
+                },
+                {
+                  "text": "noon",
+                  "start": 28.75,
+                  "end": 29.07
+                }
+              ],
+              "speaker": "A"
+            },
+            {
+              "start": 30.38,
+              "end": 32.06,
+              "text": "Please meet me at the station.",
+              "words": [
+                {
+                  "text": "Please",
+                  "start": 30.38,
+                  "end": 30.7
+                },
+                {
+                  "text": "meet",
+                  "start": 30.7,
+                  "end": 30.94
+                },
+                {
+                  "text": "me",
+                  "start": 30.94,
+                  "end": 31.18
+                },
+                {
+                  "text": "at",
+                  "start": 31.18,
+                  "end": 31.42
+                },
+                {
+                  "text": "the",
+                  "start": 31.42,
+                  "end": 31.5
+                },
+                {
+                  "text": "station",
+                  "start": 31.5,
+                  "end": 32.06
+                }
+              ],
+              "speaker": "B"
+            },
+            {
+              "start": 33.5,
+              "end": 34.94,
+              "text": "I will bring the yellow bag.",
+              "words": [
+                {
+                  "text": "I",
+                  "start": 33.5,
+                  "end": 33.58
+                },
+                {
+                  "text": "will",
+                  "start": 33.66,
+                  "end": 33.74
+                },
+                {
+                  "text": "bring",
+                  "start": 33.74,
+                  "end": 34.14
+                },
+                {
+                  "text": "the",
+                  "start": 34.14,
+                  "end": 34.14
+                },
+                {
+                  "text": "yellow",
+                  "start": 34.22,
+                  "end": 34.54
+                },
+                {
+                  "text": "bag",
+                  "start": 34.54,
+                  "end": 34.94
+                }
+              ],
+              "speaker": "C"
+            },
+            {
+              "start": 36.29,
+              "end": 37.81,
+              "text": "The blue train leaves at noon.",
+              "words": [
+                {
+                  "text": "The",
+                  "start": 36.29,
+                  "end": 36.37
+                },
+                {
+                  "text": "blue",
+                  "start": 36.37,
+                  "end": 36.53
+                },
+                {
+                  "text": "train",
+                  "start": 36.61,
+                  "end": 36.93
+                },
+                {
+                  "text": "leaves",
+                  "start": 37.01,
+                  "end": 37.33
+                },
+                {
+                  "text": "at",
+                  "start": 37.33,
+                  "end": 37.49
+                },
+                {
+                  "text": "noon",
+                  "start": 37.49,
+                  "end": 37.81
+                }
+              ],
+              "speaker": "A"
+            },
+            {
+              "start": 39.15,
+              "end": 40.83,
+              "text": "Please meet me at the station.",
+              "words": [
+                {
+                  "text": "Please",
+                  "start": 39.15,
+                  "end": 39.47
+                },
+                {
+                  "text": "meet",
+                  "start": 39.47,
+                  "end": 39.71
+                },
+                {
+                  "text": "me",
+                  "start": 39.71,
+                  "end": 39.95
+                },
+                {
+                  "text": "at",
+                  "start": 39.95,
+                  "end": 40.19
+                },
+                {
+                  "text": "the",
+                  "start": 40.19,
+                  "end": 40.27
+                },
+                {
+                  "text": "station",
+                  "start": 40.27,
+                  "end": 40.83
+                }
+              ],
+              "speaker": "B"
+            },
+            {
+              "start": 42.2,
+              "end": 43.72,
+              "text": "I will bring the yellow gag.",
+              "words": [
+                {
+                  "text": "I",
+                  "start": 42.2,
+                  "end": 42.36
+                },
+                {
+                  "text": "will",
+                  "start": 42.36,
+                  "end": 42.52
+                },
+                {
+                  "text": "bring",
+                  "start": 42.52,
+                  "end": 42.84
+                },
+                {
+                  "text": "the",
+                  "start": 42.84,
+                  "end": 42.92
+                },
+                {
+                  "text": "yellow",
+                  "start": 42.92,
+                  "end": 43.32
+                },
+                {
+                  "text": "gag",
+                  "start": 43.32,
+                  "end": 43.72
+                }
+              ],
+              "speaker": "C"
+            },
+            {
+              "start": 45.0,
+              "end": 46.6,
+              "text": "The blue train leaves at noon.",
+              "words": [
+                {
+                  "text": "The",
+                  "start": 45.0,
+                  "end": 45.08
+                },
+                {
+                  "text": "blue",
+                  "start": 45.08,
+                  "end": 45.32
+                },
+                {
+                  "text": "train",
+                  "start": 45.32,
+                  "end": 45.72
+                },
+                {
+                  "text": "leaves",
+                  "start": 45.72,
+                  "end": 46.12
+                },
+                {
+                  "text": "at",
+                  "start": 46.12,
+                  "end": 46.28
+                },
+                {
+                  "text": "noon",
+                  "start": 46.28,
+                  "end": 46.6
+                }
+              ],
+              "speaker": "A"
+            },
+            {
+              "start": 47.91,
+              "end": 49.59,
+              "text": "Please meet me at the station.",
+              "words": [
+                {
+                  "text": "Please",
+                  "start": 47.91,
+                  "end": 48.23
+                },
+                {
+                  "text": "meet",
+                  "start": 48.23,
+                  "end": 48.47
+                },
+                {
+                  "text": "me",
+                  "start": 48.47,
+                  "end": 48.71
+                },
+                {
+                  "text": "at",
+                  "start": 48.71,
+                  "end": 48.95
+                },
+                {
+                  "text": "the",
+                  "start": 48.95,
+                  "end": 49.03
+                },
+                {
+                  "text": "station",
+                  "start": 49.03,
+                  "end": 49.59
+                }
+              ],
+              "speaker": "B"
+            },
+            {
+              "start": 51.03,
+              "end": 52.47,
+              "text": "I will bring the yellow bag.",
+              "words": [
+                {
+                  "text": "I",
+                  "start": 51.03,
+                  "end": 51.11
+                },
+                {
+                  "text": "will",
+                  "start": 51.19,
+                  "end": 51.27
+                },
+                {
+                  "text": "bring",
+                  "start": 51.27,
+                  "end": 51.67
+                },
+                {
+                  "text": "the",
+                  "start": 51.67,
+                  "end": 51.67
+                },
+                {
+                  "text": "yellow",
+                  "start": 51.75,
+                  "end": 52.07
+                },
+                {
+                  "text": "bag",
+                  "start": 52.07,
+                  "end": 52.47
+                }
+              ],
+              "speaker": "C"
+            },
+            {
+              "start": 53.82,
+              "end": 55.34,
+              "text": "The blue train leaves at noon.",
+              "words": [
+                {
+                  "text": "The",
+                  "start": 53.82,
+                  "end": 53.9
+                },
+                {
+                  "text": "blue",
+                  "start": 53.9,
+                  "end": 54.06
+                },
+                {
+                  "text": "train",
+                  "start": 54.14,
+                  "end": 54.46
+                },
+                {
+                  "text": "leaves",
+                  "start": 54.54,
+                  "end": 54.86
+                },
+                {
+                  "text": "at",
+                  "start": 54.86,
+                  "end": 55.02
+                },
+                {
+                  "text": "noon",
+                  "start": 55.02,
+                  "end": 55.34
+                }
+              ],
+              "speaker": "A"
+            },
+            {
+              "start": 56.68,
+              "end": 58.36,
+              "text": "Please meet me at the station.",
+              "words": [
+                {
+                  "text": "Please",
+                  "start": 56.68,
+                  "end": 57.0
+                },
+                {
+                  "text": "meet",
+                  "start": 57.0,
+                  "end": 57.24
+                },
+                {
+                  "text": "me",
+                  "start": 57.24,
+                  "end": 57.48
+                },
+                {
+                  "text": "at",
+                  "start": 57.48,
+                  "end": 57.72
+                },
+                {
+                  "text": "the",
+                  "start": 57.72,
+                  "end": 57.8
+                },
+                {
+                  "text": "station",
+                  "start": 57.8,
+                  "end": 58.36
+                }
+              ],
+              "speaker": "B"
+            },
+            {
+              "start": 59.73,
+              "end": 61.25,
+              "text": "I will bring the yellow gag.",
+              "words": [
+                {
+                  "text": "I",
+                  "start": 59.73,
+                  "end": 59.89
+                },
+                {
+                  "text": "will",
+                  "start": 59.89,
+                  "end": 60.05
+                },
+                {
+                  "text": "bring",
+                  "start": 60.05,
+                  "end": 60.37
+                },
+                {
+                  "text": "the",
+                  "start": 60.37,
+                  "end": 60.45
+                },
+                {
+                  "text": "yellow",
+                  "start": 60.45,
+                  "end": 60.85
+                },
+                {
+                  "text": "gag",
+                  "start": 60.85,
+                  "end": 61.25
+                }
+              ],
+              "speaker": "C"
+            },
+            {
+              "start": 62.53,
+              "end": 64.13,
+              "text": "The blue train leaves at noon.",
+              "words": [
+                {
+                  "text": "The",
+                  "start": 62.53,
+                  "end": 62.61
+                },
+                {
+                  "text": "blue",
+                  "start": 62.61,
+                  "end": 62.85
+                },
+                {
+                  "text": "train",
+                  "start": 62.85,
+                  "end": 63.25
+                },
+                {
+                  "text": "leaves",
+                  "start": 63.25,
+                  "end": 63.65
+                },
+                {
+                  "text": "at",
+                  "start": 63.65,
+                  "end": 63.81
+                },
+                {
+                  "text": "noon",
+                  "start": 63.81,
+                  "end": 64.13
+                }
+              ],
+              "speaker": "A"
+            },
+            {
+              "start": 65.44,
+              "end": 67.12,
+              "text": "Please meet me at the station.",
+              "words": [
+                {
+                  "text": "Please",
+                  "start": 65.44,
+                  "end": 65.76
+                },
+                {
+                  "text": "meet",
+                  "start": 65.76,
+                  "end": 66.0
+                },
+                {
+                  "text": "me",
+                  "start": 66.0,
+                  "end": 66.24
+                },
+                {
+                  "text": "at",
+                  "start": 66.24,
+                  "end": 66.48
+                },
+                {
+                  "text": "the",
+                  "start": 66.48,
+                  "end": 66.56
+                },
+                {
+                  "text": "station",
+                  "start": 66.56,
+                  "end": 67.12
+                }
+              ],
+              "speaker": "B"
+            },
+            {
+              "start": 68.56,
+              "end": 70.0,
+              "text": "I will bring the yellow bag.",
+              "words": [
+                {
+                  "text": "I",
+                  "start": 68.56,
+                  "end": 68.64
+                },
+                {
+                  "text": "will",
+                  "start": 68.72,
+                  "end": 68.8
+                },
+                {
+                  "text": "bring",
+                  "start": 68.8,
+                  "end": 69.2
+                },
+                {
+                  "text": "the",
+                  "start": 69.2,
+                  "end": 69.2
+                },
+                {
+                  "text": "yellow",
+                  "start": 69.28,
+                  "end": 69.6
+                },
+                {
+                  "text": "bag",
+                  "start": 69.6,
+                  "end": 70.0
+                }
+              ],
+              "speaker": "C"
+            },
+            {
+              "start": 71.35,
+              "end": 72.87,
+              "text": "The blue train leaves at noon.",
+              "words": [
+                {
+                  "text": "The",
+                  "start": 71.35,
+                  "end": 71.43
+                },
+                {
+                  "text": "blue",
+                  "start": 71.43,
+                  "end": 71.59
+                },
+                {
+                  "text": "train",
+                  "start": 71.67,
+                  "end": 71.99
+                },
+                {
+                  "text": "leaves",
+                  "start": 72.07,
+                  "end": 72.39
+                },
+                {
+                  "text": "at",
+                  "start": 72.39,
+                  "end": 72.55
+                },
+                {
+                  "text": "noon",
+                  "start": 72.55,
+                  "end": 72.87
+                }
+              ],
+              "speaker": "A"
+            },
+            {
+              "start": 74.21,
+              "end": 75.89,
+              "text": "Please meet me at the station.",
+              "words": [
+                {
+                  "text": "Please",
+                  "start": 74.21,
+                  "end": 74.53
+                },
+                {
+                  "text": "meet",
+                  "start": 74.53,
+                  "end": 74.77
+                },
+                {
+                  "text": "me",
+                  "start": 74.77,
+                  "end": 75.01
+                },
+                {
+                  "text": "at",
+                  "start": 75.01,
+                  "end": 75.25
+                },
+                {
+                  "text": "the",
+                  "start": 75.25,
+                  "end": 75.33
+                },
+                {
+                  "text": "station",
+                  "start": 75.33,
+                  "end": 75.89
+                }
+              ],
+              "speaker": "B"
+            },
+            {
+              "start": 77.26,
+              "end": 78.78,
+              "text": "I will bring the yellow gag.",
+              "words": [
+                {
+                  "text": "I",
+                  "start": 77.26,
+                  "end": 77.42
+                },
+                {
+                  "text": "will",
+                  "start": 77.42,
+                  "end": 77.58
+                },
+                {
+                  "text": "bring",
+                  "start": 77.58,
+                  "end": 77.9
+                },
+                {
+                  "text": "the",
+                  "start": 77.9,
+                  "end": 77.98
+                },
+                {
+                  "text": "yellow",
+                  "start": 77.98,
+                  "end": 78.38
+                },
+                {
+                  "text": "gag",
+                  "start": 78.38,
+                  "end": 78.78
+                }
+              ],
+              "speaker": "C"
+            },
+            {
+              "start": 80.06,
+              "end": 81.66,
+              "text": "The blue train leaves at noon.",
+              "words": [
+                {
+                  "text": "The",
+                  "start": 80.06,
+                  "end": 80.14
+                },
+                {
+                  "text": "blue",
+                  "start": 80.14,
+                  "end": 80.38
+                },
+                {
+                  "text": "train",
+                  "start": 80.38,
+                  "end": 80.78
+                },
+                {
+                  "text": "leaves",
+                  "start": 80.78,
+                  "end": 81.18
+                },
+                {
+                  "text": "at",
+                  "start": 81.18,
+                  "end": 81.34
+                },
+                {
+                  "text": "noon",
+                  "start": 81.34,
+                  "end": 81.66
+                }
+              ],
+              "speaker": "A"
+            },
+            {
+              "start": 82.97,
+              "end": 84.65,
+              "text": "Please meet me at the station.",
+              "words": [
+                {
+                  "text": "Please",
+                  "start": 82.97,
+                  "end": 83.29
+                },
+                {
+                  "text": "meet",
+                  "start": 83.29,
+                  "end": 83.53
+                },
+                {
+                  "text": "me",
+                  "start": 83.53,
+                  "end": 83.77
+                },
+                {
+                  "text": "at",
+                  "start": 83.77,
+                  "end": 84.01
+                },
+                {
+                  "text": "the",
+                  "start": 84.01,
+                  "end": 84.09
+                },
+                {
+                  "text": "station",
+                  "start": 84.09,
+                  "end": 84.65
+                }
+              ],
+              "speaker": "B"
+            },
+            {
+              "start": 86.09,
+              "end": 87.53,
+              "text": "I will bring the yellow bag.",
+              "words": [
+                {
+                  "text": "I",
+                  "start": 86.09,
+                  "end": 86.17
+                },
+                {
+                  "text": "will",
+                  "start": 86.25,
+                  "end": 86.33
+                },
+                {
+                  "text": "bring",
+                  "start": 86.33,
+                  "end": 86.73
+                },
+                {
+                  "text": "the",
+                  "start": 86.73,
+                  "end": 86.73
+                },
+                {
+                  "text": "yellow",
+                  "start": 86.81,
+                  "end": 87.13
+                },
+                {
+                  "text": "bag",
+                  "start": 87.13,
+                  "end": 87.53
+                }
+              ],
+              "speaker": "C"
+            }
+          ],
+          "full_text": "The blue train leaves at noon.Please meet me at the station.I will bring the yellow gag.The blue train leaves at noon.Please meet me at the station.I will bring the yellow bag.The blue train leaves at noon.Please meet me at the station.I will bring the yellow gag.The blue train leaves at noon.Please meet me at the station.I will bring the yellow bag.The blue train leaves at noon.Please meet me at the station.I will bring the yellow gag.The blue train leaves at noon.Please meet me at the station.I will bring the yellow bag.The blue train leaves at noon.Please meet me at the station.I will bring the yellow gag.The blue train leaves at noon.Please meet me at the station.I will bring the yellow bag.The blue train leaves at noon.Please meet me at the station.I will bring the yellow gag.The blue train leaves at noon.Please meet me at the station.I will bring the yellow bag.",
+          "language": "English",
+          "align_enabled": true,
+          "punc_enabled": false,
+          "speakers": [
+            "A",
+            "B",
+            "C"
+          ]
+        },
+        "error": null,
+        "wav_name": "long.wav",
+        "created_at": "2026-11-20T16:31:34.605142",
+        "finished_at": "2026-11-20T16:31:36.811896"
+      }
+    }
+  },
+  "stream": {
+    "events": [
+      {
+        "type": "session.created",
+        "protocol": "qwen3-asr-stream",
+        "protocol_version": "1.0",
+        "mode": "standard",
+        "backend": "vad-offline",
+        "sample_rate": 16000,
+        "capabilities": {
+          "partial_results": false,
+          "word_timestamps": true,
+          "languages_auto": true,
+          "speaker_labels": true,
+          "speaker_identification": false,
+          "noise_filter_tunable": true,
+          "speaker_tunable": true,
+          "endpoint_tunable": true,
+          "output_toggles": true,
+          "scene": false
+        },
+        "limits": {
+          "max_frame_bytes": 2097152,
+          "max_backlog_bytes": 8388608
+        }
+      },
+      {
+        "type": "final",
+        "seg_id": 0,
+        "text": "The blue train leaves at noon.",
+        "start": 910,
+        "end": 3030,
+        "words": [
+          {
+            "text": "The",
+            "start": 1.23,
+            "end": 1.31
+          },
+          {
+            "text": "blue",
+            "start": 1.31,
+            "end": 1.47
+          },
+          {
+            "text": "train",
+            "start": 1.55,
+            "end": 1.87
+          },
+          {
+            "text": "leaves",
+            "start": 1.95,
+            "end": 2.27
+          },
+          {
+            "text": "at",
+            "start": 2.27,
+            "end": 2.43
+          },
+          {
+            "text": "noon",
+            "start": 2.43,
+            "end": 2.75
+          }
+        ],
+        "speaker": "A"
+      },
+      {
+        "type": "session.closed",
+        "reason": "end"
+      }
+    ],
+    "close_code": 1006
+  }
+}

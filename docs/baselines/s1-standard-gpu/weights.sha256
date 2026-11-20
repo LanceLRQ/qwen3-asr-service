@@ -1,0 +1,5 @@
+3388cf5fd3493c9ac9c69851d8e7a8badcfb4f3dc631020c4961371646d5ada8  models/speaker/campplus/campplus_cn_common.bin
+b3be75be477f0780277f3bae0fe489f48718f585f3a6e45d7dd1fbb1a4255fc5  models/vad/fsmn/model.pt
+a4cd1f1a04d90b757dc7f7dd26254e69a013b19e80efe590a83c6a3bde8608d6  models/asr/1.7b/model-00001-of-00002.safetensors
+6e0b9d9e09e2e0238e7ef3cc8a484ab387e91b90f1900bedf88bc92d7929ccfc  models/asr/1.7b/model-00002-of-00002.safetensors
+47831d0e82f96b20e9034dba01a075ee06436654719f6a68289e49f1b65ce0e7  models/align/0.6b/model.safetensors

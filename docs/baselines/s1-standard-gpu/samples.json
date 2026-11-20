@@ -1,0 +1,234 @@
+{
+  "short": {
+    "seconds": 3.925,
+    "turns": [
+      {
+        "start": 1.0,
+        "end": 2.925,
+        "voice": "slt",
+        "text": "The blue train leaves at noon."
+      }
+    ],
+    "sha256": "7391c1a5dfa13b390080c10da315d015317160685727e937f2763a7c7ef278c9"
+  },
+  "dialogue": {
+    "seconds": 9.765,
+    "turns": [
+      {
+        "start": 1.0,
+        "end": 2.925,
+        "voice": "slt",
+        "text": "The blue train leaves at noon."
+      },
+      {
+        "start": 3.925,
+        "end": 5.955,
+        "voice": "rms",
+        "text": "Please meet me at the station."
+      },
+      {
+        "start": 6.955,
+        "end": 8.765,
+        "voice": "slt",
+        "text": "I will bring the yellow bag."
+      }
+    ],
+    "sha256": "2de70de9210b9d3ae7bd2584ebd41ca2131a9cd06e830fa1c5e9e8cca11cd230"
+  },
+  "silence": {
+    "seconds": 5.0,
+    "turns": [],
+    "sha256": "262d1f34f300560a4c82ba8127ddea9e1d72946f187fdbd3e8f70ee096077aec"
+  },
+  "noise": {
+    "seconds": 5.0,
+    "turns": [],
+    "sha256": "289f12b0635e1ed0e3b4153775581f2d24e54e6922c8c7aa3e9ac193311977a8"
+  },
+  "long": {
+    "seconds": 88.65,
+    "turns": [
+      {
+        "start": 1.0,
+        "end": 2.925,
+        "voice": "slt",
+        "text": "The blue train leaves at noon."
+      },
+      {
+        "start": 3.925,
+        "end": 5.955,
+        "voice": "rms",
+        "text": "Please meet me at the station."
+      },
+      {
+        "start": 6.955,
+        "end": 8.765,
+        "voice": "slt",
+        "text": "I will bring the yellow bag."
+      },
+      {
+        "start": 9.765,
+        "end": 11.69,
+        "voice": "slt",
+        "text": "The blue train leaves at noon."
+      },
+      {
+        "start": 12.69,
+        "end": 14.72,
+        "voice": "rms",
+        "text": "Please meet me at the station."
+      },
+      {
+        "start": 15.72,
+        "end": 17.53,
+        "voice": "slt",
+        "text": "I will bring the yellow bag."
+      },
+      {
+        "start": 18.53,
+        "end": 20.455,
+        "voice": "slt",
+        "text": "The blue train leaves at noon."
+      },
+      {
+        "start": 21.455,
+        "end": 23.485,
+        "voice": "rms",
+        "text": "Please meet me at the station."
+      },
+      {
+        "start": 24.485,
+        "end": 26.295,
+        "voice": "slt",
+        "text": "I will bring the yellow bag."
+      },
+      {
+        "start": 27.295,
+        "end": 29.22,
+        "voice": "slt",
+        "text": "The blue train leaves at noon."
+      },
+      {
+        "start": 30.22,
+        "end": 32.25,
+        "voice": "rms",
+        "text": "Please meet me at the station."
+      },
+      {
+        "start": 33.25,
+        "end": 35.06,
+        "voice": "slt",
+        "text": "I will bring the yellow bag."
+      },
+      {
+        "start": 36.06,
+        "end": 37.985,
+        "voice": "slt",
+        "text": "The blue train leaves at noon."
+      },
+      {
+        "start": 38.985,
+        "end": 41.015,
+        "voice": "rms",
+        "text": "Please meet me at the station."
+      },
+      {
+        "start": 42.015,
+        "end": 43.825,
+        "voice": "slt",
+        "text": "I will bring the yellow bag."
+      },
+      {
+        "start": 44.825,
+        "end": 46.75,
+        "voice": "slt",
+        "text": "The blue train leaves at noon."
+      },
+      {
+        "start": 47.75,
+        "end": 49.78,
+        "voice": "rms",
+        "text": "Please meet me at the station."
+      },
+      {
+        "start": 50.78,
+        "end": 52.59,
+        "voice": "slt",
+        "text": "I will bring the yellow bag."
+      },
+      {
+        "start": 53.59,
+        "end": 55.515,
+        "voice": "slt",
+        "text": "The blue train leaves at noon."
+      },
+      {
+        "start": 56.515,
+        "end": 58.545,
+        "voice": "rms",
+        "text": "Please meet me at the station."
+      },
+      {
+        "start": 59.545,
+        "end": 61.355,
+        "voice": "slt",
+        "text": "I will bring the yellow bag."
+      },
+      {
+        "start": 62.355,
+        "end": 64.28,
+        "voice": "slt",
+        "text": "The blue train leaves at noon."
+      },
+      {
+        "start": 65.28,
+        "end": 67.31,
+        "voice": "rms",
+        "text": "Please meet me at the station."
+      },
+      {
+        "start": 68.31,
+        "end": 70.12,
+        "voice": "slt",
+        "text": "I will bring the yellow bag."
+      },
+      {
+        "start": 71.12,
+        "end": 73.045,
+        "voice": "slt",
+        "text": "The blue train leaves at noon."
+      },
+      {
+        "start": 74.045,
+        "end": 76.075,
+        "voice": "rms",
+        "text": "Please meet me at the station."
+      },
+      {
+        "start": 77.075,
+        "end": 78.885,
+        "voice": "slt",
+        "text": "I will bring the yellow bag."
+      },
+      {
+        "start": 79.885,
+        "end": 81.81,
+        "voice": "slt",
+        "text": "The blue train leaves at noon."
+      },
+      {
+        "start": 82.81,
+        "end": 84.84,
+        "voice": "rms",
+        "text": "Please meet me at the station."
+      },
+      {
+        "start": 85.84,
+        "end": 87.65,
+        "voice": "slt",
+        "text": "I will bring the yellow bag."
+      }
+    ],
+    "sha256": "4408942c8e52e5316fd349dd164a067b9ec765105b9ebe8135e77f4b5b33f273"
+  }
+}
