@@ -42,9 +42,10 @@ def chunk_separator(left, right):
 
 
 def segment_sentences(chunks, *, max_segment=None,
-                      long_pause_ms=None, short_pause_ms=None, dedupe=True):
+                      long_pause_ms=None, short_pause_ms=None, dedupe=True, transcript_parts=None):
     """把 ASR 处理块重组为句子级 segments。max_segment 为 None/0 时不按时长切。
 
+    transcript_parts 接收最终输出段的全文片段，只在独立块的英文词界补空格。
     dedupe=True 时先去除"处理块被拦腰切断"导致的边界重复识别（仅作用于紧邻块边界，
     见 dedupe_contiguous_boundaries）。
     """
@@ -70,7 +71,7 @@ def segment_sentences(chunks, *, max_segment=None,
             sentences.append(buf)
             buf = None
 
-    def append_piece(piece, hard_after):
+    def append_piece(piece, hard_after, separator):
         nonlocal buf
         # 局部对齐失败时将缺词片段单独输出，保留相邻片段的有效词时间。
         if buf is not None and bool(buf["words"]) != bool(piece["words"]):
@@ -78,13 +79,14 @@ def segment_sentences(chunks, *, max_segment=None,
         if buf is None:
             buf = {
                 "text": piece["text"],
+                "separator": separator,
                 "words": list(piece["words"]) if piece["words"] else None,
                 "start": piece["start"],
                 "end": piece["end"],
                 "speaker": piece.get("speaker"),
             }
         else:
-            buf["text"] += chunk_separator(buf["text"], piece["text"]) + piece["text"]
+            buf["text"] += separator + piece["text"]
             if piece["words"]:
                 buf["words"].extend(piece["words"])
             buf["end"] = max(buf["end"], piece["end"])
@@ -114,12 +116,13 @@ def segment_sentences(chunks, *, max_segment=None,
         pieces = _split_chunk_pieces(chunk, long_pause)
         nxt = chunks[ci + 1] if ci + 1 < len(chunks) else None
         for k, piece in enumerate(pieces):
+            separator = chunk_separator(prev["text"], text) if prev and k == 0 else ""
             if k < len(pieces) - 1:
                 # 块内片段：以内部句末标点 / 长停顿结尾 → 强切
-                append_piece(piece, hard_after=True)
+                append_piece(piece, hard_after=True, separator=separator)
             else:
                 append_piece(piece, hard_after=_chunk_end_is_hard(
-                    piece, chunk, nxt, speaker, long_pause, short_pause))
+                    piece, chunk, nxt, speaker, long_pause, short_pause), separator=separator)
         prev = chunk
     flush()
 
@@ -139,6 +142,8 @@ def segment_sentences(chunks, *, max_segment=None,
         if s.get("speaker") is not None:
             seg["speaker"] = s["speaker"]
         out.append(seg)
+        if transcript_parts is not None and s["text"] != _FAIL_MARK:
+            transcript_parts.append(s.get("separator", "") + s["text"])
     return out
 
 
@@ -255,7 +260,10 @@ def _apply_max_segment(sentences, max_seg, short_pause):
         if (s["end"] - s["start"]) <= max_seg:
             out.append(s)
             continue
-        out.extend(_subsplit(s, max_seg))
+        pieces = _subsplit(s, max_seg)
+        if s.get("separator"):
+            pieces[0]["separator"] = s["separator"]
+        out.extend(pieces)
     return out
 
 

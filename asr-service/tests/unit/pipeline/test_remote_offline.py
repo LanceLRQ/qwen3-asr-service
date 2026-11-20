@@ -125,3 +125,19 @@ def test_word_boundary_between_vad_chunks(remote_pipe, make_wav, left, right, ex
     assert result["full_text"] == expected
     if pause_ms == 100 and not left.endswith("."):
         assert [s["text"] for s in result["segments"]] == [expected]
+
+
+def test_punctuated_chunk_trailing_space_uses_final_segments(remote_pipe, make_wav):
+    remote_pipe.asr.transcribe.side_effect = [ASRResult("yellow gag. "), ASRResult("The train.")]
+    result = remote_pipe.run(make_wav(4), options={"diarize": False})
+    assert [seg["text"] for seg in result["segments"]] == ["yellow gag.", "The train."]
+    assert result["full_text"] == "yellow gag.The train."
+
+
+def test_only_unpunctuated_boundary_adds_space(remote_pipe, make_wav):
+    remote_pipe.vad.detect = lambda _: [(0, 500), (1500, 2000), (3000, 3500)]
+    remote_pipe.asr.transcribe.side_effect = [
+        ASRResult("yellow gag. "), ASRResult("The train"), ASRResult("leaves soon"),
+    ]
+    result = remote_pipe.run(make_wav(4), options={"diarize": False})
+    assert result["full_text"] == "yellow gag.The train leaves soon"

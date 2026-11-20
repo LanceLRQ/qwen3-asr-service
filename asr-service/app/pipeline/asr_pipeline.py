@@ -6,7 +6,7 @@ import soundfile as sf
 
 from app.engines.forced_alignment import resolve_words, valid_words
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
-from app.pipeline.sentence_segmenter import chunk_separator, dedupe_contiguous_boundaries, segment_sentences
+from app.pipeline.sentence_segmenter import segment_sentences
 from app.utils.result_parser import extract_words
 import app.config as cfg
 
@@ -202,20 +202,10 @@ class ASRPipeline:
 
             # 4.6 分句：把 ASR 处理块重组为句子（标点/停顿/说话人切换）。
             #     max_segment 仅在调用方显式给定时作为输出句长上限，缺省不按时长切。
-            # 在输出句按时长切分之前组装全文，避免在词内的显示切点插入空格。
-            segments = dedupe_contiguous_boundaries([s for s in segments if (s["text"] or "").strip()])
-            parts = []
-            for seg in segments:
-                text = seg["text"]
-                if text != "[识别失败]":
-                    if parts:
-                        parts.append(chunk_separator(parts[-1], text))
-                    parts.append(text)
-            full_text = "".join(parts)
-
+            transcript_parts = []
             segments = segment_sentences(
-                segments, dedupe=False, max_segment=max_segment, long_pause_ms=self.settings.SENTENCE_LONG_PAUSE_MS,
-                short_pause_ms=self.settings.SENTENCE_SHORT_PAUSE_MS)
+                segments, max_segment=max_segment, long_pause_ms=self.settings.SENTENCE_LONG_PAUSE_MS,
+                short_pause_ms=self.settings.SENTENCE_SHORT_PAUSE_MS, transcript_parts=transcript_parts)
 
             for seg in segments:
                 if seg.get("words") and not valid_words(
@@ -272,7 +262,7 @@ class ASRPipeline:
 
             result = {
                 "segments": segments,
-                "full_text": full_text,
+                "full_text": "".join(transcript_parts),
                 "language": language,
                 "align_enabled": align_enabled,
                 "punc_enabled": self.punc is not None,
