@@ -12,6 +12,20 @@ from app.config import TASK_TIMEOUT, TASK_RESULT_TTL, TASK_CLEANUP_INTERVAL
 logger = logging.getLogger(__name__)
 
 
+def offline_processor(manager, run):
+    """把任务输入和生命周期回调映射到已装配的离线入口。"""
+    def process(task):
+        task_id = task["task_id"]
+        return run(
+            task["file_path"], language=task.get("language"), options=task.get("options"),
+            identify_speakers=task.get("identify_speakers", False),
+            progress_callback=lambda value: manager.update_progress(task_id, value),
+            cancelled=lambda: manager.is_stopping or manager.is_cancelled(task_id),
+        )
+
+    return process
+
+
 class TaskManager:
     def __init__(self, max_queue_size=100, store=None):
         self._queue = queue.Queue(maxsize=max_queue_size)

@@ -1,3 +1,4 @@
+from functools import partial
 import logging
 import os
 import sys
@@ -17,7 +18,7 @@ from app.api.common_routes import init_common, build_common_router
 # vLLM 专用环境（无 funasr）下置为 None，使 app.main 仍可被 uvicorn factory 加载启动
 # vllm 模式；_assemble_standard 调用时若缺失则明确报错退出。保留为模块级名以便测试替身。
 try:
-    from app.runtime.task_manager import TaskManager
+    from app.runtime.task_manager import TaskManager, offline_processor
     from app.engines.qwen_asr_engine import QwenASREngine
     from app.engines.vad_engine import VADEngine
     from app.engines.punc_engine import PuncEngine
@@ -469,20 +470,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
     # 创建任务管理器
     task_manager = TaskManager(max_queue_size=cfg.MAX_QUEUE_SIZE, store=task_store)
 
-    def process_task(task: dict):
-        def on_progress(p):
-            task_manager.update_progress(task["task_id"], p)
-
-        return pipeline.run(
-            audio_path=task["file_path"],
-            language=task.get("language"),
-            progress_callback=on_progress,
-            cancelled=lambda: task_manager.is_stopping or task_manager.is_cancelled(task["task_id"]),
-            identify_speakers=task.get("identify_speakers", False),
-            options=task.get("options"),
-        )
-
-    task_manager.set_processor(process_task)
+    task_manager.set_processor(offline_processor(task_manager, pipeline.run))
     task_manager.start()
 
     # 构建服务信息（mode-aware，供 /health、/capabilities 使用）
@@ -769,7 +757,7 @@ def _assemble_vllm(app: FastAPI, args) -> None:
     # 离线任务层（Phase 1）：复用 standard 的 TaskManager/TaskStore/离线路由（依赖中性，
     # 惰性导入——module 顶层这些名在 venv-vllm 因 funasr 缺失为 None，故此处重新导入）；
     # 处理函数换成 vLLM 批量 transcribe（runtime/vllm_offline）。
-    from app.runtime.task_manager import TaskManager
+    from app.runtime.task_manager import TaskManager, offline_processor
     from app.runtime.vllm_offline import run_vllm_offline
 
     task_store = None
@@ -792,20 +780,9 @@ def _assemble_vllm(app: FastAPI, args) -> None:
 
     task_manager = TaskManager(max_queue_size=cfg.MAX_QUEUE_SIZE, store=task_store)
 
-    def process_task(task: dict):
-        def on_progress(p):
-            task_manager.update_progress(task["task_id"], p)
-        return run_vllm_offline(
-            engine, task["file_path"], language=task.get("language"), options=task.get("options"),
-            identify_speakers=task.get("identify_speakers", False),
-            progress_callback=on_progress,
-            cancelled=lambda: task_manager.is_stopping or task_manager.is_cancelled(task["task_id"]),
-            speaker_engine=speaker_engine,
-            speaker_service=linked_speaker_service,
-            energy_vad=energy_vad,
-        )
-
-    task_manager.set_processor(process_task)
+    run = partial(run_vllm_offline, engine, speaker_engine=speaker_engine,
+                  speaker_service=linked_speaker_service, energy_vad=energy_vad)
+    task_manager.set_processor(offline_processor(task_manager, run))
     task_manager.start()
 
     capabilities = {

@@ -1,3 +1,4 @@
+from unittest.mock import Mock
 import logging
 
 import httpx
@@ -20,7 +21,11 @@ def test_remote_assembly_and_transcription(isolated_create_app, monkeypatch, tmp
                  "app.utils.openvino_model_downloader.ensure_openvino_model"):
         monkeypatch.setattr(path, lambda *a, **kw: pytest.fail("local ASR download"))
     engine = {}
-    monkeypatch.setattr(main, "ASRPipeline", lambda **kw: engine.update(kw))
+    def capture_pipeline(**kwargs):
+        engine.update(kwargs)
+        return Mock(spec=["run"])
+
+    monkeypatch.setattr(main, "ASRPipeline", capture_pipeline)
     requests = []
 
     def upstream(request):
