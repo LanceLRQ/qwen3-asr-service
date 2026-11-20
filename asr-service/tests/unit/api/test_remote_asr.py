@@ -57,6 +57,7 @@ def test_remote_assembly_and_transcription(isolated_create_app, monkeypatch, tmp
     assert capabilities["mode"] == "remote" and capabilities["offline_api"]
     assert capabilities["stream"]["enabled"] is False
     assert capabilities["compat"]["openai"] and not capabilities["compat"]["realtime"]
+    assert client.get("/compat/openai/v1/models").json()["data"][0]["id"] == "qwen3-asr"
     paths = {route.path for route in app.routes}
     assert "/v2/asr/stream" not in paths
     assert "/compat/openai/v1/realtime" not in paths

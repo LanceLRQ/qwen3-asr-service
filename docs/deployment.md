@@ -2,6 +2,8 @@
 
 **中文** | [English](deployment_EN.md)
 
+接入独立部署的 Qwen3-ASR HTTP 服务，见[远端离线部署与验证](baselines/s2-remote/README.md)。
+
 ## 目录
 
 - [系统要求](#系统要求)

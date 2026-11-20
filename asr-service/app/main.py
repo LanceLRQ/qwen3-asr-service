@@ -547,6 +547,9 @@ def _assemble_standard(app: FastAPI, args) -> None:
         "capabilities": capabilities,
     }
 
+    if remote:
+        service_info["remote_model"] = args.remote_model
+
     # 共性路由（两模式都挂）
     init_common(service_info)
     app.include_router(build_common_router("/v1"))

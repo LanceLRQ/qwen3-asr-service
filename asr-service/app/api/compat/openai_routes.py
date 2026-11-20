@@ -162,7 +162,10 @@ async def list_models():
 
 
 def _model_id() -> str:
-    size = (_service_info or {}).get("model_size") or "unknown"
+    info = _service_info or {}
+    if info.get("remote_model"):
+        return info["remote_model"]
+    size = info.get("model_size") or "unknown"
     return f"qwen3-asr-{size}"
 
 

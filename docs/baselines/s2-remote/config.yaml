@@ -1,0 +1,17 @@
+serve_mode: remote
+remote_base_url: http://127.0.0.1:18764/v1
+remote_model: qwen3-asr
+remote_timeout: 30
+device: cuda
+enable_align: false
+enable_speaker: true
+enable_speaker_db: false
+enable_task_store: false
+enable_audio_tagging: false
+use_punc: false
+max_segment: 5
+enable_openai_api: true
+enable_stream: false
+host: 127.0.0.1
+port: 18765
+web: false

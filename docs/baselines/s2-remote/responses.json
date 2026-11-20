@@ -1,0 +1,544 @@
+{
+  "health": {
+    "status": "ready",
+    "mode": "remote",
+    "device": "cuda",
+    "model_size": null,
+    "align_enabled": false,
+    "punc_enabled": false,
+    "speaker_enabled": true,
+    "speaker_db_enabled": false,
+    "audio_tagging_enabled": false,
+    "asr_backend": "remote",
+    "vad_backend": "pytorch",
+    "punc_backend": "disabled",
+    "config_file": "config.yaml",
+    "capabilities": {
+      "mode": "remote",
+      "offline_api": true,
+      "speaker_labels": true,
+      "speaker_identification": false,
+      "audio_tagging": false,
+      "scene": false,
+      "scene_preset": "balanced",
+      "scene_presets": [
+        "balanced",
+        "live",
+        "music"
+      ],
+      "stream": {
+        "enabled": false,
+        "backend": null,
+        "path": null,
+        "partial_results": false,
+        "word_timestamps": false,
+        "speaker_labels": false,
+        "scene": false
+      },
+      "defaults": {
+        "max_segment": 5,
+        "max_end_silence_ms": 800,
+        "max_segment_sec": 12,
+        "speaker_threshold": 0.5,
+        "speaker_min_seg_ms": 1500,
+        "speaker_max": 8,
+        "speaker_id_threshold": 0.45,
+        "speaker_id_margin": 0.1,
+        "energy_floor_dbfs": -50.0,
+        "snr_min_db": 6.0,
+        "audio_tagging_engine": "panns",
+        "audio_tagging_panns_variant": "16k"
+      },
+      "compat": {
+        "openai": true,
+        "dashscope": false,
+        "realtime": false,
+        "realtime_partial": false
+      }
+    }
+  },
+  "capabilities": {
+    "mode": "remote",
+    "offline_api": true,
+    "speaker_labels": true,
+    "speaker_identification": false,
+    "audio_tagging": false,
+    "scene": false,
+    "scene_preset": "balanced",
+    "scene_presets": [
+      "balanced",
+      "live",
+      "music"
+    ],
+    "stream": {
+      "enabled": false,
+      "backend": null,
+      "path": null,
+      "partial_results": false,
+      "word_timestamps": false,
+      "speaker_labels": false,
+      "scene": false
+    },
+    "defaults": {
+      "max_segment": 5,
+      "max_end_silence_ms": 800,
+      "max_segment_sec": 12,
+      "speaker_threshold": 0.5,
+      "speaker_min_seg_ms": 1500,
+      "speaker_max": 8,
+      "speaker_id_threshold": 0.45,
+      "speaker_id_margin": 0.1,
+      "energy_floor_dbfs": -50.0,
+      "snr_min_db": 6.0,
+      "audio_tagging_engine": "panns",
+      "audio_tagging_panns_variant": "16k"
+    },
+    "compat": {
+      "openai": true,
+      "dashscope": false,
+      "realtime": false,
+      "realtime_partial": false
+    }
+  },
+  "models": {
+    "object": "list",
+    "data": [
+      {
+        "id": "qwen3-asr",
+        "object": "model",
+        "created": 0,
+        "owned_by": "qwen3-asr"
+      }
+    ]
+  },
+  "tasks": {
+    "short": {
+      "sha256": "7391c1a5dfa13b390080c10da315d015317160685727e937f2763a7c7ef278c9",
+      "submit_round_trip_s": 0.0023427789997185755,
+      "observed": [
+        {
+          "status": "processing",
+          "elapsed_s": 0.0032381329997406283
+        },
+        {
+          "status": "completed",
+          "elapsed_s": 0.3131025059997228
+        }
+      ],
+      "terminal": {
+        "task_id": "41f47263-b212-4160-ada5-5e2274b3a935",
+        "status": "completed",
+        "progress": 1.0,
+        "result": {
+          "segments": [
+            {
+              "start": 0.91,
+              "end": 3.03,
+              "text": "The blue train leaves at noon.",
+              "speaker": "A"
+            }
+          ],
+          "full_text": "The blue train leaves at noon.",
+          "language": "English",
+          "align_enabled": false,
+          "punc_enabled": false,
+          "speakers": [
+            "A"
+          ],
+          "warnings": [
+            "with_words"
+          ]
+        },
+        "error": null,
+        "wav_name": "short.wav",
+        "created_at": "2026-11-20T16:59:28.152418",
+        "finished_at": "2026-11-20T16:59:28.456944"
+      },
+      "upstream": {
+        "http_handler_s": 0.171333746000073,
+        "uploaded_bytes": 68245.0,
+        "calls": 1.0,
+        "engine_e2e_s": 0.16969752311706543,
+        "queue_s": 8.09499988463358e-06,
+        "inference_s": 0.16834004000020286
+      }
+    },
+    "dialogue": {
+      "sha256": "2de70de9210b9d3ae7bd2584ebd41ca2131a9cd06e830fa1c5e9e8cca11cd230",
+      "submit_round_trip_s": 0.0022235660003389057,
+      "observed": [
+        {
+          "status": "processing",
+          "elapsed_s": 0.0030520550003529934
+        },
+        {
+          "status": "completed",
+          "elapsed_s": 0.7732178780001959
+        }
+      ],
+      "terminal": {
+        "task_id": "27c730eb-a01e-468c-bafc-760d0cdece92",
+        "status": "completed",
+        "progress": 1.0,
+        "result": {
+          "segments": [
+            {
+              "start": 0.91,
+              "end": 3.03,
+              "text": "The blue train leaves at noon.",
+              "speaker": "A"
+            },
+            {
+              "start": 3.85,
+              "end": 6.05,
+              "text": "Please meet me at the station.",
+              "speaker": "A"
+            },
+            {
+              "start": 6.9,
+              "end": 8.87,
+              "text": "I will bring the yellow bag.",
+              "speaker": "A"
+            }
+          ],
+          "full_text": "The blue train leaves at noon.Please meet me at the station.I will bring the yellow bag.",
+          "language": "English",
+          "align_enabled": false,
+          "punc_enabled": false,
+          "speakers": [
+            "A"
+          ],
+          "warnings": [
+            "with_words"
+          ]
+        },
+        "error": null,
+        "wav_name": "dialogue.wav",
+        "created_at": "2026-11-20T16:59:28.474535",
+        "finished_at": "2026-11-20T16:59:29.227464"
+      },
+      "upstream": {
+        "http_handler_s": 0.5128420809996896,
+        "uploaded_bytes": 202495.0,
+        "calls": 3.0,
+        "engine_e2e_s": 0.5072400569915771,
+        "queue_s": 2.433600002405001e-05,
+        "inference_s": 0.5031615050002074
+      }
+    },
+    "silence": {
+      "sha256": "262d1f34f300560a4c82ba8127ddea9e1d72946f187fdbd3e8f70ee096077aec",
+      "submit_round_trip_s": 0.0014822099997218174,
+      "observed": [
+        {
+          "status": "processing",
+          "elapsed_s": 0.002105595999637444
+        },
+        {
+          "status": "completed",
+          "elapsed_s": 0.10711151799978325
+        }
+      ],
+      "terminal": {
+        "task_id": "826ef977-c2bd-4782-a8de-fda74713c18f",
+        "status": "completed",
+        "progress": 1.0,
+        "result": {
+          "segments": [],
+          "full_text": "",
+          "language": "English",
+          "align_enabled": false,
+          "punc_enabled": false,
+          "speakers": [],
+          "warnings": [
+            "with_words"
+          ]
+        },
+        "error": null,
+        "wav_name": "silence.wav",
+        "created_at": "2026-11-20T16:59:29.256505",
+        "finished_at": "2026-11-20T16:59:29.326286"
+      },
+      "upstream": {
+        "http_handler_s": 0.0,
+        "uploaded_bytes": 0.0,
+        "calls": 0.0,
+        "engine_e2e_s": 0.0,
+        "queue_s": 0.0,
+        "inference_s": 0.0
+      }
+    },
+    "noise": {
+      "sha256": "289f12b0635e1ed0e3b4153775581f2d24e54e6922c8c7aa3e9ac193311977a8",
+      "submit_round_trip_s": 0.0016596619998381357,
+      "observed": [
+        {
+          "status": "processing",
+          "elapsed_s": 0.0022980249996180646
+        },
+        {
+          "status": "completed",
+          "elapsed_s": 0.10704577499973311
+        }
+      ],
+      "terminal": {
+        "task_id": "68750ff1-03fc-475b-a390-06c4e0dd34ab",
+        "status": "completed",
+        "progress": 1.0,
+        "result": {
+          "segments": [],
+          "full_text": "",
+          "language": "English",
+          "align_enabled": false,
+          "punc_enabled": false,
+          "speakers": [],
+          "warnings": [
+            "with_words"
+          ]
+        },
+        "error": null,
+        "wav_name": "noise.wav",
+        "created_at": "2026-11-20T16:59:29.372879",
+        "finished_at": "2026-11-20T16:59:29.442164"
+      },
+      "upstream": {
+        "http_handler_s": 0.0,
+        "uploaded_bytes": 0.0,
+        "calls": 0.0,
+        "engine_e2e_s": 0.0,
+        "queue_s": 0.0,
+        "inference_s": 0.0
+      }
+    },
+    "long": {
+      "sha256": "4408942c8e52e5316fd349dd164a067b9ec765105b9ebe8135e77f4b5b33f273",
+      "submit_round_trip_s": 0.011374021000392531,
+      "observed": [
+        {
+          "status": "processing",
+          "elapsed_s": 0.012482913999974699
+        },
+        {
+          "status": "completed",
+          "elapsed_s": 6.372678620999977
+        }
+      ],
+      "terminal": {
+        "task_id": "6152fdfa-49a6-4d8d-ac39-adf8b8d896f8",
+        "status": "completed",
+        "progress": 1.0,
+        "result": {
+          "segments": [
+            {
+              "start": 0.91,
+              "end": 3.03,
+              "text": "The blue train leaves at noon.",
+              "speaker": "A"
+            },
+            {
+              "start": 3.85,
+              "end": 6.05,
+              "text": "Please meet me at the station.",
+              "speaker": "B"
+            },
+            {
+              "start": 6.9,
+              "end": 9.221,
+              "text": "I will bring the yellow gag.",
+              "speaker": "C"
+            },
+            {
+              "start": 9.221,
+              "end": 11.79,
+              "text": " The blue train leaves at noon.",
+              "speaker": "A"
+            },
+            {
+              "start": 12.61,
+              "end": 15.152,
+              "text": "Please meet me at the station.",
+              "speaker": "B"
+            },
+            {
+              "start": 15.152,
+              "end": 17.61,
+              "text": " I will bring the yellow bag.",
+              "speaker": "C"
+            },
+            {
+              "start": 18.44,
+              "end": 20.56,
+              "text": "The blue train leaves at noon.",
+              "speaker": "A"
+            },
+            {
+              "start": 21.38,
+              "end": 23.58,
+              "text": "Please meet me at the station.",
+              "speaker": "B"
+            },
+            {
+              "start": 24.43,
+              "end": 26.751,
+              "text": "I will bring the yellow gag.",
+              "speaker": "C"
+            },
+            {
+              "start": 26.751,
+              "end": 29.32,
+              "text": " The blue train leaves at noon.",
+              "speaker": "A"
+            },
+            {
+              "start": 30.14,
+              "end": 32.682,
+              "text": "Please meet me at the station.",
+              "speaker": "B"
+            },
+            {
+              "start": 32.682,
+              "end": 35.14,
+              "text": " I will bring the yellow bag.",
+              "speaker": "C"
+            },
+            {
+              "start": 35.97,
+              "end": 38.09,
+              "text": "The blue train leaves at noon.",
+              "speaker": "A"
+            },
+            {
+              "start": 38.91,
+              "end": 41.11,
+              "text": "Please meet me at the station.",
+              "speaker": "B"
+            },
+            {
+              "start": 41.96,
+              "end": 44.281,
+              "text": "I will bring the yellow gag.",
+              "speaker": "C"
+            },
+            {
+              "start": 44.281,
+              "end": 46.85,
+              "text": " The blue train leaves at noon.",
+              "speaker": "A"
+            },
+            {
+              "start": 47.67,
+              "end": 50.212,
+              "text": "Please meet me at the station.",
+              "speaker": "B"
+            },
+            {
+              "start": 50.212,
+              "end": 52.67,
+              "text": " I will bring the yellow bag.",
+              "speaker": "C"
+            },
+            {
+              "start": 53.5,
+              "end": 55.62,
+              "text": "The blue train leaves at noon.",
+              "speaker": "A"
+            },
+            {
+              "start": 56.44,
+              "end": 58.64,
+              "text": "Please meet me at the station.",
+              "speaker": "B"
+            },
+            {
+              "start": 59.49,
+              "end": 61.811,
+              "text": "I will bring the yellow gag.",
+              "speaker": "C"
+            },
+            {
+              "start": 61.811,
+              "end": 64.38,
+              "text": " The blue train leaves at noon.",
+              "speaker": "A"
+            },
+            {
+              "start": 65.2,
+              "end": 67.742,
+              "text": "Please meet me at the station.",
+              "speaker": "B"
+            },
+            {
+              "start": 67.742,
+              "end": 70.2,
+              "text": " I will bring the yellow bag.",
+              "speaker": "C"
+            },
+            {
+              "start": 71.03,
+              "end": 73.15,
+              "text": "The blue train leaves at noon.",
+              "speaker": "A"
+            },
+            {
+              "start": 73.97,
+              "end": 76.17,
+              "text": "Please meet me at the station.",
+              "speaker": "B"
+            },
+            {
+              "start": 77.02,
+              "end": 79.341,
+              "text": "I will bring the yellow gag.",
+              "speaker": "C"
+            },
+            {
+              "start": 79.341,
+              "end": 81.91,
+              "text": " The blue train leaves at noon.",
+              "speaker": "A"
+            },
+            {
+              "start": 82.73,
+              "end": 85.272,
+              "text": "Please meet me at the station.",
+              "speaker": "B"
+            },
+            {
+              "start": 85.272,
+              "end": 87.73,
+              "text": " I will bring the yellow bag.",
+              "speaker": "C"
+            }
+          ],
+          "full_text": "The blue train leaves at noon.Please meet me at the station.I will bring the yellow gag. The blue train leaves at noon.Please meet me at the station. I will bring the yellow bag.The blue train leaves at noon.Please meet me at the station.I will bring the yellow gag. The blue train leaves at noon.Please meet me at the station. I will bring the yellow bag.The blue train leaves at noon.Please meet me at the station.I will bring the yellow gag. The blue train leaves at noon.Please meet me at the station. I will bring the yellow bag.The blue train leaves at noon.Please meet me at the station.I will bring the yellow gag. The blue train leaves at noon.Please meet me at the station. I will bring the yellow bag.The blue train leaves at noon.Please meet me at the station.I will bring the yellow gag. The blue train leaves at noon.Please meet me at the station. I will bring the yellow bag.",
+          "language": "English",
+          "align_enabled": false,
+          "punc_enabled": false,
+          "speakers": [
+            "A",
+            "B",
+            "C"
+          ],
+          "warnings": [
+            "with_words"
+          ]
+        },
+        "error": null,
+        "wav_name": "long.wav",
+        "created_at": "2026-11-20T16:59:29.501380",
+        "finished_at": "2026-11-20T16:59:35.837789"
+      },
+      "upstream": {
+        "http_handler_s": 4.543182121001337,
+        "uploaded_bytes": 2281698.0,
+        "calls": 20.0,
+        "engine_e2e_s": 4.504819869995117,
+        "queue_s": 0.00016243699928963906,
+        "inference_s": 4.477035902000807
+      }
+    }
+  },
+  "sync": {
+    "text": "The blue train leaves at noon."
+  }
+}

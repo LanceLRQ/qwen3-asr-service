@@ -2,6 +2,8 @@
 
 [中文](deployment.md) | **English**
 
+For an independently deployed Qwen3-ASR HTTP server, see the [remote offline deployment and validation guide](baselines/s2-remote/README.md).
+
 ## Table of Contents
 
 - [System Requirements](#system-requirements)
