@@ -2,7 +2,7 @@
 
 [← Back to docs home](../README.md) ｜ [中文](vllm-vs-standard.md) | **English**
 
-> This page focuses on the **functional differences of the vLLM engine vs the default standard mode**: it summarizes how the **vLLM engine** (`--serve-mode vllm`) differs from the original default **standard** mode (funasr / OpenVINO) in **features**, to aid selection and upgrade evaluation.
+> This page focuses on the **functional differences of the vLLM engine vs the default standard mode**: it summarizes how the **vLLM engine** (`--serve-mode vllm`) differs from the original default **standard** mode (Transformers / OpenVINO) in **features**, to aid selection and upgrade evaluation.
 >
 > **In one line**: the service originally had only the `standard` mode; this feature adds an **optional `vllm` mode** — GPU-native streaming (incremental, per-sentence) plus an offline endpoint with the same contract as standard, and brings speaker / compatibility-API capabilities to that mode. **The two modes are mutually exclusive at startup; standard mode's behavior, parameters and defaults are completely unchanged (zero regression).**
 
@@ -13,7 +13,7 @@
 | | Original default (standard) | New (vllm) |
 |---|---|---|
 | Startup | fixed standard | `--serve-mode standard \| vllm` (pick one) |
-| Inference backend | funasr (GPU) / OpenVINO (CPU) | vLLM native engine (in-process synchronous `vllm.LLM`) |
+| Inference backend | Qwen3-ASR / Transformers (GPU) / OpenVINO (CPU) | vLLM native engine (in-process synchronous `vllm.LLM`) |
 | Device | GPU / **CPU** | **GPU only (CUDA required; exits on non-GPU)** |
 | Runtime env | `venv` (default) | isolated `venv-vllm` / separate Docker image |
 | Process model | multi-worker OK | **uvicorn workers=1** (CUDA context in a separate subprocess) |
@@ -63,6 +63,8 @@
 | Realtime streaming | optional; whole-sentence final only | always on; **incremental partial→final per sentence** |
 | Offline `/v2/asr` | ✅ | ✅ (same contract) |
 | Segmentation | FSMN-VAD fine segmentation | punctuation-first (word-timestamp positioning) |
+| Word timestamps | Offline and native realtime finals with alignment enabled | Offline with alignment enabled; absent in realtime |
+| Audio tagging | Optional YAMNet | Unavailable |
 | Punctuation | CT-Transformer (can disable) | model-native (always on, not separately disableable) |
 | Speaker diarization / ID | ✅ (FSMN-VAD + CAM++) | ✅ (energy VAD + CAM++) |
 | Compat offline (OpenAI/DashScope) | ✅ | ✅ |

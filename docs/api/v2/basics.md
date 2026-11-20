@@ -98,13 +98,13 @@ GET /v2/health
 | punc_enabled | 是否启用标点恢复 |
 | speaker_enabled | 是否启用说话人分离（`enable_speaker`） |
 | speaker_db_enabled | 声纹库是否可用（启用且 model_tag 一致） |
-| asr_backend | ASR 后端：`qwen_asr` / `openvino` |
+| asr_backend | ASR 后端：`qwen_asr` / `openvino` / `vllm` |
 | vad_backend | VAD 后端：`pytorch` / `onnx` |
 | punc_backend | 标点后端：`pytorch` / `onnx` / `disabled` |
 | config_file | 本次生效的配置文件名（`null` = 未加载配置文件） |
 | capabilities | 服务能力摘要，与 `GET /capabilities` 一致 |
 
-> vllm 模式（占位，暂未实现）下不适用的字段为 `null`。
+> vLLM 模式下，离线对齐看 `align_enabled`，实时词级时间戳看 `stream.word_timestamps`。
 
 ### 能力查询
 
@@ -141,14 +141,14 @@ GET /v2/capabilities
 
 | 字段 | 说明 |
 |------|------|
-| speaker_labels | 说话人分离是否启用（离线 + 实时同一开关） |
+| speaker_labels | 说话人分离是否启用（离线能力；实时能力见 `stream.speaker_labels`） |
 | speaker_identification | 声纹库真名识别是否可用（登记 / identify / 转写联动） |
 | audio_tagging | 音频标注是否启用（`--enable-audio-tagging`，决定 `POST /v2/audio/tag` 是否可用） |
 | scene | 场景识别是否启用（决定离线 `segments[].scene` 与实时 `scene` 消息是否产出） |
-| stream.enabled | 实时端点是否已挂载（需 `--enable-stream`） |
-| stream.backend | `vad-offline` / `vllm-native`（暂未实现） |
+| stream.enabled | 实时端点是否已挂载（standard 需 `--enable-stream`，vLLM 恒开） |
+| stream.backend | `vad-offline` / `vllm-native` |
 | stream.partial_results | 是否产生中间结果 `partial`（vad-offline 后端为 false） |
-| stream.word_timestamps | `final` 是否带单词级时间戳（随对齐开关） |
+| stream.word_timestamps | `final` 是否带单词级时间戳（standard 随对齐开关，vLLM 为 false） |
 | stream.speaker_labels | 实时 `final` 是否带说话人标签 |
 | stream.scene | 实时连接是否下发场景切换消息 `scene`（需音频标注 + 场景识别启用） |
 | defaults | 可覆盖参数（实时 `start` 字段 / 离线 Form 字段）的当前生效默认值，反映实际配置；Web UI 用于数值框占位提示 |

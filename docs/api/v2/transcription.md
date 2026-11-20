@@ -38,7 +38,7 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | language | string | null | 识别语言提示，`null`/省略=自动检测；取值与归一化规则见[下方说明](#语言代码取值与归一化) |
 | identify_speakers | bool | false | 对分离出的说话人做声纹识别（需说话人分离与[声纹库](speakers.md#说话人分离与声纹识别)均已启用） |
 | return_speaker_id | bool | false | 命中/登记的说话人在 `segments[].speaker_id` 回传声纹库 uuid（供客户端记忆声纹；`result.speakers[]` 映射恒含 `speaker_id`，本开关仅控制是否落到段级） |
-| with_punc | bool | 服务端默认 | 是否做标点恢复（降级开关，只能关；服务端未加载标点模型则本就无标点） |
+| with_punc | bool | 服务端默认 | standard 可关闭标点恢复；vLLM 使用模型原生标点，关闭请求会记入 warnings |
 | with_words | bool | 服务端默认 | 是否输出词级时间戳（需对齐模型已加载） |
 | diarize | bool | 服务端默认 | 是否做说话人分离（关闭可省算力；需说话人引擎已加载） |
 | max_segment | int | 服务端默认 | VAD 切片合并最大时长（秒），范围 `[1, 30]` |
@@ -132,7 +132,7 @@ curl -X POST http://127.0.0.1:8765/v2/audio/tag \
 WS /v2/asr/stream
 ```
 
-**前置条件**：`standard` 模式 + 启用实时（`--enable-stream` 或配置 `enable_stream: true`）。未启用时端点不存在；可先 [`GET /v2/capabilities`](basics.md#能力查询) 预检 `stream.enabled`。
+**前置条件**：vLLM 模式默认挂载；standard 模式需启用实时（`--enable-stream` 或配置 `enable_stream: true`）。未启用时端点不存在；可先 [`GET /v2/capabilities`](basics.md#能力查询) 预检 `stream.enabled`。
 
 > 浏览器测试页：启动加 `--web` 后访问 `/web-ui/stream`（支持麦克风与音频文件模拟推流）。
 
@@ -183,7 +183,7 @@ WS /v2/asr/stream
 | speaker_id_margin | 服务端默认 | 声纹 top1-top2 margin，范围 `[0, 1]` |
 | max_end_silence_ms | 服务端默认 | 断句尾静音（毫秒），范围 `[200, 2000]`：调小出字更快、易切碎；调大不打断、出字慢 |
 | max_segment_sec | 服务端默认 | 长句兜底切分（秒），范围 `[1, 60]` |
-| with_punc / with_words / diarize | 服务端默认 | 降级开关：可关闭标点 / 词级时间戳 / 说话人分离（只能关，不能开启未加载的模型） |
+| with_punc / with_words / diarize | 服务端默认 | standard 模式可关闭标点 / 词级时间戳 / 说话人分离（只能关，不能开启未加载的模型） |
 
 > **范围钳制与软提示**：以上覆盖仅影响本会话；数值越界 / 类型错误 → `invalid_config`（致命）。
 > 参数合法但对应功能未启用（如 `diarize:true` 但服务端未加载说话人引擎）→ 不报错，

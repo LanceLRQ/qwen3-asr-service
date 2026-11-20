@@ -95,13 +95,13 @@ GET /v2/health
 | punc_enabled | Whether punctuation restoration is enabled |
 | speaker_enabled | Whether speaker diarization is enabled (`enable_speaker`) |
 | speaker_db_enabled | Whether the voiceprint database is available (enabled and model_tag matches) |
-| asr_backend | ASR backend: `qwen_asr` / `openvino` |
+| asr_backend | ASR backend: `qwen_asr` / `openvino` / `vllm` |
 | vad_backend | VAD backend: `pytorch` / `onnx` |
 | punc_backend | Punctuation backend: `pytorch` / `onnx` / `disabled` |
 | config_file | Name of the active config file (`null` = no config file loaded) |
 | capabilities | Capability summary, same as `GET /capabilities` |
 
-> In vllm mode (placeholder, not yet implemented), non-applicable fields are `null`.
+> In vLLM mode, inspect `align_enabled` for offline alignment and `stream.word_timestamps` for realtime alignment.
 
 ### Capabilities
 
@@ -138,14 +138,14 @@ Returns the current serving mode and capability declaration (clients can use it 
 
 | Field | Description |
 |-------|-------------|
-| speaker_labels | Whether speaker diarization is enabled (offline and real-time share the same switch) |
+| speaker_labels | Whether speaker diarization is enabled (offline capability; see `stream.speaker_labels` for realtime) |
 | speaker_identification | Whether voiceprint real-name identification is available (enrollment / identify / transcription integration) |
 | audio_tagging | Whether audio tagging is enabled (`--enable-audio-tagging`; gates `POST /v2/audio/tag` and the offline `audio_events` field) |
 | scene | Whether scene detection is available (the offline `segments[].scene` field) |
-| stream.enabled | Whether the real-time endpoint is mounted (requires `--enable-stream`) |
-| stream.backend | `vad-offline` / `vllm-native` (not yet implemented) |
+| stream.enabled | Whether the real-time endpoint is mounted (standard requires `--enable-stream`; vLLM always mounts it) |
+| stream.backend | `vad-offline` / `vllm-native` |
 | stream.partial_results | Whether intermediate `partial` results are produced (false for vad-offline) |
-| stream.word_timestamps | Whether `final` carries word-level timestamps (follows the alignment switch) |
+| stream.word_timestamps | Whether `final` carries word-level timestamps (standard follows alignment; false for vLLM) |
 | stream.speaker_labels | Whether real-time `final` carries speaker labels |
 | stream.scene | Whether the real-time stream emits `scene` messages |
 | defaults | Current effective defaults of the overridable params (real-time `start` fields / offline Form fields), reflecting actual config; used by the Web UI for input placeholders |

@@ -38,7 +38,7 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | language | string | null | Language hint; `null`/omitted = auto-detect. Accepted forms and normalization: see [below](#language-codes-and-normalization) |
 | identify_speakers | bool | false | Run voiceprint identification on the diarized speakers (requires both speaker diarization and the [voiceprint database](speakers_EN.md#speaker-diarization--voiceprint-identification) to be enabled) |
 | return_speaker_id | bool | false | Return the voiceprint-DB uuid in `segments[].speaker_id` for matched/enrolled speakers (so clients can remember voiceprints; `result.speakers[]` always carries `speaker_id` — this flag only controls per-segment attachment) |
-| with_punc | bool | server default | Whether to restore punctuation (downgrade-only toggle; no punctuation if the model isn't loaded server-side) |
+| with_punc | bool | server default | standard: optional punctuation restoration. vLLM: native punctuation stays enabled; disabling it adds a warning. |
 | with_words | bool | server default | Whether to emit word-level timestamps (requires the alignment model loaded) |
 | diarize | bool | server default | Whether to run speaker diarization (turn off to save compute; requires the speaker engine loaded) |
 | max_segment | int | server default | Max VAD-merge segment length (seconds), range `[1, 30]` |
@@ -128,7 +128,7 @@ Response (200):
 WS /v2/asr/stream
 ```
 
-**Prerequisites**: `standard` mode + real-time enabled (`--enable-stream` or config `enable_stream: true`). The endpoint does not exist otherwise; probe [`GET /v2/capabilities`](basics_EN.md#capabilities) and check `stream.enabled` first.
+**Prerequisites**: vLLM always mounts this endpoint. In standard mode, enable realtime (`--enable-stream` or config `enable_stream: true`). The endpoint does not exist otherwise; probe [`GET /v2/capabilities`](basics_EN.md#capabilities) and check `stream.enabled` first.
 
 > Browser test page: start with `--web` and open `/web-ui/stream` (microphone capture / simulated streaming from an audio file).
 
@@ -179,7 +179,7 @@ Client                                  Server
 | speaker_id_margin | server default | Voiceprint top1-top2 margin, range `[0, 1]` |
 | max_end_silence_ms | server default | Endpoint trailing silence (ms), range `[200, 2000]`: smaller = faster output but choppier; larger = won't interrupt but slower |
 | max_segment_sec | server default | Long-sentence fallback split (seconds), range `[1, 60]` |
-| with_punc / with_words / diarize | server default | Downgrade toggles: disable punctuation / word timestamps / diarization (off only; can't enable a model that isn't loaded) |
+| with_punc / with_words / diarize | server default | standard mode: disable punctuation / word timestamps / diarization (off only; can't enable a model that isn't loaded) |
 
 > **Clamping & soft notices**: these overrides affect only the current session; out-of-range / wrong-type → `invalid_config` (fatal).
 > A well-formed param whose feature isn't enabled (e.g. `diarize:true` with no speaker engine loaded) does NOT error —

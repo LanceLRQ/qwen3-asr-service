@@ -650,7 +650,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
 def _assemble_vllm(app: FastAPI, args) -> None:
     """vllm 模式（路线 A）：vLLM 原生流式引擎 + 统一实时端点 WS /v2/asr/stream + 共性接口。
 
-    仅提供流式转写；不挂离线/transformers/OpenVINO/TaskManager/兼容桥（D5）。
+    离线转写复用任务队列，兼容接口按开关挂载。
     断句用能量端点器（无 funasr）。要求 CUDA 设备；进程内同步 vLLM，须 uvicorn workers=1。
     """
     device_info = detect_device()
@@ -658,7 +658,7 @@ def _assemble_vllm(app: FastAPI, args) -> None:
     if device != "cuda":
         logger.critical(
             f"serve-mode=vllm 需要 CUDA 设备，当前解析为 {device}。"
-            "vLLM 原生流式仅支持 GPU；如需 CPU/离线请用 --serve-mode standard。")
+            "vLLM 原生流式仅支持 GPU；如需 CPU请用 --serve-mode standard。")
         sys.exit(1)
     vram_gb = device_info.get("vram_gb")
     model_size = args.model_size or auto_select_model_size(vram_gb)
@@ -861,7 +861,7 @@ def _assemble_vllm(app: FastAPI, args) -> None:
 
     # 兼容接口（/compat/*，Phase 3）：离线复用 vLLM 任务层，实时复用 vLLM 流式后端。
     # 与 standard 唯一差异：vLLM 流式恒开，故实时兼容随离线开关挂载（无需 --enable-stream）；
-    # 实时为 R1 finals-only（ws_bridge 跳过 partial）。compat 代码依赖中性，惰性导入。
+    # 实时桥按协议映射 partial 和 final。compat 代码依赖中性，惰性导入。
     enable_openai = getattr(args, "enable_openai_api", False)
     enable_dashscope = getattr(args, "enable_dashscope_api", False)
     if enable_openai or enable_dashscope:

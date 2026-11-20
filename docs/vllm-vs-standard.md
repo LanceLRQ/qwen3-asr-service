@@ -2,7 +2,7 @@
 
 [← 返回文档首页](../README.md) ｜ **中文** | [English](vllm-vs-standard_EN.md)
 
-> 本文聚焦 **vLLM 引擎相对默认 standard 模式的功能差异**：梳理 **vLLM 引擎**（`--serve-mode vllm`）相对原有默认 **standard** 模式（funasr / OpenVINO）在**功能特性**上的明显区别，便于选型与升级评估。
+> 本文聚焦 **vLLM 引擎相对默认 standard 模式的功能差异**：梳理 **vLLM 引擎**（`--serve-mode vllm`）相对原有默认 **standard** 模式（Transformers / OpenVINO）在**功能特性**上的明显区别，便于选型与升级评估。
 >
 > **一句话**：原服务只有 `standard` 一种运行模式；本特性新增**可选的 `vllm` 运行模式**——GPU 原生流式（逐句增量）+ 与 standard 同契约的离线接口，并为该模式补齐说话人、兼容接口能力。**两种模式互斥启动；standard 模式的行为、参数、默认值完全不变（零回归）。**
 
@@ -13,7 +13,7 @@
 | | 原默认（standard） | 新增（vllm） |
 |---|---|---|
 | 启动 | 固定 standard | `--serve-mode standard \| vllm`（二选一） |
-| 推理后端 | funasr（GPU）/ OpenVINO（CPU） | vLLM 原生引擎（进程内同步 `vllm.LLM`） |
+| 推理后端 | Qwen3-ASR / Transformers（GPU）/ OpenVINO（CPU） | vLLM 原生引擎（进程内同步 `vllm.LLM`） |
 | 设备 | GPU / **CPU** 均可 | **仅 GPU（必 CUDA，非 GPU 直接退出）** |
 | 运行环境 | `venv`（默认） | 独立 `venv-vllm` / 独立 Docker 镜像 |
 | 进程模型 | 多 worker 可 | **uvicorn workers=1**（CUDA 上下文在独立子进程） |
@@ -63,6 +63,8 @@
 | 实时流式 | 可选；仅整句 final | 恒开；**逐句 partial→final 增量** |
 | 离线 `/v2/asr` | ✅ | ✅（同契约） |
 | 分段 | FSMN-VAD 精分段 | 标点优先（词级时间戳定位） |
+| 词级时间戳 | 开启对齐后支持离线和原生实时 final | 开启对齐后支持离线；实时无词级时间戳 |
+| 音频标注 | 可选 YAMNet | 未接入 |
 | 标点 | CT-Transformer（可单独关） | 模型原生（恒有，不可单独关） |
 | 说话人分离 / 识别 | ✅（FSMN-VAD + CAM++） | ✅（能量 VAD + CAM++） |
 | 兼容离线（OpenAI/DashScope） | ✅ | ✅ |
