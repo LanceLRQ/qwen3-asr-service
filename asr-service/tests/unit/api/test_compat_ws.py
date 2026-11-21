@@ -112,10 +112,15 @@ def test_openai_full_flow(ws_app):
                       "audio": base64.b64encode(b"\x00\x00" * 100).decode()})
         ws.send_json({"type": "input_audio_buffer.commit"})
 
+        # 手动 commit：立即回 committed + item.created，随后 completed（同一 item_id）
+        committed = ws.receive_json()
+        created = ws.receive_json()
         ev = ws.receive_json()
+        assert committed["type"] == "input_audio_buffer.committed"
+        assert created["type"] == "conversation.item.created"
         assert ev["type"] == "conversation.item.input_audio_transcription.completed"
         assert ev["transcript"] == "你好世界"
-        assert ev["item_id"] == "item_0"
+        assert committed["item_id"] == created["item"]["id"] == ev["item_id"] == "item_0"
         assert "delta" not in ev["type"]   # Stage A 不发逐字增量
     assert backend.released == 1
 
@@ -150,10 +155,18 @@ def test_openai_multiple_finals_increment_item_id(ws_app):
         ws.receive_json()
         ws.send_json({"type": "session.update", "session": {}})
         ws.receive_json()
+        ws.send_json({"type": "input_audio_buffer.append",
+                      "audio": base64.b64encode(b"\x00\x00" * 100).decode()})
         ws.send_json({"type": "input_audio_buffer.commit"})
+        # 有音频时 commit 回执 item_0；随后两句 final 各自 completed，第二句自行提交。
+        assert ws.receive_json()["type"] == "input_audio_buffer.committed"
+        assert ws.receive_json()["type"] == "conversation.item.created"
         e0 = ws.receive_json()
-        e1 = ws.receive_json()
+        assert e0["type"] == "conversation.item.input_audio_transcription.completed"
         assert e0["item_id"] == "item_0" and e0["transcript"] == "第一句"
+        assert ws.receive_json()["type"] == "input_audio_buffer.committed"
+        assert ws.receive_json()["type"] == "conversation.item.created"
+        e1 = ws.receive_json()
         assert e1["item_id"] == "item_1" and e1["transcript"] == "第二句"
 
 
@@ -297,6 +310,8 @@ def test_openai_r2_partial_delta(ws_app):
         assert d0["delta"] == "你好" and d0["item_id"] == "item_0"
         assert d1["delta"] == "世界" and d1["item_id"] == "item_0"   # 增量后缀，非累计
         ws.send_json({"type": "input_audio_buffer.commit"})
+        assert ws.receive_json()["type"] == "input_audio_buffer.committed"
+        assert ws.receive_json()["type"] == "conversation.item.created"
         ev = ws.receive_json()
         assert ev["type"] == "conversation.item.input_audio_transcription.completed"
         assert ev["transcript"] == "你好世界" and ev["item_id"] == "item_0"  # delta 与 completed 同 item

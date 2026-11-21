@@ -3,6 +3,16 @@
 本项目所有重要变更记录于此。版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)，
 发布版本号经由 git tag（去掉 `v` 前缀）注入镜像 `APP_VERSION`，体现在 `/openapi.json` 的 `info.version`。
 
+## [Unreleased]
+
+### 修复
+- **OpenAI Realtime 兼容接口补齐生命周期事件**：`/compat/openai/v1/realtime` 此前只下发 `conversation.item.input_audio_transcription.completed`，依赖标准事件的客户端在说话结束后卡住。现在服务端 VAD 模式按 `speech_started` → `speech_stopped` → `committed` → `conversation.item.created` → `completed` 下发；手动 `input_audio_buffer.commit` 在此前队列音频处理后回 `committed` + `item.created`，随后 `completed`；空缓冲 commit 返回 `input_audio_buffer_commit_empty` 错误，自动收句后迟到的 commit 不再创建空 item。同一句共用同一 `item_id`，下一句自动换新；迟到/重复的 VAD end 不重复回执、不乱序。`session.update` 同时兼容 GA（`session.audio.input.turn_detection`）与 beta（`session.turn_detection`），`session.updated` 按输入路径回显，未指定时使用 GA 结构；`turn_detection: null` 时按协议抑制 `speech_started` / `speech_stopped`，但手动 commit 与 completed 保持正常。
+- 后端 `StreamSession` / `VllmStreamSession` 新增可选 `emit_vad_events`（经 `configure()` 传入，默认关闭），standard 与 vLLM 两种模式行为一致；原生 `/v2/asr/stream` 帧序列与行为不变。
+- 同步 OpenAI Realtime 生命周期事件的中英文兼容文档，补充 standard / vLLM 模式对应测试。
+
+### 新增
+- 新增 DashScope 兼容 `WS /compat/dashscope/api-ws/v1/realtime`，支持 Qwen3-ASR-Flash-Realtime 事件协议与 base64 PCM16 音频输入。
+
 ## [2.4.2] - 2026-09-15
 
 DashScope 实时兼容接口补充句子编号。
