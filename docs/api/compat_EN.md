@@ -59,6 +59,35 @@ When the service is started with `--api-key`, all compat endpoints require `Auth
 
 > The realtime rows (last two above) differ by serving mode: **standard** (VAD-offline) needs `--enable-stream` and emits only whole-sentence finals, no per-token increments; **vLLM** (`--serve-mode vllm`, native streaming) has streaming always on, mounts realtime compat with the compat switches (**no `--enable-stream` needed**), and emits per-token increments — DashScope intermediate `result-generated` (`sentence_end:false`) is naturally cumulative and forwarded cleanly; OpenAI `…delta` is **best-effort** (partials are cumulative and may be revised, so only a pure append yields a delta suffix, revision frames are skipped, and the authoritative full text is still the `…completed` event).
 
+## Realtime transcription lifecycle events (OpenAI Realtime)
+
+`WS /compat/openai/v1/realtime?intent=transcription` emits the full OpenAI Realtime lifecycle. The same `item_id` is shared across `speech_started` → `speech_stopped` → `committed` → `item.created` → `completed`, and a new id is allocated for the next utterance.
+
+Server VAD (`turn_detection: {"type": "server_vad"}`):
+
+```text
+input_audio_buffer.speech_started                        # item_id=item_0
+input_audio_buffer.speech_stopped                        # item_id=item_0
+input_audio_buffer.committed                             # item_id=item_0
+conversation.item.created                                # item.id=item_0
+conversation.item.input_audio_transcription.completed    # item_id=item_0
+```
+
+Manual commit (the client sends `input_audio_buffer.commit`, usually with `turn_detection: null`):
+
+```text
+input_audio_buffer.committed                             # ack after prior audio processing, item_id=item_0
+conversation.item.created                                # item.id=item_0
+conversation.item.input_audio_transcription.completed    # item_id=item_0
+```
+
+Sending `input_audio_buffer.commit` with an empty buffer returns an `error` with code `input_audio_buffer_commit_empty` and does not create an item.
+
+- Late or duplicate VAD ends do not emit a second `committed`, and never append `speech_stopped` after `committed`.
+- `session.update` accepts both GA (`session.audio.input.turn_detection`) and beta (`session.turn_detection`) paths, and echoes `turn_detection` in `session.updated`.
+- With `turn_detection: null`, `speech_started` / `speech_stopped` are suppressed as required by the protocol. The backend still uses VAD for transcription segmentation; manual `commit` still produces `committed` / `completed` as usual.
+- Backend VAD frames are opt-in for the compat layer (`emit_vad_events`); the native `/v2/asr/stream` keeps them off by default, so its frame sequence and behaviour are unchanged.
+
 ## Compat vs native v2
 
 - Need to **integrate an existing OpenAI/DashScope ecosystem** (SDKs, off-the-shelf clients) → use the compat APIs.

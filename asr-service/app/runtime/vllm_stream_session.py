@@ -89,6 +89,9 @@ class VllmStreamSession:
         self._sem = infer_sem                  # asyncio.Semaphore：限同时解码会话数
         self.language = language
         self._max_utt_samples = int(max_utterance_sec * _TARGET_SR)
+        # 兼容层可选：把 VAD start/end 作为额外帧上抛（OpenAI Realtime 生命周期事件需要），
+        # 原生 /v2 协议保持关闭，行为不变。
+        self._emit_vad_events = False
         # 会话态
         self.audio_fs = _TARGET_SR
         self._chunk_size_sec = None            # None=用引擎默认；configure 可按会话覆盖
@@ -116,6 +119,7 @@ class VllmStreamSession:
         css = cfg_msg.get("chunk_size_sec")
         if css is not None:                    # 会话级覆盖（D6），越界抛 ValueError → invalid_config
             self._chunk_size_sec = coerce_num_in_range(css, CHUNK_SIZE_SEC_RANGE, "chunk_size_sec")
+        self._emit_vad_events = bool(cfg_msg.get("emit_vad_events", False))
         # 重置会话态
         self._endpointer.reset()
         self.state = None
@@ -162,8 +166,11 @@ class VllmStreamSession:
         events = self._endpointer.process(arr, frame_ms=dur_ms)
 
         # 句开始：先建状态，使本帧即进入新句
-        if self.state is None and any(e["type"] == "start" for e in events):
+        start_ev = next((e for e in events if e["type"] == "start"), None)
+        if self.state is None and start_ev is not None:
             await self._begin_segment(self._total_ms)
+            if self._emit_vad_events:
+                yield {"type": "vad_start", "start": int(start_ev["start"])}
 
         # 句内：喂本帧，文本变化则发 partial
         if self.state is not None:
@@ -176,8 +183,12 @@ class VllmStreamSession:
 
         self._total_ms += dur_ms
 
-        # 句尾：能量端点判停 → final
-        if self.state is not None and any(e["type"] == "end" for e in events):
+        # 句尾：能量端点判停 → final（与 standard 一致，vad_end 先于 final）
+        end_ev = next((e for e in events if e["type"] == "end"), None)
+        if self.state is not None and end_ev is not None:
+            if self._emit_vad_events:
+                yield {"type": "vad_end", "start": int(self._seg_start_ms or 0),
+                       "end": int(end_ev["end"])}
             yield await self._finish_segment(self._total_ms)
         # 兜底：超长无停顿句强制切分（上下文/显存边界，非性能必需——O(n²) 已被前缀缓存中和）
         elif self.state is not None and self._utt_samples >= self._max_utt_samples:
