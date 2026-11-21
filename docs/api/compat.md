@@ -59,6 +59,35 @@
 
 > 实时（上表最后两行）的挂载与增量能力因模式而异：**standard**（VAD-offline）需 `--enable-stream`，仅产整句 final、无逐字增量；**vLLM**（`--serve-mode vllm`，原生流式）流式恒开、实时随兼容开关自动挂载（**无需 `--enable-stream`**），并产逐字增量——DashScope 中间 `result-generated`（`sentence_end:false`）天然累计、干净直发；OpenAI `…delta` 为 **best-effort**（partial 累计且可修订，仅纯追加时取新增后缀作 delta、修订帧跳过，权威全文仍以 `…completed` 为准）。
 
+## 实时转写生命周期事件（OpenAI Realtime）
+
+`WS /compat/openai/v1/realtime?intent=transcription` 按 OpenAI Realtime 协议下发完整生命周期；同一句的 `item_id` 在 `speech_started` → `speech_stopped` → `committed` → `item.created` → `completed` 之间保持一致，下一句自动换新 id。
+
+服务端 VAD（`turn_detection: {"type": "server_vad"}`）：
+
+```text
+input_audio_buffer.speech_started                        # item_id=item_0
+input_audio_buffer.speech_stopped                        # item_id=item_0
+input_audio_buffer.committed                             # item_id=item_0
+conversation.item.created                                # item.id=item_0
+conversation.item.input_audio_transcription.completed    # item_id=item_0
+```
+
+手动 commit（客户端发送 `input_audio_buffer.commit`，通常配 `turn_detection: null`）：
+
+```text
+input_audio_buffer.committed                             # 此前已接收音频处理完成后回执 item_id=item_0
+conversation.item.created                                # item.id=item_0
+conversation.item.input_audio_transcription.completed    # item_id=item_0
+```
+
+缓冲区为空时发送 `input_audio_buffer.commit` 会收到 `error`，错误码为 `input_audio_buffer_commit_empty`，不会创建 item。
+
+- 迟到或重复的 VAD end 不会重复发送 `committed`，也不会在 `committed` 之后补发 `speech_stopped`。
+- `session.update` 同时接受 GA（`session.audio.input.turn_detection`）与 beta（`session.turn_detection`），并在 `session.updated` 中回显 `turn_detection`。
+- `turn_detection: null` 时按协议不再下发 `speech_started` / `speech_stopped`；后端仍使用 VAD 完成转写断句，手动 `commit` 的 `committed` / `completed` 语义不变。
+- 后端 VAD 帧由兼容层按需开启（`emit_vad_events`），原生 `/v2/asr/stream` 默认关闭，帧序列与行为不变。
+
 ## 与原生 v2 的取舍
 
 - 需要**对接已有 OpenAI/DashScope 生态**（SDK、现成客户端）→ 用兼容接口。

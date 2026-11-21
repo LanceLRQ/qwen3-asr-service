@@ -12,7 +12,10 @@ adapter 鸭子接口：
   async on_configured(ws, warnings)      # configure 成功后（OpenAI session.updated；DashScope task-started）
   translate_finals(final) -> list[dict]  # 一条 final → 上游事件（OpenAI completed / DashScope result-generated）
   translate_partials(p) -> list[dict]    # （可选，R2）一条 partial → 增量事件；未实现 = R1 finals-only
+  translate_vad_start(f) -> list[dict]   # （可选）后端 emit_vad_events 的 VAD 起点 → 协议事件
+  translate_vad_end(f) -> list[dict]     # （可选）VAD 终点（含句末提交）；未实现则跳过
   translate_error(code, message, *, fatal=False) -> dict
+  async on_commit(ws, *, has_audio=True)  # （可选）消费队列处理完此前音频后回执，再 flush
   async on_finish(ws)                    # end（HARD_END）冲刷后（DashScope task-finished；OpenAI 不触发）
 
 partial 分发：route B 只产整句 final；vLLM 路线 A 会产 partial 增量。消费循环 _emit 把
@@ -35,7 +38,8 @@ logger = logging.getLogger(__name__)
 _backend = None
 
 # 消费队列哨兵
-_SOFT_FLUSH = object()   # 冲刷当前缓冲末句但**不结束**本轮（OpenAI commit）
+_COMMIT = object()       # 先处理此前已入队音频，再回 commit 并冲刷（OpenAI commit）
+_SOFT_FLUSH = object()   # 冲刷当前缓冲末句但**不结束**本轮
 _HARD_END = object()     # 冲刷并结束本轮（DashScope finish-task）
 
 
@@ -48,9 +52,18 @@ def init_compat_ws(backend):
 async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) -> bool:
     """单轮会话（一次 run-task 周期 / OpenAI 整个连接）。返回是否继续复用连接。"""
     frame_q: asyncio.Queue = asyncio.Queue()
-    state = {"backlog": 0}
+    state = {"backlog": 0, "queued_audio_bytes": 0, "audio_bytes_since_final": 0}
 
     async def _emit(f):
+        # VAD 生命周期（仅兼容层按需产生）：交给 adapter 翻译成协议事件，未实现则跳过。
+        if f.get("type") in ("vad_start", "vad_end"):
+            fn = getattr(adapter, "translate_vad_start" if f["type"] == "vad_start"
+                         else "translate_vad_end", None)
+            if fn is None:
+                return
+            for ev in fn(f):
+                await ws.send_json(ev)
+            return
         # partial（vLLM 路线 A）：adapter 实现 translate_partials → 下发增量（R2）；未实现 → 跳过
         # （R1 finals-only）。route B 不产 partial，此分支不触发。final 一律交 translate_finals。
         if f.get("type") == "partial":
@@ -71,10 +84,22 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
             return
         for ev in adapter.translate_finals(f):
             await ws.send_json(ev)
+        # final 已收句；partial / VAD 边界不清除未提交音频计数。
+        state["audio_bytes_since_final"] = 0
 
     async def _consume():
         while True:
             item = await frame_q.get()
+            if item is _COMMIT:
+                # 队列前的音频均已处理；已自动收句的音频不再算作待 commit 内容。
+                has_audio = state["audio_bytes_since_final"] > 0
+                state["audio_bytes_since_final"] = 0
+                fn = getattr(adapter, "on_commit", None)
+                if fn is not None:
+                    await fn(ws, has_audio=has_audio)
+                async for f in session.flush():
+                    await _emit(f)
+                continue
             if item is _SOFT_FLUSH:
                 async for f in session.flush():
                     await _emit(f)
@@ -83,6 +108,8 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
                 async for f in session.flush():
                     await _emit(f)
                 return
+            state["queued_audio_bytes"] -= len(item)
+            state["audio_bytes_since_final"] += len(item)
             try:
                 async for f in session.feed_audio(item):
                     await _emit(f)
@@ -127,9 +154,11 @@ async def _run_round(ws: WebSocket, adapter, session, deadline, loop, holder) ->
                         "backlog_overflow", "服务端处理积压超限，请降低推流速率", fatal=True))
                     return False
                 state["backlog"] += len(payload)
+                state["queued_audio_bytes"] += len(payload)
                 frame_q.put_nowait(payload)
             elif kind == "flush":
-                frame_q.put_nowait(_SOFT_FLUSH)
+                # 作为队列事件排在此前已接收的音频之后；消费者回执后再 flush。
+                frame_q.put_nowait(_COMMIT)
             elif kind == "end":
                 frame_q.put_nowait(_HARD_END)
                 await consume_task

@@ -163,6 +163,9 @@ class StreamSession:
         self.seg_start_ms = None
         self.buffer = None
         self._frame_count = 0
+        # 兼容层可选：把 VAD start/end 作为额外帧上抛（OpenAI/DashScope 实时事件需要），
+        # 原生 /v2 协议保持关闭，行为不变。
+        self._emit_vad_events = False
 
     def configure(self, cfg_msg: dict):
         cfg_msg = cfg_msg or {}
@@ -185,6 +188,7 @@ class StreamSession:
         self.seg_start_ms = None
         self.buffer = AudioBuffer(sr=_TARGET_SR)
         self._frame_count = 0
+        self._emit_vad_events = bool(cfg_msg.get("emit_vad_events", False))
         self._apply_session_override(cfg_msg)
         self._apply_noise_override(cfg_msg)
         if self._speaker is not None and self._with_diarize:
@@ -379,10 +383,14 @@ class StreamSession:
         t = ev["type"]
         if t == "start":
             self.seg_start_ms = ev["start"]
+            if self._emit_vad_events:
+                yield {"type": "vad_start", "start": ev["start"]}
         elif t in ("end", "complete"):
             start_ms = ev["start"] if t == "complete" else self.seg_start_ms
             if start_ms is None:
                 start_ms = self.buffer.base_ms
+            if self._emit_vad_events:
+                yield {"type": "vad_end", "start": start_ms, "end": ev["end"]}
             async for msg in self._emit_final(start_ms, ev["end"]):
                 yield msg
             self.seg_start_ms = None

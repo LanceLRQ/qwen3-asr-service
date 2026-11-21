@@ -36,6 +36,8 @@ def _map_session_update(obj: dict) -> dict:
     cfg_msg = {}
     # OpenAI Realtime pcm16 惯例 24kHz；客户端未声明 rate 时按此默认（本服务内部重采样到 16k）
     cfg_msg["audio_fs"] = rate if rate is not None else 24000
+    # 让后端额外上抛 VAD start/end 帧，用于 speech_started / speech_stopped 事件
+    cfg_msg["emit_vad_events"] = True
     engine_lang = to_engine_language(lang)
     if engine_lang is not None:
         cfg_msg["language"] = engine_lang
@@ -51,6 +53,99 @@ class OpenAIRealtimeAdapter:
         self._item_seq = 0
         self._audio_fs = None      # 上次 configure 采用的采样率（session.updated 回显）
         self._last_partial = ""    # 当前句已下发的累计 partial 文本（R2 delta diff 基准）
+        # VAD/commit 生命周期状态：同一句的 speech_started → speech_stopped →
+        # committed → item.created → completed 必须共用同一个 item_id。
+        self._cur_item_id = None
+        self._prev_item_id = None
+        self._committed = False
+        self._turn_detection = {"type": "server_vad"}
+        self._turn_detection_path = "unspecified"
+
+    @staticmethod
+    def _event_id() -> str:
+        return f"event_{uuid4().hex}"
+
+    def _ensure_item(self) -> str:
+        if self._cur_item_id is None:
+            self._cur_item_id = f"item_{self._item_seq}"
+            self._item_seq += 1
+            self._committed = False
+        return self._cur_item_id
+
+    def _commit_events(self, item_id: str) -> list[dict]:
+        """committed + item.created（每句只发一次）。"""
+        if self._committed:
+            return []
+        self._committed = True
+        prev = self._prev_item_id
+        return [
+            {
+                "type": "input_audio_buffer.committed",
+                "event_id": self._event_id(),
+                "previous_item_id": prev,
+                "item_id": item_id,
+            },
+            {
+                "type": "conversation.item.created",
+                "event_id": self._event_id(),
+                "previous_item_id": prev,
+                "item": {
+                    "id": item_id,
+                    "object": "realtime.item",
+                    "type": "message",
+                    "status": "completed",
+                    "role": "user",
+                    "content": [{"type": "input_audio", "transcript": None}],
+                },
+            },
+        ]
+
+    def translate_vad_start(self, f: dict):
+        # turn_detection=null 按 OpenAI 协议关闭服务端 VAD，因此不向客户端下发 speech 事件。
+        if self._turn_detection is None:
+            return []
+        item_id = self._ensure_item()
+        return [{
+            "type": "input_audio_buffer.speech_started",
+            "event_id": self._event_id(),
+            "audio_start_ms": int(f.get("start") or 0),
+            "item_id": item_id,
+        }]
+
+    def translate_vad_end(self, f: dict):
+        # turn_detection=null 按 OpenAI 协议关闭服务端 VAD，不下发 speech 事件。
+        if self._turn_detection is None:
+            return []
+        item_id = self._ensure_item()
+        if self._committed:
+            # 客户端已手动 commit 并收到回执；迟到的 VAD end 不再补发 speech_stopped，
+            # 避免 committed 之后又出现 speech_stopped 的乱序事件。
+            return []
+        events = [{
+            "type": "input_audio_buffer.speech_stopped",
+            "event_id": self._event_id(),
+            "audio_end_ms": int(f.get("end") or 0),
+            "item_id": item_id,
+        }]
+        events.extend(self._commit_events(item_id))
+        return events
+
+    async def on_commit(self, ws: WebSocket, *, has_audio: bool = True):
+        """客户端 commit 回执；队列已处理此前音频，空缓冲按 OpenAI 协议返回错误。"""
+        if not has_audio:
+            # 对齐 OpenAI：空缓冲 commit 返回错误，不创建 item 或提交回执。
+            await ws.send_json({
+                "type": "error",
+                "error": {
+                    "type": "invalid_request_error",
+                    "code": "input_audio_buffer_commit_empty",
+                    "message": "Error committing input audio buffer: buffer is empty.",
+                },
+            })
+            return
+        item_id = self._ensure_item()
+        for ev in self._commit_events(item_id):
+            await ws.send_json(ev)
 
     async def on_open(self, ws: WebSocket, backend):
         await ws.send_json({
@@ -77,6 +172,21 @@ class OpenAIRealtimeAdapter:
             return ("ignore", None)
         t = obj.get("type")
         if t == "session.update":
+            sess = obj.get("session") or {}
+            missing = object()
+            td = sess.get("turn_detection", missing)
+            if td is not missing:
+                self._turn_detection = td
+                self._turn_detection_path = "beta"
+            else:
+                # GA transcription session: turn_detection 位于 session.audio.input 下
+                td = ((sess.get("audio") or {}).get("input") or {}).get(
+                    "turn_detection", missing)
+                if td is not missing:
+                    self._turn_detection = td
+                    self._turn_detection_path = "ga"
+                else:
+                    self._turn_detection_path = "unspecified"
             cfg_msg = _map_session_update(obj)
             self._audio_fs = cfg_msg.get("audio_fs")
             return ("configure", cfg_msg)
@@ -97,13 +207,16 @@ class OpenAIRealtimeAdapter:
         if warnings:
             logger.info(f"[compat-ws/openai] 忽略未启用参数: {', '.join(warnings)}")
         # 回显服务端采用的采样率，客户端据此可检测与实发 PCM 的不一致（未声明 rate 时为默认 24000）
-        await ws.send_json({
-            "type": "session.updated",
-            "session": {
-                "object": "realtime.transcription_session",
-                "audio": {"input": {"format": {"type": "audio/pcm", "rate": self._audio_fs}}},
-            },
-        })
+        # transcription session 默认使用 GA 结构；若客户端使用 beta 路径，则按 beta 回显。
+        session = {
+            "object": "realtime.transcription_session",
+            "audio": {"input": {"format": {"type": "audio/pcm", "rate": self._audio_fs}}},
+        }
+        if self._turn_detection_path == "beta":
+            session["turn_detection"] = self._turn_detection
+        else:
+            session["audio"]["input"]["turn_detection"] = self._turn_detection
+        await ws.send_json({"type": "session.updated", "session": session})
 
     def translate_partials(self, partial: dict):
         # R2 best-effort：vLLM partial 是累计且可修订，OpenAI delta 要增量片段。仅纯追加时取
@@ -117,13 +230,18 @@ class OpenAIRealtimeAdapter:
         delta = new[len(old):]
         if not delta:
             return []
-        return [partial_to_openai_delta(delta, f"item_{self._item_seq}")]
+        return [partial_to_openai_delta(delta, self._ensure_item())]
 
     def translate_finals(self, final: dict):
-        item_id = f"item_{self._item_seq}"
-        self._item_seq += 1
+        item_id = self._ensure_item()
+        # 长句兜底切分/未走 VAD end 的 flush 路径：补发 committed，保证客户端能收到回执。
+        events = self._commit_events(item_id)
+        events.append(final_to_openai_completed(final, item_id))
+        self._prev_item_id = item_id
+        self._cur_item_id = None
+        self._committed = False
         self._last_partial = ""              # 本句结束 → 下一句 delta 基准归零
-        return [final_to_openai_completed(final, item_id)]
+        return events
 
     def translate_error(self, code: str, message: str, *, fatal: bool = False):
         return {
