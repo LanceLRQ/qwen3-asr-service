@@ -34,9 +34,19 @@
 | OpenAI Python SDK | `OpenAI(base_url=...)` | `http://<host>:8765/compat/openai/v1` |
 | OpenAI 实时 | ws base | `ws://<host>:8765/compat/openai/v1` |
 | DashScope SDK | `dashscope.base_http_api_url` | `http://<host>:8765/compat/dashscope/api/v1` |
-| DashScope 实时 | `dashscope.base_websocket_api_url` | `ws://<host>:8765/compat/dashscope/api-ws/v1` |
+| DashScope 实时（Paraformer） | `dashscope.base_websocket_api_url` | `ws://<host>:8765/compat/dashscope/api-ws/v1` |
+| DashScope 实时（Qwen3-ASR-Flash-Realtime） | WebSocket URL | `ws://<host>:8765/compat/dashscope/api-ws/v1/realtime?model=qwen3-asr-flash-realtime` |
 
 前缀之后的上游子路径逐段原样保留（SDK 硬编码），故兼容路径与 `/v1`、`/v2` 零碰撞。
+
+### DashScope Qwen3-ASR-Flash-Realtime WebSocket
+
+- **端点**：`WS /compat/dashscope/api-ws/v1/realtime`，查询参数 `model` 缺省为 `qwen3-asr-flash-realtime`；仅接受 Qwen ASR 系列模型名。
+- **鉴权**：复用兼容层鉴权；配置 `--api-key` 时用 `Authorization: Bearer <api-key>` 或 `?token=<api-key>`。
+- **上游协议来源**：适配 DashScope 官方 `wss://dashscope.aliyuncs.com/api-ws/v1/realtime?model=qwen3-asr-flash-realtime` 的 Qwen3-ASR-Flash-Realtime 事件协议；官方 URL 与模型名用于协议对照。实际用途是让 Qwen realtime 协议客户端连接本服务，由本机流式 ASR 引擎转写；不会代理到 DashScope 云端，也不消耗 DashScope 额度或需要其 API key。
+- **与 Paraformer `/inference` 的关系**：`/inference` 使用 `run-task`/`finish-task` 信封，`/realtime` 使用 Qwen realtime 事件信封；两者各自创建会话，但共用本服务注入的实时后端、鉴权与容量控制。两个实时路由都受 `--enable-dashscope-api` 控制（standard 模式还需 `--enable-stream`；vLLM 模式流式常开）。
+- **与 OpenAI Realtime 的差异**：此端点采用 DashScope Qwen 字段：`session.sample_rate`、`session.finish`、`session.finished`，中间识别文本为 `conversation.item.input_audio_transcription.text` 的 `text`/`stash`；OpenAI 端点采用 OpenAI GA transcription 字段和会话生命周期。
+- **事件序列**：连接后 `session.created`；客户端发 `session.update` 后收到 `session.updated`；音频通过 `input_audio_buffer.append` 的 base64 PCM16 字段发送；识别过程可产生 `input_audio_buffer.speech_started`、`conversation.item.input_audio_transcription.text`（vLLM partial）；句末产生 `speech_stopped`、`input_audio_buffer.committed`、`conversation.item.created`、`conversation.item.input_audio_transcription.completed`；`session.finish` 后返回 `session.finished`。错误以 `error` 事件报告，非法模型用 1008 关闭。空缓冲 commit 使用 `input_audio_buffer_commit_empty`（沿用 OpenAI Realtime 错误码；Qwen 文档仅规定空缓冲产生错误，未指定独立错误码）；非法或超长 base64 音频帧分别返回 `invalid_value` 或 `frame_too_large`。
 
 ## 2. 认证
 

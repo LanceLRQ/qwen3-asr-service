@@ -10,6 +10,9 @@
 - 后端 `StreamSession` / `VllmStreamSession` 新增可选 `emit_vad_events`（经 `configure()` 传入，默认关闭），standard 与 vLLM 两种模式行为一致；原生 `/v2/asr/stream` 帧序列与行为不变。
 - 同步 OpenAI Realtime 生命周期事件的中英文兼容文档，补充 standard / vLLM 模式对应测试。
 
+### 新增
+- 新增 DashScope 兼容 `WS /compat/dashscope/api-ws/v1/realtime`，支持 Qwen3-ASR-Flash-Realtime 事件协议与 base64 PCM16 音频输入。
+
 ## [2.4.2] - 2026-09-15
 
 DashScope 实时兼容接口补充句子编号。

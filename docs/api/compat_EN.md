@@ -34,9 +34,19 @@ Both upstream SDKs support overriding the base url — point it at this service'
 | OpenAI Python SDK | `OpenAI(base_url=...)` | `http://<host>:8765/compat/openai/v1` |
 | OpenAI realtime | ws base | `ws://<host>:8765/compat/openai/v1` |
 | DashScope SDK | `dashscope.base_http_api_url` | `http://<host>:8765/compat/dashscope/api/v1` |
-| DashScope realtime | `dashscope.base_websocket_api_url` | `ws://<host>:8765/compat/dashscope/api-ws/v1` |
+| DashScope realtime (Paraformer) | `dashscope.base_websocket_api_url` | `ws://<host>:8765/compat/dashscope/api-ws/v1` |
+| DashScope realtime (Qwen3-ASR-Flash-Realtime) | WebSocket URL | `ws://<host>:8765/compat/dashscope/api-ws/v1/realtime?model=qwen3-asr-flash-realtime` |
 
 Sub-paths after the prefix are preserved verbatim (hardcoded by the SDKs), so compat paths never collide with `/v1` or `/v2`.
+
+### DashScope Qwen3-ASR-Flash-Realtime WebSocket
+
+- **Endpoint**: `WS /compat/dashscope/api-ws/v1/realtime`; query parameter `model` defaults to `qwen3-asr-flash-realtime` and accepts Qwen ASR model names only.
+- **Authentication**: uses the compat authentication rules. With `--api-key`, send `Authorization: Bearer <api-key>` or `?token=<api-key>`.
+- **Upstream protocol source**: adapts the Qwen3-ASR-Flash-Realtime event protocol of DashScope's official `wss://dashscope.aliyuncs.com/api-ws/v1/realtime?model=qwen3-asr-flash-realtime` endpoint; the official URL and model identify the protocol being mirrored. The endpoint lets Qwen realtime clients connect to this service and transcribes audio with its local streaming ASR engine. It does not proxy to DashScope Cloud, consume DashScope quota, or require a DashScope API key.
+- **Relationship to Paraformer `/inference`**: `/inference` uses the `run-task`/`finish-task` envelope; `/realtime` uses Qwen realtime events. They create separate sessions but share this service's injected streaming backend, authentication, and capacity control. Both realtime routes use the existing `--enable-dashscope-api` switch (standard mode also requires `--enable-stream`; streaming is always enabled in vLLM mode).
+- **Differences from OpenAI Realtime**: this endpoint uses DashScope Qwen fields: `session.sample_rate`, `session.finish`, `session.finished`, and intermediate text in `text`/`stash` of `conversation.item.input_audio_transcription.text`. The OpenAI endpoint uses OpenAI GA transcription fields and session lifecycle.
+- **Event sequence**: connection → `session.created`; client `session.update` → `session.updated`; audio is base64 PCM16 in `input_audio_buffer.append`; recognition can emit `input_audio_buffer.speech_started` and `conversation.item.input_audio_transcription.text` (vLLM partials); sentence completion emits `speech_stopped`, `input_audio_buffer.committed`, `conversation.item.created`, and `conversation.item.input_audio_transcription.completed`; `session.finish` → `session.finished`. Errors use an `error` event; an invalid model closes with code 1008. Empty-buffer commit uses `input_audio_buffer_commit_empty`, matching the OpenAI Realtime error code (Qwen docs specify that empty-buffer commit is an error but do not define a distinct code); invalid and oversized base64 audio frames return `invalid_value` and `frame_too_large`, respectively.
 
 ## 2. Authentication
 

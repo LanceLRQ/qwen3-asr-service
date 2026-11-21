@@ -613,7 +613,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
         if stream_backend is not None:
             from app.api.compat.dashscope_ws_routes import build_dashscope_ws_router
             app.include_router(build_dashscope_ws_router())
-            logger.info("DashScope 实时兼容已启用：WS /compat/dashscope/api-ws/v1/inference（整句，无中间结果）")
+            logger.info("DashScope 实时兼容已启用：WS /compat/dashscope/api-ws/v1/inference、/realtime（整句，无中间结果）")
         elif stream_enabled is False:
             logger.info("DashScope 实时兼容未挂载：需 --enable-stream")
 
@@ -882,7 +882,7 @@ def _assemble_vllm(app: FastAPI, args) -> None:
         app.include_router(build_dashscope_router())
         app.include_router(build_dashscope_ws_router())
         logger.info("DashScope 兼容接口已启用：/compat/dashscope/api/v1/*"
-                    "（含实时 WS /api-ws/v1/inference，整句下发）")
+                    "（含实时 WS /api-ws/v1/inference、/realtime，整句下发）")
 
     # 条件挂载 Web UI（演示页已内置 partial→final 实时渲染）
     if getattr(args, "web", False):
